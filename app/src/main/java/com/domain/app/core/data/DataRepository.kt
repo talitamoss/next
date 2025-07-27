@@ -144,7 +144,7 @@ fun DataPointEntity.toDataPoint(): DataPoint {
         timestamp = timestamp,
         type = type,
         value = JSONObject(value).toMap(),
-        metadata = JSONObject(metadata).toMap(),
+        metadata = JSONObject(metadata).toStringMap(),
         location = if (latitude != null && longitude != null) {
             Location(
                 latitude = latitude,
@@ -160,6 +160,14 @@ fun JSONObject.toMap(): Map<String, Any> {
     val map = mutableMapOf<String, Any>()
     keys().forEach { key ->
         map[key] = get(key)
+    }
+    return map
+}
+
+fun JSONObject.toStringMap(): Map<String, String> {
+    val map = mutableMapOf<String, String>()
+    keys().forEach { key ->
+        map[key] = getString(key)
     }
     return map
 }

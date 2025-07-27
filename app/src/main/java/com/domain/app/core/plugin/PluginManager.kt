@@ -2,6 +2,7 @@ package com.domain.app.core.plugin
 
 import android.content.Context
 import com.domain.app.core.data.DataPoint
+import com.domain.app.core.data.toEntity
 import com.domain.app.core.event.Event
 import com.domain.app.core.event.EventBus
 import com.domain.app.core.storage.AppDatabase
