@@ -15,13 +15,16 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuickAddBottomSheet(
-    plugins: List<Plugin>,
+    plugin: Plugin?,
     onDismiss: () -> Unit,
-    onPluginSelected: (Plugin) -> Unit
+    onDataSubmit: (Plugin, Map<String, Any>) -> Unit
 ) {
+    if (plugin == null) return
+    
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
-
+    var showPluginDialog by remember { mutableStateOf(false) }
+    
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState
@@ -29,61 +32,88 @@ fun QuickAddBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(16.dp)
                 .padding(bottom = 32.dp)
         ) {
             Text(
                 text = "Quick Add",
                 style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(16.dp)
+                modifier = Modifier.padding(bottom = 16.dp)
             )
             
-            Divider()
+            // Show plugin info
+            ListItem(
+                headlineContent = { Text(plugin.metadata.name) },
+                supportingContent = { Text(plugin.metadata.description) },
+                leadingContent = {
+                    // Plugin icon placeholder
+                    Surface(
+                        modifier = Modifier.size(40.dp),
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = when(plugin.id) {
+                                    "water" -> "💧"
+                                    "mood" -> "😊"
+                                    else -> plugin.metadata.name.first().toString()
+                                },
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier.clickable { 
+                    showPluginDialog = true 
+                }
+            )
             
-            LazyColumn {
-                items(plugins) { plugin ->
-                    QuickAddItem(
-                        plugin = plugin,
-                        onClick = {
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Quick action button
+            Button(
+                onClick = { showPluginDialog = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Add ${plugin.metadata.name}")
+            }
+        }
+    }
+    
+    // Plugin-specific dialogs
+    if (showPluginDialog) {
+        when (plugin.id) {
+            "water" -> {
+                val config = plugin.getQuickAddConfig()
+                if (config != null) {
+                    WaterQuickAddDialog(
+                        options = config.options ?: emptyList(),
+                        onDismiss = { showPluginDialog = false },
+                        onConfirm = { amount ->
+                            onDataSubmit(plugin, mapOf("amount" to amount))
+                            showPluginDialog = false
                             scope.launch {
                                 sheetState.hide()
-                                onPluginSelected(plugin)
+                                onDismiss()
                             }
                         }
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun QuickAddItem(
-    plugin: Plugin,
-    onClick: () -> Unit
-) {
-    var showDialog by remember { mutableStateOf(false) }
-    
-    ListItem(
-        headlineContent = { Text(plugin.metadata.name) },
-        supportingContent = { Text(plugin.metadata.description) },
-        modifier = Modifier.clickable { 
-            when (plugin.id) {
-                "water" -> showDialog = true
-                "counter" -> onClick()
-                else -> onClick()
-            }
-        }
-    )
-    
-    // Custom dialogs for specific plugins
-    when (plugin.id) {
-        "water" -> {
-            if (showDialog) {
-                WaterQuickAddDialog(
-                    onDismiss = { showDialog = false },
-                    onConfirm = { amount ->
-                        showDialog = false
-                        onClick()
+            // Add other plugin-specific dialogs here
+            else -> {
+                // Generic input dialog for other plugins
+                GenericQuickAddDialog(
+                    plugin = plugin,
+                    onDismiss = { showPluginDialog = false },
+                    onConfirm = { data ->
+                        onDataSubmit(plugin, data)
+                        showPluginDialog = false
+                        scope.launch {
+                            sheetState.hide()
+                            onDismiss()
+                        }
                     }
                 )
             }
@@ -93,50 +123,38 @@ fun QuickAddItem(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WaterQuickAddDialog(
+fun GenericQuickAddDialog(
+    plugin: Plugin,
     onDismiss: () -> Unit,
-    onConfirm: (Int) -> Unit
+    onConfirm: (Map<String, Any>) -> Unit
 ) {
-    var amount by remember { mutableStateOf("250") }
+    var inputValue by remember { mutableStateOf("") }
+    val config = plugin.getQuickAddConfig()
     
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Water") },
+        title = { Text("Add ${plugin.metadata.name}") },
         text = {
             Column {
-                Text("How much water did you drink?")
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = { amount = it.filter { char -> char.isDigit() } },
-                    label = { Text("Amount (ml)") },
-                    singleLine = true
-                )
+                Text("Enter value:")
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = amount == "250",
-                        onClick = { amount = "250" },
-                        label = { Text("250ml") }
-                    )
-                    FilterChip(
-                        selected = amount == "500",
-                        onClick = { amount = "500" },
-                        label = { Text("500ml") }
-                    )
-                    FilterChip(
-                        selected = amount == "1000",
-                        onClick = { amount = "1000" },
-                        label = { Text("1L") }
-                    )
-                }
+                OutlinedTextField(
+                    value = inputValue,
+                    onValueChange = { inputValue = it },
+                    label = { Text(config?.title ?: "Value") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(amount.toIntOrNull() ?: 250) }
+                onClick = {
+                    val data = mutableMapOf<String, Any>()
+                    data["value"] = inputValue
+                    onConfirm(data)
+                },
+                enabled = inputValue.isNotEmpty()
             ) {
                 Text("Add")
             }

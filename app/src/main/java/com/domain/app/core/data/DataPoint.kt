@@ -4,18 +4,27 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * Universal data point that all plugins produce
+ * Simplified DataPoint for MVP with slots for future expansion
  */
 data class DataPoint(
+    // Essential fields only
     val id: String = UUID.randomUUID().toString(),
     val pluginId: String,
     val timestamp: Instant = Instant.now(),
     val type: String,
+    
+    // Simple but flexible data storage
     val value: Map<String, Any>,
-    val metadata: Map<String, String> = emptyMap(),
-    val location: Location? = null
+    
+    // Future-proofing fields (nullable for now)
+    val metadata: Map<String, String>? = null,
+    val source: String? = "manual",  // "manual", "voice", "auto"
+    val version: Int = 1
 )
 
+/**
+ * Location data if needed
+ */
 data class Location(
     val latitude: Double,
     val longitude: Double,

@@ -3,6 +3,8 @@ package com.domain.app.ui.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.data.DataRepository
+import com.domain.app.core.event.Event
+import com.domain.app.core.event.EventBus
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginManager
 import com.domain.app.core.plugin.PluginState
@@ -22,10 +24,14 @@ class DashboardViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
     
+    private val _selectedPlugin = MutableStateFlow<Plugin?>(null)
+    val selectedPlugin: StateFlow<Plugin?> = _selectedPlugin.asStateFlow()
+    
     init {
         loadPlugins()
         observePluginStates()
         loadDataCounts()
+        observeEvents()
     }
     
     private fun loadPlugins() {
@@ -83,34 +89,66 @@ class DashboardViewModel @Inject constructor(
         }
     }
     
+    private fun observeEvents() {
+        EventBus.events
+            .filterIsInstance<Event.DataCollected>()
+            .onEach { event ->
+                // Show success feedback
+                _uiState.update {
+                    it.copy(
+                        lastDataPoint = event.dataPoint,
+                        showSuccessFeedback = true
+                    )
+                }
+            }
+            .launchIn(viewModelScope)
+    }
+    
     fun onPluginTileClick(plugin: Plugin) {
+        if (plugin.supportsManualEntry()) {
+            _selectedPlugin.value = plugin
+            _uiState.update { it.copy(showQuickAdd = true) }
+        }
+    }
+    
+    fun onQuickAdd(plugin: Plugin, data: Map<String, Any>) {
         viewModelScope.launch {
-            if (plugin.isCollecting()) {
-                pluginManager.disablePlugin(plugin.id)
-            } else {
-                pluginManager.enablePlugin(plugin.id)
+            _uiState.update { it.copy(isProcessing = true) }
+            
+            try {
+                val dataPoint = pluginManager.createManualEntry(plugin.id, data)
+                if (dataPoint != null) {
+                    // Success handled by event observer
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            error = "Failed to create entry",
+                            isProcessing = false
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        error = e.message,
+                        isProcessing = false
+                    )
+                }
             }
         }
     }
     
-    fun onQuickAdd(plugin: Plugin) {
-        viewModelScope.launch {
-            when (plugin.id) {
-                "water" -> {
-                    pluginManager.createManualEntry(
-                        plugin.id,
-                        mapOf("amount" to 250, "unit" to "ml")
-                    )
-                }
-                "counter" -> {
-                    pluginManager.createManualEntry(
-                        plugin.id,
-                        mapOf("label" to "Item")
-                    )
-                }
-                // Add more plugin-specific quick add logic here
-            }
-        }
+    fun dismissQuickAdd() {
+        _selectedPlugin.value = null
+        _uiState.update { it.copy(showQuickAdd = false) }
+    }
+    
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
+    }
+    
+    fun clearSuccessFeedback() {
+        _uiState.update { it.copy(showSuccessFeedback = false) }
     }
 }
 
@@ -121,6 +159,9 @@ data class DashboardUiState(
     val todayEntryCount: Int = 0,
     val weekEntryCount: Int = 0,
     val activePluginCount: Int = 0,
-    val isLoading: Boolean = false,
-    val error: String? = null
+    val showQuickAdd: Boolean = false,
+    val isProcessing: Boolean = false,
+    val error: String? = null,
+    val lastDataPoint: com.domain.app.core.data.DataPoint? = null,
+    val showSuccessFeedback: Boolean = false
 )

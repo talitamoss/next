@@ -2,11 +2,10 @@ package com.domain.app.core.plugin
 
 import android.content.Context
 import com.domain.app.core.data.DataPoint
-import kotlinx.coroutines.flow.Flow
 
 /**
- * Base interface for all plugins.
- * Defines the contract that every data collection plugin must implement.
+ * Minimal plugin interface for MVP
+ * Future features will be added through extension interfaces
  */
 interface Plugin {
     /**
@@ -25,38 +24,46 @@ interface Plugin {
     suspend fun initialize(context: Context)
     
     /**
-     * Start collecting data
-     */
-    suspend fun startCollection()
-    
-    /**
-     * Stop collecting data
-     */
-    suspend fun stopCollection()
-    
-    /**
-     * Get the current collection state
-     */
-    fun isCollecting(): Boolean
-    
-    /**
-     * Flow of data points from this plugin
-     */
-    fun dataFlow(): Flow<DataPoint>
-    
-    /**
-     * Manual data entry (optional)
-     * @return true if plugin supports manual entry
+     * Does this plugin support manual data entry?
      */
     fun supportsManualEntry(): Boolean = false
     
     /**
-     * Create a manual data point (if supported)
+     * Create a manual data point (for quick add functionality)
      */
     suspend fun createManualEntry(data: Map<String, Any>): DataPoint? = null
     
     /**
+     * Get quick add configuration for UI
+     */
+    fun getQuickAddConfig(): QuickAddConfig? = null
+    
+    /**
      * Clean up resources
      */
-    suspend fun cleanup()
+    suspend fun cleanup() {}
 }
+
+/**
+ * Configuration for quick add UI
+ */
+data class QuickAddConfig(
+    val title: String,
+    val defaultValue: Any? = null,
+    val inputType: InputType = InputType.NUMBER,
+    val options: List<QuickOption>? = null,
+    val unit: String? = null
+)
+
+enum class InputType {
+    NUMBER,
+    TEXT,
+    CHOICE,
+    SLIDER
+}
+
+data class QuickOption(
+    val label: String,
+    val value: Any,
+    val icon: String? = null
+)
