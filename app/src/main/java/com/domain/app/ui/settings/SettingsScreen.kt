@@ -14,6 +14,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.domain.app.core.plugin.Plugin
+import com.domain.app.core.plugin.security.PluginTrustLevel
+import com.domain.app.ui.security.PluginPermissionDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -23,6 +25,14 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     
+    // Handle navigation
+    LaunchedEffect(uiState.navigateToSecurity) {
+        uiState.navigateToSecurity?.let { pluginId ->
+            navController.navigate("plugin_security/$pluginId")
+            viewModel.clearNavigation()
+        }
+    }
+    
     Scaffold(
         topBar = {
             TopAppBar(
@@ -31,6 +41,22 @@ fun SettingsScreen(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
             )
+        },
+        snackbarHost = {
+            SnackbarHost { 
+                uiState.message?.let { message ->
+                    Snackbar(
+                        snackbarData = object : SnackbarData {
+                            override val visuals = SnackbarVisuals(
+                                message = message,
+                                duration = SnackbarDuration.Short
+                            )
+                            override fun performAction() { viewModel.dismissMessage() }
+                            override fun dismiss() { viewModel.dismissMessage() }
+                        }
+                    )
+                }
+            }
         }
     ) { paddingValues ->
         LazyColumn(
@@ -39,6 +65,32 @@ fun SettingsScreen(
                 .padding(paddingValues),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
+            // Plugin Management Section
+            item {
+                SettingsSectionHeader(title = "Plugin Management")
+            }
+            
+            item {
+                Text(
+                    text = "Enable/disable plugins and manage permissions",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
+            
+            // Show all plugins with enable/disable and security
+            items(uiState.plugins) { plugin ->
+                PluginManagementItem(
+                    plugin = plugin,
+                    isEnabled = uiState.pluginStates[plugin.id]?.isEnabled ?: false,
+                    onToggle = { viewModel.togglePlugin(plugin.id) },
+                    onSecurityClick = { viewModel.navigateToPluginSecurity(plugin.id) }
+                )
+            }
+            
+            item { Divider(modifier = Modifier.padding(vertical = 16.dp)) }
+            
             // Dashboard Management Section
             item {
                 SettingsSectionHeader(title = "Dashboard Plugins")
@@ -46,15 +98,17 @@ fun SettingsScreen(
             
             item {
                 Text(
-                    text = "Toggle which plugins appear on your dashboard",
+                    text = "Choose which plugins appear on your dashboard",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 )
             }
             
-            // Show all plugins with dashboard toggle
-            items(uiState.plugins) { plugin ->
+            // Show enabled plugins with dashboard toggle
+            items(uiState.plugins.filter { plugin -> 
+                uiState.pluginStates[plugin.id]?.isEnabled == true 
+            }) { plugin ->
                 DashboardPluginItem(
                     plugin = plugin,
                     isOnDashboard = uiState.dashboardPluginIds.contains(plugin.id),
@@ -105,6 +159,15 @@ fun SettingsScreen(
             
             item {
                 SettingsItem(
+                    icon = AppIcons.Security.shield,
+                    title = "Security Audit",
+                    subtitle = "View plugin permissions and security events",
+                    onClick = { navController.navigate("security_audit") }
+                )
+            }
+            
+            item {
+                SettingsItem(
                     icon = AppIcons.Security.lock,
                     title = "Change PIN",
                     subtitle = "Update your security PIN",
@@ -114,7 +177,7 @@ fun SettingsScreen(
             
             item {
                 SettingsItem(
-                    icon = AppIcons.Security.shield,
+                    icon = AppIcons.Security.fingerprint,
                     title = "Biometric Lock",
                     subtitle = "Use fingerprint or face unlock",
                     onClick = { /* TODO: Toggle biometric */ }
@@ -146,6 +209,16 @@ fun SettingsScreen(
                 )
             }
         }
+    }
+    
+    // Permission request dialog
+    if (uiState.showPermissionRequest && uiState.pendingPlugin != null) {
+        PluginPermissionDialog(
+            plugin = uiState.pendingPlugin,
+            requestedPermissions = uiState.pendingPlugin.securityManifest.requestedCapabilities,
+            onGrant = { viewModel.grantPendingPermissions() },
+            onDeny = { viewModel.denyPendingPermissions() }
+        )
     }
 }
 
@@ -183,6 +256,93 @@ fun SettingsItem(
 }
 
 @Composable
+fun PluginManagementItem(
+    plugin: Plugin,
+    isEnabled: Boolean,
+    onToggle: () -> Unit,
+    onSecurityClick: () -> Unit
+) {
+    ListItem(
+        headlineContent = { 
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(plugin.metadata.name)
+                // Trust level badge
+                when (plugin.trustLevel) {
+                    PluginTrustLevel.OFFICIAL -> {
+                        Surface(
+                            shape = MaterialTheme.shapes.extraSmall,
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = "Official",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                    PluginTrustLevel.VERIFIED -> {
+                        Surface(
+                            shape = MaterialTheme.shapes.extraSmall,
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                text = "Verified",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+                    else -> {}
+                }
+            }
+        },
+        supportingContent = { 
+            Column {
+                Text(plugin.metadata.description)
+                Text(
+                    text = "v${plugin.metadata.version} by ${plugin.metadata.author}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        leadingContent = {
+            Icon(
+                imageVector = AppIcons.getPluginIcon(plugin.id),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp)
+            )
+        },
+        trailingContent = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Security button
+                IconButton(onClick = onSecurityClick) {
+                    Icon(
+                        imageVector = AppIcons.Security.shield,
+                        contentDescription = "Security settings",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                // Enable/disable switch
+                Switch(
+                    checked = isEnabled,
+                    onCheckedChange = { onToggle() }
+                )
+            }
+        }
+    )
+}
+
+@Composable
 fun DashboardPluginItem(
     plugin: Plugin,
     isOnDashboard: Boolean,
@@ -190,18 +350,6 @@ fun DashboardPluginItem(
 ) {
     ListItem(
         headlineContent = { Text(plugin.metadata.name) },
-        supportingContent = { 
-            Column {
-                Text(plugin.metadata.description)
-                if (isOnDashboard) {
-                    Text(
-                        text = "Shown on dashboard",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        },
         leadingContent = {
             Icon(
                 imageVector = AppIcons.getPluginIcon(plugin.id),

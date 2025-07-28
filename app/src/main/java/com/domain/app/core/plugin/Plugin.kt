@@ -2,14 +2,22 @@ package com.domain.app.core.plugin
 
 import android.content.Context
 import com.domain.app.core.data.DataPoint
+import com.domain.app.core.plugin.security.PluginSecurityManifest
+import com.domain.app.core.plugin.security.PluginTrustLevel
 
 /**
- * Base plugin interface for modular data collection
- * Designed for extensibility and future feature additions
+ * Enhanced plugin interface with security integration
  */
 interface Plugin {
     val id: String
     val metadata: PluginMetadata
+    
+    // Security manifest - required for all plugins
+    val securityManifest: PluginSecurityManifest
+    
+    // Trust level - determined by system
+    val trustLevel: PluginTrustLevel
+        get() = PluginTrustLevel.COMMUNITY // Default, can be overridden
     
     // Core functionality
     suspend fun initialize(context: Context)
@@ -30,12 +38,15 @@ interface Plugin {
         "value" to dataPoint.value.toString()
     )
     
+    // Permission rationale - explain why each capability is needed
+    fun getPermissionRationale(): Map<PluginCapability, String> = emptyMap()
+    
     // Cleanup
     suspend fun cleanup() {}
 }
 
 /**
- * Enhanced plugin metadata with all foundational fields
+ * Enhanced plugin metadata with security fields
  */
 data class PluginMetadata(
     // Basic info
@@ -52,7 +63,7 @@ data class PluginMetadata(
     val dataPattern: DataPattern = DataPattern.SINGLE_VALUE,
     val inputType: InputType = InputType.NUMBER,
     
-    // New foundational fields
+    // Core fields
     val supportsMultiStage: Boolean = false,
     val relatedPlugins: List<String> = emptyList(),
     val exportFormat: ExportFormat = ExportFormat.CSV,
@@ -112,7 +123,7 @@ enum class ExportFormat {
 }
 
 /**
- * Data sensitivity levels
+ * Data sensitivity levels - matches security manifest
  */
 enum class DataSensitivity {
     PUBLIC,    // Can be shared freely
@@ -174,3 +185,12 @@ sealed class ValidationResult {
     data class Error(val message: String) : ValidationResult()
     data class Warning(val message: String) : ValidationResult()
 }
+
+/**
+ * Risk warning for high-risk permissions
+ */
+data class RiskWarning(
+    val severity: RiskLevel,
+    val message: String,
+    val capability: PluginCapability
+)

@@ -3,10 +3,10 @@ package com.domain.app.plugins
 import android.content.Context
 import com.domain.app.core.data.DataPoint
 import com.domain.app.core.plugin.*
+import com.domain.app.core.plugin.security.*
 
 /**
- * Water intake tracking plugin
- * Tracks daily water consumption with cumulative pattern
+ * Water intake tracking plugin with security manifest
  */
 class WaterPlugin : Plugin {
     override val id = "water"
@@ -33,6 +33,28 @@ class WaterPlugin : Plugin {
             ContextTrigger.TIME_OF_DAY,
             ContextTrigger.AFTER_EVENT
         )
+    )
+    
+    override val securityManifest = PluginSecurityManifest(
+        requestedCapabilities = setOf(
+            PluginCapability.COLLECT_DATA,
+            PluginCapability.READ_OWN_DATA,
+            PluginCapability.LOCAL_STORAGE,
+            PluginCapability.EXPORT_DATA
+        ),
+        dataSensitivity = DataSensitivity.NORMAL,
+        dataAccess = setOf(DataAccessScope.OWN_DATA_ONLY),
+        privacyPolicy = "Water intake data is stored locally and never shared without your permission.",
+        dataRetention = DataRetentionPolicy.USER_CONTROLLED
+    )
+    
+    override val trustLevel = PluginTrustLevel.OFFICIAL
+    
+    override fun getPermissionRationale() = mapOf(
+        PluginCapability.COLLECT_DATA to "Record your daily water intake",
+        PluginCapability.READ_OWN_DATA to "View your hydration history and progress",
+        PluginCapability.LOCAL_STORAGE to "Save your water intake data on your device",
+        PluginCapability.EXPORT_DATA to "Export your hydration data for personal use"
     )
     
     override suspend fun initialize(context: Context) {

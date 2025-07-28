@@ -3,10 +3,10 @@ package com.domain.app.plugins
 import android.content.Context
 import com.domain.app.core.data.DataPoint
 import com.domain.app.core.plugin.*
+import com.domain.app.core.plugin.security.*
 
 /**
- * Simple counter plugin for testing and general counting
- * Example of a basic plugin implementation
+ * Simple counter plugin with minimal security requirements
  */
 class CounterPlugin : Plugin {
     override val id = "counter"
@@ -28,6 +28,26 @@ class CounterPlugin : Plugin {
             "count", "counter", "tally", "increment",
             "add one", "plus one", "tick", "mark"
         )
+    )
+    
+    override val securityManifest = PluginSecurityManifest(
+        requestedCapabilities = setOf(
+            PluginCapability.COLLECT_DATA,
+            PluginCapability.READ_OWN_DATA,
+            PluginCapability.LOCAL_STORAGE
+        ),
+        dataSensitivity = DataSensitivity.NORMAL,
+        dataAccess = setOf(DataAccessScope.OWN_DATA_ONLY),
+        privacyPolicy = "Counter data is stored locally for tracking purposes only.",
+        dataRetention = DataRetentionPolicy.DEFAULT
+    )
+    
+    override val trustLevel = PluginTrustLevel.OFFICIAL
+    
+    override fun getPermissionRationale() = mapOf(
+        PluginCapability.COLLECT_DATA to "Count and track items or events",
+        PluginCapability.READ_OWN_DATA to "View your counting history",
+        PluginCapability.LOCAL_STORAGE to "Save your counts on your device"
     )
     
     private var counter = 0

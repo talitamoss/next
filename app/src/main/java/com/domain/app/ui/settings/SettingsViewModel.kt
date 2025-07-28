@@ -4,8 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.data.DataRepository
 import com.domain.app.core.plugin.Plugin
+import com.domain.app.core.plugin.PluginCapability
 import com.domain.app.core.plugin.PluginManager
 import com.domain.app.core.plugin.PluginState
+import com.domain.app.core.plugin.security.PluginPermissionManager
+import com.domain.app.core.plugin.security.PluginTrustLevel
 import com.domain.app.core.preferences.PreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -16,7 +19,8 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val pluginManager: PluginManager,
     private val dataRepository: DataRepository,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val permissionManager: PluginPermissionManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -53,12 +57,72 @@ class SettingsViewModel @Inject constructor(
     
     fun togglePlugin(pluginId: String) {
         viewModelScope.launch {
+            val plugin = pluginManager.getPlugin(pluginId) ?: return@launch
             val currentState = _uiState.value.pluginStates[pluginId]
+            
             if (currentState?.isEnabled == true) {
+                // Disabling - just disable
                 pluginManager.disablePlugin(pluginId)
             } else {
-                pluginManager.enablePlugin(pluginId)
+                // Enabling - check permissions first
+                val hasPermissions = permissionManager.hasAnyPermissions(pluginId)
+                
+                if (!hasPermissions && plugin.trustLevel != PluginTrustLevel.OFFICIAL) {
+                    // Show permission request dialog
+                    _uiState.update {
+                        it.copy(
+                            pendingPlugin = plugin,
+                            showPermissionRequest = true
+                        )
+                    }
+                } else {
+                    // Already has permissions or is official plugin
+                    pluginManager.enablePlugin(pluginId)
+                }
             }
+        }
+    }
+    
+    fun grantPendingPermissions() {
+        viewModelScope.launch {
+            val plugin = _uiState.value.pendingPlugin ?: return@launch
+            
+            permissionManager.grantPermissions(
+                pluginId = plugin.id,
+                permissions = plugin.securityManifest.requestedCapabilities,
+                grantedBy = "user_settings"
+            )
+            
+            pluginManager.enablePlugin(plugin.id)
+            
+            _uiState.update {
+                it.copy(
+                    pendingPlugin = null,
+                    showPermissionRequest = false
+                )
+            }
+        }
+    }
+    
+    fun denyPendingPermissions() {
+        _uiState.update {
+            it.copy(
+                pendingPlugin = null,
+                showPermissionRequest = false,
+                message = "Plugin cannot be enabled without permissions"
+            )
+        }
+    }
+    
+    fun navigateToPluginSecurity(pluginId: String) {
+        _uiState.update {
+            it.copy(navigateToSecurity = pluginId)
+        }
+    }
+    
+    fun clearNavigation() {
+        _uiState.update {
+            it.copy(navigateToSecurity = null)
         }
     }
     
@@ -96,12 +160,19 @@ class SettingsViewModel @Inject constructor(
             _uiState.update { it.copy(message = "All data cleared") }
         }
     }
+    
+    fun dismissMessage() {
+        _uiState.update { it.copy(message = null) }
+    }
 }
 
 data class SettingsUiState(
     val plugins: List<Plugin> = emptyList(),
     val pluginStates: Map<String, PluginState> = emptyMap(),
     val dashboardPluginIds: Set<String> = emptySet(),
+    val pendingPlugin: Plugin? = null,
+    val showPermissionRequest: Boolean = false,
+    val navigateToSecurity: String? = null,
     val isLoading: Boolean = false,
     val message: String? = null
 )

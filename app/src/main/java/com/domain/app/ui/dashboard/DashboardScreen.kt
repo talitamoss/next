@@ -19,6 +19,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.domain.app.core.plugin.Plugin
+import com.domain.app.core.plugin.security.PluginTrustLevel
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,9 +41,7 @@ fun DashboardScreen(
                 actions = {
                     TextButton(
                         onClick = { 
-                            // Navigate to settings screen with the bottom nav
                             navController.navigate("settings") {
-                                // Clear backstack to root
                                 popUpTo(navController.graph.id) {
                                     inclusive = false
                                 }
@@ -97,8 +96,12 @@ fun DashboardScreen(
                     DashboardPluginTile(
                         plugin = plugin,
                         isCollecting = uiState.pluginStates[plugin.id]?.isCollecting ?: false,
+                        hasPermissions = uiState.pluginPermissions[plugin.id] ?: false,
                         onClick = {
                             viewModel.onPluginTileClick(plugin)
+                        },
+                        onLongClick = {
+                            navController.navigate("plugin_security/${plugin.id}")
                         }
                     )
                 }
@@ -123,15 +126,23 @@ fun DashboardScreen(
         }
     }
 
-    // Quick Add Bottom Sheet
+    // Quick Add Bottom Sheet with permission check
     if (uiState.showQuickAdd && selectedPlugin != null) {
-        QuickAddBottomSheet(
-            plugin = selectedPlugin,
-            onDismiss = { viewModel.dismissQuickAdd() },
-            onDataSubmit = { plugin, data ->
-                viewModel.onQuickAdd(plugin, data)
-            }
-        )
+        if (uiState.needsPermission) {
+            PluginPermissionQuickDialog(
+                plugin = selectedPlugin,
+                onGrant = { viewModel.grantQuickAddPermission() },
+                onDeny = { viewModel.dismissQuickAdd() }
+            )
+        } else {
+            QuickAddBottomSheet(
+                plugin = selectedPlugin,
+                onDismiss = { viewModel.dismissQuickAdd() },
+                onDataSubmit = { plugin, data ->
+                    viewModel.onQuickAdd(plugin, data)
+                }
+            )
+        }
     }
     
     // Plugin Selector Bottom Sheet
@@ -154,139 +165,158 @@ fun DashboardScreen(
 }
 
 @Composable
-fun SummaryCard(
-    title: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-        }
-    }
-}
-
-@Composable
 fun DashboardPluginTile(
     plugin: Plugin,
     isCollecting: Boolean,
-    onClick: () -> Unit
+    hasPermissions: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .aspectRatio(1f)
-            .clickable { onClick() },
+            .clickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = if (isCollecting) 
-                MaterialTheme.colorScheme.primaryContainer 
-            else 
-                MaterialTheme.colorScheme.surfaceVariant
+            containerColor = when {
+                !hasPermissions -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                isCollecting -> MaterialTheme.colorScheme.primaryContainer
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            }
         )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Box(
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (hasPermissions) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = AppIcons.getPluginIcon(plugin.id),
+                        contentDescription = null,
+                        tint = if (hasPermissions)
+                            MaterialTheme.colorScheme.onPrimary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = plugin.metadata.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    color = if (hasPermissions)
+                        MaterialTheme.colorScheme.onSurface
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (!hasPermissions) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Needs permission",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else if (isCollecting) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Active",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            
+            // Trust indicator
+            if (plugin.trustLevel == PluginTrustLevel.OFFICIAL) {
+                Icon(
+                    imageVector = AppIcons.Security.shield,
+                    contentDescription = "Official plugin",
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PluginPermissionQuickDialog(
+    plugin: Plugin,
+    onGrant: () -> Unit,
+    onDeny: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDeny,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Icon(
                     imageVector = AppIcons.getPluginIcon(plugin.id),
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(28.dp)
+                    tint = MaterialTheme.colorScheme.primary
                 )
+                Text("Enable ${plugin.metadata.name}?")
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = plugin.metadata.name,
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                maxLines = 1
-            )
-            if (isCollecting) {
-                Spacer(modifier = Modifier.height(4.dp))
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("This plugin needs permissions to collect data.")
+                
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                ) {
+                    Text(
+                        text = "Required: ${plugin.securityManifest.requestedCapabilities.size} permissions",
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                
                 Text(
-                    text = "Active",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
+                    text = "You can review detailed permissions in Settings.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        },
+        confirmButton = {
+            FilledTonalButton(onClick = onGrant) {
+                Text("Grant & Continue")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDeny) {
+                Text("Cancel")
+            }
         }
-    }
-}
-
-@Composable
-fun AddPluginTile(
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .aspectRatio(1f)
-            .clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = CardDefaults.outlinedCardBorder()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = AppIcons.Action.add,
-                contentDescription = "Add plugin",
-                modifier = Modifier.size(32.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Add Plugin",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-fun EmptyPluginTile() {
-    Card(
-        modifier = Modifier.aspectRatio(1f),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
-        )
-    ) {
-        Box(modifier = Modifier.fillMaxSize())
-    }
+    )
 }

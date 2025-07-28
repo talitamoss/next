@@ -3,11 +3,11 @@ package com.domain.app.plugins
 import android.content.Context
 import com.domain.app.core.data.DataPoint
 import com.domain.app.core.plugin.*
+import com.domain.app.core.plugin.security.*
 import java.time.LocalTime
 
 /**
- * Medication adherence tracking plugin
- * Tracks medication taken with timing and dosage
+ * Medication tracking plugin with enhanced security for sensitive health data
  */
 class MedicationPlugin : Plugin {
     override val id = "medication"
@@ -34,6 +34,30 @@ class MedicationPlugin : Plugin {
             ContextTrigger.TIME_OF_DAY,
             ContextTrigger.PATTERN_BASED
         )
+    )
+    
+    override val securityManifest = PluginSecurityManifest(
+        requestedCapabilities = setOf(
+            PluginCapability.COLLECT_DATA,
+            PluginCapability.READ_OWN_DATA,
+            PluginCapability.LOCAL_STORAGE,
+            PluginCapability.EXPORT_DATA,
+            PluginCapability.SHOW_NOTIFICATIONS
+        ),
+        dataSensitivity = DataSensitivity.SENSITIVE,
+        dataAccess = setOf(DataAccessScope.OWN_DATA_ONLY),
+        privacyPolicy = "Medication data is highly sensitive health information. It is encrypted with additional security layers and never leaves your device without explicit consent. Only share with trusted healthcare providers.",
+        dataRetention = DataRetentionPolicy.USER_CONTROLLED
+    )
+    
+    override val trustLevel = PluginTrustLevel.OFFICIAL
+    
+    override fun getPermissionRationale() = mapOf(
+        PluginCapability.COLLECT_DATA to "Record when you take your medications",
+        PluginCapability.READ_OWN_DATA to "View your medication history and adherence",
+        PluginCapability.LOCAL_STORAGE to "Securely store your medication data with encryption",
+        PluginCapability.EXPORT_DATA to "Export medication logs for healthcare providers",
+        PluginCapability.SHOW_NOTIFICATIONS to "Remind you to take your medications on time"
     )
     
     override suspend fun initialize(context: Context) {

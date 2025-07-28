@@ -3,10 +3,10 @@ package com.domain.app.plugins
 import android.content.Context
 import com.domain.app.core.data.DataPoint
 import com.domain.app.core.plugin.*
+import com.domain.app.core.plugin.security.*
 
 /**
- * Mood tracking plugin with optional notes
- * Uses single-stage input with rating pattern
+ * Mood tracking plugin with security manifest
  */
 class MoodPlugin : Plugin {
     override val id = "mood"
@@ -34,6 +34,28 @@ class MoodPlugin : Plugin {
             ContextTrigger.TIME_OF_DAY,
             ContextTrigger.PATTERN_BASED
         )
+    )
+    
+    override val securityManifest = PluginSecurityManifest(
+        requestedCapabilities = setOf(
+            PluginCapability.COLLECT_DATA,
+            PluginCapability.READ_OWN_DATA,
+            PluginCapability.LOCAL_STORAGE,
+            PluginCapability.EXPORT_DATA
+        ),
+        dataSensitivity = DataSensitivity.SENSITIVE,
+        dataAccess = setOf(DataAccessScope.OWN_DATA_ONLY),
+        privacyPolicy = "Mood data is sensitive personal information. It is encrypted and stored locally. We never share this data without your explicit consent.",
+        dataRetention = DataRetentionPolicy.USER_CONTROLLED
+    )
+    
+    override val trustLevel = PluginTrustLevel.OFFICIAL
+    
+    override fun getPermissionRationale() = mapOf(
+        PluginCapability.COLLECT_DATA to "Record your mood and emotional state",
+        PluginCapability.READ_OWN_DATA to "View your mood history and patterns",
+        PluginCapability.LOCAL_STORAGE to "Securely save your mood data on your device",
+        PluginCapability.EXPORT_DATA to "Export your mood data for personal analysis or sharing with healthcare providers"
     )
     
     override suspend fun initialize(context: Context) {

@@ -1,8 +1,11 @@
 package com.domain.app.di
 
 import android.content.Context
+import com.domain.app.core.data.DataRepository
 import com.domain.app.core.plugin.PluginManager
 import com.domain.app.core.plugin.PluginRegistry
+import com.domain.app.core.plugin.security.PluginPermissionManager
+import com.domain.app.core.plugin.security.SecurityMonitor
 import com.domain.app.core.storage.AppDatabase
 import dagger.Module
 import dagger.Provides
@@ -26,8 +29,18 @@ object PluginModule {
     fun providePluginManager(
         @ApplicationContext context: Context,
         database: AppDatabase,
-        pluginRegistry: PluginRegistry
+        dataRepository: DataRepository,
+        pluginRegistry: PluginRegistry,
+        permissionManager: PluginPermissionManager,
+        securityMonitor: SecurityMonitor
     ): PluginManager {
-        return PluginManager(context, database, pluginRegistry)
+        return PluginManager(
+            context = context,
+            database = database,
+            dataRepository = dataRepository,
+            pluginRegistry = pluginRegistry,
+            permissionManager = permissionManager,
+            securityMonitor = securityMonitor
+        )
     }
 }

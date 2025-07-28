@@ -3,10 +3,10 @@ package com.domain.app.plugins
 import android.content.Context
 import com.domain.app.core.data.DataPoint
 import com.domain.app.core.plugin.*
+import com.domain.app.core.plugin.security.*
 
 /**
- * Exercise and physical activity tracking plugin
- * Tracks activity type, duration, intensity, and calories
+ * Exercise tracking plugin with security manifest
  */
 class ExercisePlugin : Plugin {
     override val id = "exercise"
@@ -35,6 +35,30 @@ class ExercisePlugin : Plugin {
             ContextTrigger.LOCATION,
             ContextTrigger.PATTERN_BASED
         )
+    )
+    
+    override val securityManifest = PluginSecurityManifest(
+        requestedCapabilities = setOf(
+            PluginCapability.COLLECT_DATA,
+            PluginCapability.READ_OWN_DATA,
+            PluginCapability.LOCAL_STORAGE,
+            PluginCapability.EXPORT_DATA,
+            PluginCapability.ANALYTICS_BASIC
+        ),
+        dataSensitivity = DataSensitivity.NORMAL,
+        dataAccess = setOf(DataAccessScope.OWN_DATA_ONLY),
+        privacyPolicy = "Exercise data is stored locally and used to track your fitness progress. Location data is not collected unless explicitly enabled.",
+        dataRetention = DataRetentionPolicy.USER_CONTROLLED
+    )
+    
+    override val trustLevel = PluginTrustLevel.OFFICIAL
+    
+    override fun getPermissionRationale() = mapOf(
+        PluginCapability.COLLECT_DATA to "Record your workouts and physical activities",
+        PluginCapability.READ_OWN_DATA to "View your exercise history and progress",
+        PluginCapability.LOCAL_STORAGE to "Save your workout data on your device",
+        PluginCapability.EXPORT_DATA to "Export fitness data for analysis or sharing",
+        PluginCapability.ANALYTICS_BASIC to "Calculate calories burned and activity trends"
     )
     
     override suspend fun initialize(context: Context) {

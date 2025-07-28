@@ -3,11 +3,11 @@ package com.domain.app.plugins
 import android.content.Context
 import com.domain.app.core.data.DataPoint
 import com.domain.app.core.plugin.*
+import com.domain.app.core.plugin.security.*
 import java.time.LocalTime
 
 /**
- * Sleep tracking plugin with multi-stage support
- * Tracks duration, quality, and optional dream journal
+ * Sleep tracking plugin with security manifest
  */
 class SleepPlugin : Plugin {
     override val id = "sleep"
@@ -24,7 +24,7 @@ class SleepPlugin : Plugin {
         supportsMultiStage = true,
         relatedPlugins = listOf("mood", "energy", "exercise"),
         exportFormat = ExportFormat.CSV,
-        dataSensitivity = DataSensitivity.NORMAL,
+        dataSensitivity = DataSensitivity.SENSITIVE,
         naturalLanguageAliases = listOf(
             "sleep", "slept", "sleeping", "rest", "rested",
             "went to bed", "woke up", "nap", "napped",
@@ -34,6 +34,30 @@ class SleepPlugin : Plugin {
             ContextTrigger.TIME_OF_DAY,
             ContextTrigger.PATTERN_BASED
         )
+    )
+    
+    override val securityManifest = PluginSecurityManifest(
+        requestedCapabilities = setOf(
+            PluginCapability.COLLECT_DATA,
+            PluginCapability.READ_OWN_DATA,
+            PluginCapability.LOCAL_STORAGE,
+            PluginCapability.EXPORT_DATA,
+            PluginCapability.ANALYTICS_BASIC
+        ),
+        dataSensitivity = DataSensitivity.SENSITIVE,
+        dataAccess = setOf(DataAccessScope.OWN_DATA_ONLY),
+        privacyPolicy = "Sleep data including dream journals is encrypted locally. Sleep patterns can reveal sensitive health information and are never shared without explicit consent.",
+        dataRetention = DataRetentionPolicy.USER_CONTROLLED
+    )
+    
+    override val trustLevel = PluginTrustLevel.OFFICIAL
+    
+    override fun getPermissionRationale() = mapOf(
+        PluginCapability.COLLECT_DATA to "Record your sleep duration and quality",
+        PluginCapability.READ_OWN_DATA to "View your sleep history and patterns",
+        PluginCapability.LOCAL_STORAGE to "Save your sleep data securely on your device",
+        PluginCapability.EXPORT_DATA to "Export sleep data for health analysis",
+        PluginCapability.ANALYTICS_BASIC to "Calculate sleep trends and average sleep quality"
     )
     
     override suspend fun initialize(context: Context) {
@@ -72,7 +96,6 @@ class SleepPlugin : Plugin {
         )
     )
     
-    // Fallback for simple input
     override fun getQuickAddConfig() = QuickAddConfig(
         title = "Log Sleep",
         inputType = InputType.CHOICE,
