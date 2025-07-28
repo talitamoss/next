@@ -1,108 +1,63 @@
 package com.domain.app.core.plugin
 
 /**
- * Capabilities that plugins can request.
- * Each capability grants specific permissions within the app.
+ * Defines granular permissions that plugins can request.
+ * Each capability grants specific access within the application.
  */
 enum class PluginCapability {
     // Data capabilities
-    COLLECT_DATA,         // Can create new data entries
-    READ_OWN_DATA,        // Can read data it created
-    READ_ALL_DATA,        // Can read any data (high privilege)
-    MODIFY_DATA,          // Can update existing data
-    DELETE_DATA,          // Can delete data
+    COLLECT_DATA,
+    READ_OWN_DATA,
+    READ_ALL_DATA,
+    MODIFY_DATA,
+    DELETE_DATA,
     
     // UI capabilities
-    CUSTOM_UI,            // Can provide custom UI components
-    MODIFY_THEME,         // Can modify app appearance
-    ADD_MENU_ITEMS,       // Can add items to menus
-    SHOW_NOTIFICATIONS,   // Can display notifications
-    FULLSCREEN_UI,        // Can take over full screen
+    CUSTOM_UI,
+    MODIFY_THEME,
+    ADD_MENU_ITEMS,
+    SHOW_NOTIFICATIONS,
+    FULLSCREEN_UI,
     
     // System capabilities
-    BACKGROUND_SYNC,      // Can sync in background
-    BACKGROUND_PROCESS,   // Can run background tasks
-    NETWORK_ACCESS,       // Can access network
-    FILE_ACCESS,          // Can read/write files
-    CAMERA_ACCESS,        // Can access camera
-    MICROPHONE_ACCESS,    // Can access microphone
+    BACKGROUND_SYNC,
+    BACKGROUND_PROCESS,
+    NETWORK_ACCESS,
+    FILE_ACCESS,
+    CAMERA_ACCESS,
+    MICROPHONE_ACCESS,
     
     // Integration capabilities
-    SHARE_DATA,           // Can share data externally
-    IMPORT_DATA,          // Can import external data
-    EXPORT_DATA,          // Can export data
-    INTEGRATE_SERVICES,   // Can integrate with external services
+    SHARE_DATA,
+    IMPORT_DATA,
+    EXPORT_DATA,
+    INTEGRATE_SERVICES,
     
     // Advanced capabilities
-    ACCESS_SENSORS,       // Can access device sensors
-    ACCESS_LOCATION,      // Can access location
-    ACCESS_BIOMETRIC,     // Can access biometric data
-    MODIFY_SETTINGS,      // Can change app settings
-    INSTALL_PLUGINS,      // Can install other plugins
+    ACCESS_SENSORS,
+    ACCESS_LOCATION,
+    ACCESS_BIOMETRIC,
+    MODIFY_SETTINGS,
+    INSTALL_PLUGINS,
     
     // Analytics capabilities
-    ANALYTICS_BASIC,      // Can track basic usage
-    ANALYTICS_DETAILED,   // Can track detailed behavior
+    ANALYTICS_BASIC,
+    ANALYTICS_DETAILED,
     
     // Communication capabilities
-    SEND_EMAILS,          // Can send emails
-    SEND_SMS,             // Can send SMS
-    PUSH_NOTIFICATIONS,   // Can send push notifications
+    SEND_EMAILS,
+    SEND_SMS,
+    PUSH_NOTIFICATIONS,
     
     // Storage capabilities
-    LOCAL_STORAGE,        // Can use local storage
-    CLOUD_STORAGE,        // Can use cloud storage
-    CACHE_DATA,           // Can cache data locally
+    LOCAL_STORAGE,
+    CLOUD_STORAGE,
+    CACHE_DATA
 }
 
 /**
- * Risk levels associated with capabilities
+ * Risk levels associated with different capabilities
  */
-fun PluginCapability.getRiskLevel(): RiskLevel {
-    return when (this) {
-        // Low risk - basic functionality
-        COLLECT_DATA,
-        READ_OWN_DATA,
-        CUSTOM_UI,
-        LOCAL_STORAGE,
-        CACHE_DATA -> RiskLevel.LOW
-        
-        // Medium risk - extended functionality
-        SHOW_NOTIFICATIONS,
-        ADD_MENU_ITEMS,
-        BACKGROUND_SYNC,
-        NETWORK_ACCESS,
-        SHARE_DATA,
-        ANALYTICS_BASIC -> RiskLevel.MEDIUM
-        
-        // High risk - sensitive access
-        READ_ALL_DATA,
-        MODIFY_DATA,
-        DELETE_DATA,
-        FILE_ACCESS,
-        ACCESS_LOCATION,
-        EXPORT_DATA,
-        IMPORT_DATA,
-        INTEGRATE_SERVICES,
-        ANALYTICS_DETAILED -> RiskLevel.HIGH
-        
-        // Critical risk - full access
-        MODIFY_SETTINGS,
-        INSTALL_PLUGINS,
-        ACCESS_BIOMETRIC,
-        ACCESS_SENSORS,
-        CAMERA_ACCESS,
-        MICROPHONE_ACCESS,
-        SEND_EMAILS,
-        SEND_SMS,
-        CLOUD_STORAGE,
-        MODIFY_THEME,
-        FULLSCREEN_UI,
-        BACKGROUND_PROCESS,
-        PUSH_NOTIFICATIONS -> RiskLevel.CRITICAL
-    }
-}
-
 enum class RiskLevel {
     LOW,
     MEDIUM,
@@ -111,71 +66,115 @@ enum class RiskLevel {
 }
 
 /**
- * Human-readable descriptions for capabilities
+ * Extension function to get the risk level for a capability
  */
-fun PluginCapability.getDescription(): String {
+fun PluginCapability.getRiskLevel(): RiskLevel {
     return when (this) {
-        COLLECT_DATA -> "Create and save new data entries"
-        READ_OWN_DATA -> "View data this plugin has created"
-        READ_ALL_DATA -> "View all data from any plugin"
-        MODIFY_DATA -> "Edit existing data entries"
-        DELETE_DATA -> "Remove data permanently"
+        PluginCapability.COLLECT_DATA,
+        PluginCapability.READ_OWN_DATA,
+        PluginCapability.CUSTOM_UI,
+        PluginCapability.LOCAL_STORAGE,
+        PluginCapability.CACHE_DATA -> RiskLevel.LOW
         
-        CUSTOM_UI -> "Display custom interface elements"
-        MODIFY_THEME -> "Change app colors and appearance"
-        ADD_MENU_ITEMS -> "Add options to app menus"
-        SHOW_NOTIFICATIONS -> "Display system notifications"
-        FULLSCREEN_UI -> "Take control of entire screen"
+        PluginCapability.SHOW_NOTIFICATIONS,
+        PluginCapability.ADD_MENU_ITEMS,
+        PluginCapability.BACKGROUND_SYNC,
+        PluginCapability.NETWORK_ACCESS,
+        PluginCapability.SHARE_DATA,
+        PluginCapability.ANALYTICS_BASIC -> RiskLevel.MEDIUM
         
-        BACKGROUND_SYNC -> "Sync data when app is closed"
-        BACKGROUND_PROCESS -> "Run tasks in background"
-        NETWORK_ACCESS -> "Connect to the internet"
-        FILE_ACCESS -> "Read and write files on device"
-        CAMERA_ACCESS -> "Use device camera"
-        MICROPHONE_ACCESS -> "Use device microphone"
+        PluginCapability.READ_ALL_DATA,
+        PluginCapability.MODIFY_DATA,
+        PluginCapability.DELETE_DATA,
+        PluginCapability.FILE_ACCESS,
+        PluginCapability.ACCESS_LOCATION,
+        PluginCapability.EXPORT_DATA,
+        PluginCapability.IMPORT_DATA,
+        PluginCapability.INTEGRATE_SERVICES,
+        PluginCapability.ANALYTICS_DETAILED -> RiskLevel.HIGH
         
-        SHARE_DATA -> "Share data with other apps"
-        IMPORT_DATA -> "Import data from external sources"
-        EXPORT_DATA -> "Export data to files"
-        INTEGRATE_SERVICES -> "Connect to external services"
-        
-        ACCESS_SENSORS -> "Use device sensors (accelerometer, etc.)"
-        ACCESS_LOCATION -> "Access device location"
-        ACCESS_BIOMETRIC -> "Access health and biometric data"
-        MODIFY_SETTINGS -> "Change app settings"
-        INSTALL_PLUGINS -> "Install additional plugins"
-        
-        ANALYTICS_BASIC -> "Track basic usage patterns"
-        ANALYTICS_DETAILED -> "Track detailed user behavior"
-        
-        SEND_EMAILS -> "Send emails on your behalf"
-        SEND_SMS -> "Send text messages"
-        PUSH_NOTIFICATIONS -> "Send push notifications"
-        
-        LOCAL_STORAGE -> "Store data on device"
-        CLOUD_STORAGE -> "Store data in cloud"
-        CACHE_DATA -> "Cache temporary data"
+        PluginCapability.MODIFY_SETTINGS,
+        PluginCapability.INSTALL_PLUGINS,
+        PluginCapability.ACCESS_BIOMETRIC,
+        PluginCapability.ACCESS_SENSORS,
+        PluginCapability.CAMERA_ACCESS,
+        PluginCapability.MICROPHONE_ACCESS,
+        PluginCapability.SEND_EMAILS,
+        PluginCapability.SEND_SMS,
+        PluginCapability.CLOUD_STORAGE,
+        PluginCapability.MODIFY_THEME,
+        PluginCapability.FULLSCREEN_UI,
+        PluginCapability.BACKGROUND_PROCESS,
+        PluginCapability.PUSH_NOTIFICATIONS -> RiskLevel.CRITICAL
     }
 }
 
 /**
- * Required Android permissions for capabilities
+ * Extension function to get human-readable description for a capability
+ */
+fun PluginCapability.getDescription(): String {
+    return when (this) {
+        PluginCapability.COLLECT_DATA -> "Create and save new data entries"
+        PluginCapability.READ_OWN_DATA -> "View data this plugin has created"
+        PluginCapability.READ_ALL_DATA -> "View all data from any plugin"
+        PluginCapability.MODIFY_DATA -> "Edit existing data entries"
+        PluginCapability.DELETE_DATA -> "Remove data permanently"
+        
+        PluginCapability.CUSTOM_UI -> "Display custom interface elements"
+        PluginCapability.MODIFY_THEME -> "Change app colors and appearance"
+        PluginCapability.ADD_MENU_ITEMS -> "Add options to app menus"
+        PluginCapability.SHOW_NOTIFICATIONS -> "Display system notifications"
+        PluginCapability.FULLSCREEN_UI -> "Take control of entire screen"
+        
+        PluginCapability.BACKGROUND_SYNC -> "Sync data when app is closed"
+        PluginCapability.BACKGROUND_PROCESS -> "Run tasks in background"
+        PluginCapability.NETWORK_ACCESS -> "Connect to the internet"
+        PluginCapability.FILE_ACCESS -> "Read and write files on device"
+        PluginCapability.CAMERA_ACCESS -> "Use device camera"
+        PluginCapability.MICROPHONE_ACCESS -> "Use device microphone"
+        
+        PluginCapability.SHARE_DATA -> "Share data with other apps"
+        PluginCapability.IMPORT_DATA -> "Import data from external sources"
+        PluginCapability.EXPORT_DATA -> "Export data to files"
+        PluginCapability.INTEGRATE_SERVICES -> "Connect to external services"
+        
+        PluginCapability.ACCESS_SENSORS -> "Use device sensors (accelerometer, etc.)"
+        PluginCapability.ACCESS_LOCATION -> "Access device location"
+        PluginCapability.ACCESS_BIOMETRIC -> "Access health and biometric data"
+        PluginCapability.MODIFY_SETTINGS -> "Change app settings"
+        PluginCapability.INSTALL_PLUGINS -> "Install additional plugins"
+        
+        PluginCapability.ANALYTICS_BASIC -> "Track basic usage patterns"
+        PluginCapability.ANALYTICS_DETAILED -> "Track detailed user behavior"
+        
+        PluginCapability.SEND_EMAILS -> "Send emails on your behalf"
+        PluginCapability.SEND_SMS -> "Send text messages"
+        PluginCapability.PUSH_NOTIFICATIONS -> "Send push notifications"
+        
+        PluginCapability.LOCAL_STORAGE -> "Store data on device"
+        PluginCapability.CLOUD_STORAGE -> "Store data in cloud"
+        PluginCapability.CACHE_DATA -> "Cache temporary data"
+    }
+}
+
+/**
+ * Extension function to get required Android permissions for capabilities
  */
 fun PluginCapability.getRequiredAndroidPermissions(): List<String> {
     return when (this) {
-        CAMERA_ACCESS -> listOf("android.permission.CAMERA")
-        MICROPHONE_ACCESS -> listOf("android.permission.RECORD_AUDIO")
-        ACCESS_LOCATION -> listOf(
+        PluginCapability.CAMERA_ACCESS -> listOf("android.permission.CAMERA")
+        PluginCapability.MICROPHONE_ACCESS -> listOf("android.permission.RECORD_AUDIO")
+        PluginCapability.ACCESS_LOCATION -> listOf(
             "android.permission.ACCESS_FINE_LOCATION",
             "android.permission.ACCESS_COARSE_LOCATION"
         )
-        NETWORK_ACCESS -> listOf("android.permission.INTERNET")
-        FILE_ACCESS -> listOf(
+        PluginCapability.NETWORK_ACCESS -> listOf("android.permission.INTERNET")
+        PluginCapability.FILE_ACCESS -> listOf(
             "android.permission.READ_EXTERNAL_STORAGE",
             "android.permission.WRITE_EXTERNAL_STORAGE"
         )
-        SEND_SMS -> listOf("android.permission.SEND_SMS")
-        SHOW_NOTIFICATIONS -> listOf("android.permission.POST_NOTIFICATIONS")
+        PluginCapability.SEND_SMS -> listOf("android.permission.SEND_SMS")
+        PluginCapability.SHOW_NOTIFICATIONS -> listOf("android.permission.POST_NOTIFICATIONS")
         else -> emptyList()
     }
 }

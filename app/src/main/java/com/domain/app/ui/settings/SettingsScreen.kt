@@ -33,6 +33,19 @@ fun SettingsScreen(
         }
     }
     
+    val snackbarHostState = remember { SnackbarHostState() }
+    
+    // Show messages
+    LaunchedEffect(uiState.message) {
+        uiState.message?.let { message ->
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short
+            )
+            viewModel.dismissMessage()
+        }
+    }
+    
     Scaffold(
         topBar = {
             TopAppBar(
@@ -43,20 +56,7 @@ fun SettingsScreen(
             )
         },
         snackbarHost = {
-            SnackbarHost { 
-                uiState.message?.let { message ->
-                    Snackbar(
-                        snackbarData = object : SnackbarData {
-                            override val visuals = SnackbarVisuals(
-                                message = message,
-                                duration = SnackbarDuration.Short
-                            )
-                            override fun performAction() { viewModel.dismissMessage() }
-                            override fun dismiss() { viewModel.dismissMessage() }
-                        }
-                    )
-                }
-            }
+            SnackbarHost(hostState = snackbarHostState)
         }
     ) { paddingValues ->
         LazyColumn(
@@ -212,13 +212,15 @@ fun SettingsScreen(
     }
     
     // Permission request dialog
-    if (uiState.showPermissionRequest && uiState.pendingPlugin != null) {
-        PluginPermissionDialog(
-            plugin = uiState.pendingPlugin,
-            requestedPermissions = uiState.pendingPlugin.securityManifest.requestedCapabilities,
-            onGrant = { viewModel.grantPendingPermissions() },
-            onDeny = { viewModel.denyPendingPermissions() }
-        )
+    uiState.pendingPlugin?.let { plugin ->
+        if (uiState.showPermissionRequest) {
+            PluginPermissionDialog(
+                plugin = plugin,
+                requestedPermissions = plugin.securityManifest.requestedCapabilities,
+                onGrant = { viewModel.grantPendingPermissions() },
+                onDeny = { viewModel.denyPendingPermissions() }
+            )
+        }
     }
 }
 

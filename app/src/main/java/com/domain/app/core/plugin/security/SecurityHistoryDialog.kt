@@ -9,6 +9,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.domain.app.core.plugin.PluginCapability
+import com.domain.app.core.plugin.getDescription
+import com.domain.app.core.plugin.getRiskLevel
 import com.domain.app.core.plugin.security.*
 import com.domain.app.ui.theme.AppIcons
 import java.text.SimpleDateFormat
@@ -188,12 +191,13 @@ private fun getEventIcon(event: SecurityEvent): androidx.compose.ui.graphics.vec
     }
 }
 
+@Composable
 private fun getEventColor(event: SecurityEvent): androidx.compose.ui.graphics.Color {
     return when (event) {
-        is SecurityEvent.PermissionGranted -> androidx.compose.material3.MaterialTheme.colorScheme.primary
-        is SecurityEvent.SecurityViolation -> androidx.compose.material3.MaterialTheme.colorScheme.error
-        is SecurityEvent.PermissionDenied -> androidx.compose.material3.MaterialTheme.colorScheme.tertiary
-        else -> androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+        is SecurityEvent.PermissionGranted -> MaterialTheme.colorScheme.primary
+        is SecurityEvent.SecurityViolation -> MaterialTheme.colorScheme.error
+        is SecurityEvent.PermissionDenied -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 }
 

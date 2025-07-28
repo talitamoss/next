@@ -4,6 +4,7 @@ import com.domain.app.core.data.DataPoint
 import com.domain.app.core.data.DataRepository
 import com.domain.app.core.plugin.PluginCapability
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.time.Instant
 import javax.inject.Inject
@@ -134,9 +135,7 @@ class SecureDataRepository @Inject constructor(
             return Result.failure(SecurityException("Plugin does not have permission to export data"))
         }
         
-        val data = actualRepository.getPluginData(pluginId)
-            .map { it }
-            .let { kotlinx.coroutines.flow.first(it) }
+        val data = actualRepository.getPluginData(pluginId).first()
         
         recordDataAccess("EXPORT", data.size)
         

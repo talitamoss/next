@@ -6,7 +6,8 @@ import com.domain.app.core.plugin.security.PluginSecurityManifest
 import com.domain.app.core.plugin.security.PluginTrustLevel
 
 /**
- * Enhanced plugin interface with security integration
+ * Core plugin interface defining the contract for all behavioral data collection plugins.
+ * Designed for extensibility while maintaining security and privacy.
  */
 interface Plugin {
     val id: String
@@ -17,7 +18,7 @@ interface Plugin {
     
     // Trust level - determined by system
     val trustLevel: PluginTrustLevel
-        get() = PluginTrustLevel.COMMUNITY // Default, can be overridden
+        get() = PluginTrustLevel.COMMUNITY
     
     // Core functionality
     suspend fun initialize(context: Context)
@@ -38,7 +39,7 @@ interface Plugin {
         "value" to dataPoint.value.toString()
     )
     
-    // Permission rationale - explain why each capability is needed
+    // Permission rationale
     fun getPermissionRationale(): Map<PluginCapability, String> = emptyMap()
     
     // Cleanup
@@ -46,38 +47,29 @@ interface Plugin {
 }
 
 /**
- * Enhanced plugin metadata with security fields
+ * Plugin metadata containing descriptive and behavioral information
  */
 data class PluginMetadata(
-    // Basic info
     val name: String,
     val description: String,
     val version: String,
     val author: String,
-    
-    // Categorization
     val category: PluginCategory = PluginCategory.OTHER,
     val tags: List<String> = emptyList(),
-    
-    // Data characteristics
     val dataPattern: DataPattern = DataPattern.SINGLE_VALUE,
     val inputType: InputType = InputType.NUMBER,
-    
-    // Core fields
     val supportsMultiStage: Boolean = false,
     val relatedPlugins: List<String> = emptyList(),
     val exportFormat: ExportFormat = ExportFormat.CSV,
     val dataSensitivity: DataSensitivity = DataSensitivity.NORMAL,
     val naturalLanguageAliases: List<String> = emptyList(),
-    
-    // Optional fields
     val iconResource: Int? = null,
     val permissions: List<String> = emptyList(),
     val contextualTriggers: List<ContextTrigger> = emptyList()
 )
 
 /**
- * Plugin categories
+ * Plugin categories for organization
  */
 enum class PluginCategory {
     HEALTH,
@@ -92,13 +84,13 @@ enum class PluginCategory {
  * Data collection patterns
  */
 enum class DataPattern {
-    SINGLE_VALUE,      // One value at a time (mood, weight)
-    CUMULATIVE,        // Values add up (water, calories)
-    DURATION,          // Time-based (sleep, exercise)
-    OCCURRENCE,        // Yes/No events (medication, habits)
-    RATING,            // Scale ratings (pain, energy)
-    TEXT,              // Text entries (journal, notes)
-    COMPOSITE          // Multiple data types
+    SINGLE_VALUE,
+    CUMULATIVE,
+    DURATION,
+    OCCURRENCE,
+    RATING,
+    TEXT,
+    COMPOSITE
 }
 
 /**
@@ -123,28 +115,29 @@ enum class ExportFormat {
 }
 
 /**
- * Data sensitivity levels - matches security manifest
+ * Data sensitivity levels for privacy classification
  */
 enum class DataSensitivity {
-    PUBLIC,    // Can be shared freely
-    NORMAL,    // Standard privacy
-    SENSITIVE, // Health data
-    PRIVATE    // Never share
+    PUBLIC,
+    NORMAL,
+    SENSITIVE,
+    PRIVATE,
+    REGULATED
 }
 
 /**
- * Context triggers for smart suggestions
+ * Context triggers for intelligent suggestions
  */
 enum class ContextTrigger {
-    TIME_OF_DAY,      // Suggest at certain times
-    LOCATION,         // Suggest at locations
-    AFTER_EVENT,      // After another data entry
-    PATTERN_BASED,    // Based on patterns
-    MANUAL_ONLY       // Never auto-suggest
+    TIME_OF_DAY,
+    LOCATION,
+    AFTER_EVENT,
+    PATTERN_BASED,
+    MANUAL_ONLY
 }
 
 /**
- * Configuration for quick add UI
+ * Configuration for quick add functionality
  */
 data class QuickAddConfig(
     val title: String,
@@ -187,7 +180,7 @@ sealed class ValidationResult {
 }
 
 /**
- * Risk warning for high-risk permissions
+ * Risk warning for permissions
  */
 data class RiskWarning(
     val severity: RiskLevel,
