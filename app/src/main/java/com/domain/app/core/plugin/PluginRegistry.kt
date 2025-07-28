@@ -1,7 +1,9 @@
+// app/src/main/java/com/domain/app/core/plugin/PluginRegistry.kt
 package com.domain.app.core.plugin
 
 import com.domain.app.plugins.counter.CounterPlugin
 import com.domain.app.plugins.wellness.water.WaterPlugin
+import com.domain.app.plugins.wellness.mood.MoodPlugin
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -17,8 +19,6 @@ class PluginRegistry @Inject constructor() {
     init {
         // Register built-in plugins
         registerBuiltInPlugins()
-	register(MoodPlugin())
-
     }
     
     /**
@@ -76,9 +76,9 @@ class PluginRegistry @Inject constructor() {
         // Register core plugins
         register(CounterPlugin())
         register(WaterPlugin())
+        register(MoodPlugin())  // This line needs to be uncommented
         
         // TODO: Add these plugins once implemented:
-        // register(MoodPlugin())
         // register(SleepPlugin())
         
         // Future: Could scan for plugins using reflection or load from external sources

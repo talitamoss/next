@@ -57,7 +57,7 @@ fun WaterSummary(dataPoints: List<DataPoint>) {
     Column {
         Text("Today: ${todayTotal.toInt()} ml")
         LinearProgressIndicator(
-            progress = (todayTotal / 2000f).coerceIn(0f, 1f),
+            progress = (todayTotal / 2000.0).toFloat().coerceIn(0f, 1f),
             modifier = Modifier.fillMaxWidth()
         )
         Text(
