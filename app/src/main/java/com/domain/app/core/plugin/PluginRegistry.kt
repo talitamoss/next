@@ -1,14 +1,13 @@
 package com.domain.app.core.plugin
 
-import com.domain.app.plugins.counter.CounterPlugin
-import com.domain.app.plugins.wellness.water.WaterPlugin
-import com.domain.app.plugins.wellness.mood.MoodPlugin
-import com.domain.app.plugins.wellness.sleep.SleepPlugin
-import com.domain.app.plugins.wellness.exercise.ExercisePlugin
-import com.domain.app.plugins.health.MedicationPlugin
+import com.domain.app.plugins.*
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Registry for all available plugins using flat structure
+ * Plugins are organized by metadata rather than directory structure
+ */
 @Singleton
 class PluginRegistry @Inject constructor() {
     
@@ -48,8 +47,36 @@ class PluginRegistry @Inject constructor() {
         }
     }
     
+    fun getPluginsByDataPattern(pattern: DataPattern): List<Plugin> {
+        return plugins.values.filter {
+            it.metadata.dataPattern == pattern
+        }
+    }
+    
+    fun getPluginsByTag(tag: String): List<Plugin> {
+        return plugins.values.filter {
+            it.metadata.tags.contains(tag)
+        }
+    }
+    
+    fun getPluginsBySensitivity(sensitivity: DataSensitivity): List<Plugin> {
+        return plugins.values.filter {
+            it.metadata.dataSensitivity == sensitivity
+        }
+    }
+    
+    fun searchPlugins(query: String): List<Plugin> {
+        val lowercaseQuery = query.lowercase()
+        return plugins.values.filter { plugin ->
+            plugin.metadata.name.lowercase().contains(lowercaseQuery) ||
+            plugin.metadata.description.lowercase().contains(lowercaseQuery) ||
+            plugin.metadata.tags.any { it.lowercase().contains(lowercaseQuery) } ||
+            plugin.metadata.naturalLanguageAliases.any { it.lowercase().contains(lowercaseQuery) }
+        }
+    }
+    
     private fun registerBuiltInPlugins() {
-        // Core plugins for Phase 1
+        // Register all plugins from flat structure
         register(WaterPlugin())
         register(MoodPlugin())
         register(SleepPlugin())
@@ -57,6 +84,10 @@ class PluginRegistry @Inject constructor() {
         register(MedicationPlugin())
         register(CounterPlugin())
         
-        // More plugins can be added here as they're developed
+        // Future plugins will be added here
+        // register(JournalPlugin())
+        // register(ExpensePlugin())
+        // register(HabitPlugin())
+        // etc.
     }
 }
