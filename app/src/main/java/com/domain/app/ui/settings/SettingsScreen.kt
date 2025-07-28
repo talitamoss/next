@@ -39,6 +39,20 @@ fun SettingsScreen(
                 .padding(paddingValues),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
+            // Dashboard Management Section
+            item {
+                SettingsSectionHeader(title = "Dashboard Layout")
+            }
+            
+            item {
+                DashboardManagementItem(
+                    dashboardCount = uiState.dashboardPluginIds.size,
+                    onClick = { /* TODO: Navigate to dashboard settings */ }
+                )
+            }
+            
+            item { Divider(modifier = Modifier.padding(vertical = 16.dp)) }
+            
             // Plugin Management Section
             item {
                 SettingsSectionHeader(title = "Plugins")
@@ -211,5 +225,32 @@ fun PluginSettingsItem(
                 onCheckedChange = { onToggle() }
             )
         }
+    )
+}
+
+@Composable
+fun DashboardManagementItem(
+    dashboardCount: Int,
+    onClick: () -> Unit
+) {
+    ListItem(
+        headlineContent = { Text("Dashboard Plugins") },
+        supportingContent = { 
+            Text("$dashboardCount of 6 plugins shown on dashboard") 
+        },
+        leadingContent = {
+            Icon(
+                imageVector = AppIcons.Navigation.dashboard,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        trailingContent = {
+            Icon(
+                imageVector = AppIcons.Control.chevronRight,
+                contentDescription = null
+            )
+        },
+        modifier = Modifier.clickable { onClick() }
     )
 }

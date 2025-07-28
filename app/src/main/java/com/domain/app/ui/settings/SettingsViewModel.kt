@@ -6,6 +6,7 @@ import com.domain.app.core.data.DataRepository
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginManager
 import com.domain.app.core.plugin.PluginState
+import com.domain.app.core.preferences.PreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -14,7 +15,8 @@ import javax.inject.Inject
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val pluginManager: PluginManager,
-    private val dataRepository: DataRepository
+    private val dataRepository: DataRepository,
+    private val preferencesManager: PreferencesManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -23,6 +25,7 @@ class SettingsViewModel @Inject constructor(
     init {
         loadPlugins()
         observePluginStates()
+        observeDashboardPlugins()
     }
     
     private fun loadPlugins() {
@@ -38,6 +41,16 @@ class SettingsViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
     
+    private fun observeDashboardPlugins() {
+        preferencesManager.dashboardPlugins
+            .onEach { dashboardIds ->
+                _uiState.update { 
+                    it.copy(dashboardPluginIds = dashboardIds.toSet()) 
+                }
+            }
+            .launchIn(viewModelScope)
+    }
+    
     fun togglePlugin(pluginId: String) {
         viewModelScope.launch {
             val currentState = _uiState.value.pluginStates[pluginId]
@@ -49,30 +62,37 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
+    fun toggleDashboard(pluginId: String) {
+        viewModelScope.launch {
+            if (_uiState.value.dashboardPluginIds.contains(pluginId)) {
+                preferencesManager.removeFromDashboard(pluginId)
+            } else {
+                preferencesManager.addToDashboard(pluginId)
+            }
+        }
+    }
+    
+    fun reorderDashboard(pluginIds: List<String>) {
+        viewModelScope.launch {
+            preferencesManager.updateDashboardPlugins(pluginIds)
+        }
+    }
+    
     fun exportData() {
         viewModelScope.launch {
-            // TODO: Implement data export
-            // 1. Get all data from repository
-            // 2. Convert to CSV format
-            // 3. Save to file or share
             _uiState.update { it.copy(message = "Export feature coming soon") }
         }
     }
     
     fun importData() {
         viewModelScope.launch {
-            // TODO: Implement data import
-            // 1. File picker
-            // 2. Parse CSV
-            // 3. Validate and import
             _uiState.update { it.copy(message = "Import feature coming soon") }
         }
     }
     
     fun clearAllData() {
         viewModelScope.launch {
-            // TODO: Show confirmation dialog first
-            dataRepository.cleanupOldData(0) // This will delete all data
+            dataRepository.cleanupOldData(0)
             _uiState.update { it.copy(message = "All data cleared") }
         }
     }
@@ -81,6 +101,7 @@ class SettingsViewModel @Inject constructor(
 data class SettingsUiState(
     val plugins: List<Plugin> = emptyList(),
     val pluginStates: Map<String, PluginState> = emptyMap(),
+    val dashboardPluginIds: Set<String> = emptySet(),
     val isLoading: Boolean = false,
     val message: String? = null
 )
