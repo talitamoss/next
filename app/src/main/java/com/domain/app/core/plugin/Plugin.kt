@@ -4,7 +4,8 @@ import android.content.Context
 import com.domain.app.core.data.DataPoint
 
 /**
- * Base plugin interface with enhanced metadata and future-ready capabilities
+ * Base plugin interface for modular data collection
+ * Designed for extensibility and future feature additions
  */
 interface Plugin {
     val id: String
@@ -65,6 +66,18 @@ data class PluginMetadata(
 )
 
 /**
+ * Plugin categories
+ */
+enum class PluginCategory {
+    HEALTH,
+    MENTAL_WELLNESS,
+    PRODUCTIVITY,
+    LIFESTYLE,
+    JOURNAL,
+    OTHER
+}
+
+/**
  * Data collection patterns
  */
 enum class DataPattern {
@@ -77,15 +90,9 @@ enum class DataPattern {
     COMPOSITE          // Multiple data types
 }
 
-enum class PluginCategory {
-    HEALTH,
-    MENTAL_WELLNESS,
-    PRODUCTIVITY,
-    LIFESTYLE,
-    JOURNAL,
-    OTHER
-}
-
+/**
+ * Input types for data collection
+ */
 enum class InputType {
     NUMBER,
     TEXT,
@@ -97,10 +104,16 @@ enum class InputType {
     DATE_PICKER
 }
 
+/**
+ * Export format options
+ */
 enum class ExportFormat {
     CSV, JSON, XML, CUSTOM
 }
 
+/**
+ * Data sensitivity levels
+ */
 enum class DataSensitivity {
     PUBLIC,    // Can be shared freely
     NORMAL,    // Standard privacy
@@ -108,6 +121,9 @@ enum class DataSensitivity {
     PRIVATE    // Never share
 }
 
+/**
+ * Context triggers for smart suggestions
+ */
 enum class ContextTrigger {
     TIME_OF_DAY,      // Suggest at certain times
     LOCATION,         // Suggest at locations
@@ -117,7 +133,7 @@ enum class ContextTrigger {
 }
 
 /**
- * Configuration for quick add
+ * Configuration for quick add UI
  */
 data class QuickAddConfig(
     val title: String,
@@ -127,6 +143,9 @@ data class QuickAddConfig(
     val unit: String? = null
 )
 
+/**
+ * Quick add option
+ */
 data class QuickOption(
     val label: String,
     val value: Any,
