@@ -177,16 +177,6 @@ fun DataPointCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            
-            // Show location if available
-            dataPoint.location?.let { location ->
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Location: ${location.latitude}, ${location.longitude}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
     }
 }
@@ -208,7 +198,7 @@ fun FilterDropdownMenu(
             onClick = { onPluginSelected(null) },
             leadingIcon = {
                 if (selectedPlugin == null) {
-                    Icon(AppIcons.Action.filter, contentDescription = null)
+                    Icon(AppIcons.Action.check, contentDescription = null)
                 }
             }
         )
@@ -221,7 +211,7 @@ fun FilterDropdownMenu(
                 onClick = { onPluginSelected(pluginId) },
                 leadingIcon = {
                     if (selectedPlugin == pluginId) {
-                        Icon(AppIcons.Action.filter, contentDescription = null)
+                        Icon(AppIcons.Action.check, contentDescription = null)
                     }
                 }
             )

@@ -21,7 +21,6 @@ class PluginManager @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val activePlugins = mutableMapOf<String, Plugin>()
-    private val pluginJobs = mutableMapOf<String, Job>()
     
     private val _pluginStates = MutableStateFlow<Map<String, PluginState>>(emptyMap())
     val pluginStates: StateFlow<Map<String, PluginState>> = _pluginStates.asStateFlow()
@@ -73,9 +72,6 @@ class PluginManager @Inject constructor(
                 // Add to active plugins
                 activePlugins[plugin.id] = plugin
                 
-                // Start monitoring plugin data
-                monitorPluginData(plugin)
-                
             } catch (e: Exception) {
                 handlePluginError(plugin.id, e)
             }
@@ -83,14 +79,13 @@ class PluginManager @Inject constructor(
     }
     
     /**
-     * Enable a plugin and start data collection
+     * Enable a plugin
      */
     suspend fun enablePlugin(pluginId: String) = withContext(Dispatchers.IO) {
         val plugin = activePlugins[pluginId] ?: return@withContext
         
         try {
-            plugin.startCollection()
-            
+            // Just update the state - plugins don't have startCollection method
             database.pluginStateDao().updateCollectingState(pluginId, true)
             database.pluginStateDao().clearErrors(pluginId)
             
@@ -102,14 +97,13 @@ class PluginManager @Inject constructor(
     }
     
     /**
-     * Disable a plugin and stop data collection
+     * Disable a plugin
      */
     suspend fun disablePlugin(pluginId: String) = withContext(Dispatchers.IO) {
         val plugin = activePlugins[pluginId] ?: return@withContext
         
         try {
-            plugin.stopCollection()
-            
+            // Just update the state - plugins don't have stopCollection method
             database.pluginStateDao().updateCollectingState(pluginId, false)
             
             EventBus.emit(Event.PluginStateChanged(pluginId, false))
@@ -156,7 +150,25 @@ class PluginManager @Inject constructor(
         }
         
         try {
-            return@withContext plugin.createManualEntry(data)
+            val dataPoint = plugin.createManualEntry(data)
+            if (dataPoint != null) {
+                // Save to database
+                database.dataPointDao().insert(dataPoint.toEntity())
+                
+                // Emit event
+                EventBus.emit(Event.DataCollected(dataPoint))
+                
+                // Update last collection time
+                database.pluginStateDao().insertOrUpdate(
+                    database.pluginStateDao().getState(pluginId)?.copy(
+                        lastCollection = Instant.now()
+                    ) ?: PluginStateEntity(
+                        pluginId = pluginId,
+                        lastCollection = Instant.now()
+                    )
+                )
+            }
+            return@withContext dataPoint
         } catch (e: Exception) {
             handlePluginError(pluginId, e)
             return@withContext null
@@ -182,7 +194,6 @@ class PluginManager @Inject constructor(
      * Clean up all plugins
      */
     suspend fun cleanup() {
-        pluginJobs.values.forEach { it.cancel() }
         activePlugins.values.forEach { plugin ->
             try {
                 plugin.cleanup()
@@ -191,37 +202,6 @@ class PluginManager @Inject constructor(
             }
         }
         scope.cancel()
-    }
-    
-    private fun monitorPluginData(plugin: Plugin) {
-        pluginJobs[plugin.id]?.cancel()
-        
-        pluginJobs[plugin.id] = scope.launch {
-            plugin.dataFlow()
-                .catch { e -> handlePluginError(plugin.id, e) }
-                .collect { dataPoint ->
-                    try {
-                        // Save to database
-                        val entity = dataPoint.toEntity()
-                        database.dataPointDao().insert(entity)
-                        
-                        // Emit event
-                        EventBus.emit(Event.DataCollected(dataPoint))
-                        
-                        // Update last collection time
-                        database.pluginStateDao().insertOrUpdate(
-                            database.pluginStateDao().getState(plugin.id)?.copy(
-                                lastCollection = Instant.now()
-                            ) ?: PluginStateEntity(
-                                pluginId = plugin.id,
-                                lastCollection = Instant.now()
-                            )
-                        )
-                    } catch (e: Exception) {
-                        handlePluginError(plugin.id, e)
-                    }
-                }
-        }
     }
     
     private suspend fun handlePluginError(pluginId: String, error: Throwable) {

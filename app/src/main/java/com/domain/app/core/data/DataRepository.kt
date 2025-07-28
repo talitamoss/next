@@ -128,12 +128,10 @@ fun DataPoint.toEntity(): DataPointEntity {
         pluginId = pluginId,
         timestamp = timestamp,
         type = type,
-        value = JSONObject(value).toString(),
-        metadata = JSONObject(metadata).toString(),
-        latitude = location?.latitude,
-        longitude = location?.longitude,
-        locationAccuracy = location?.accuracy,
-        altitude = location?.altitude
+        valueJson = JSONObject(value).toString(),
+        metadataJson = metadata?.let { JSONObject(it).toString() },
+        source = source,
+        version = version
     )
 }
 
@@ -143,23 +141,21 @@ fun DataPointEntity.toDataPoint(): DataPoint {
         pluginId = pluginId,
         timestamp = timestamp,
         type = type,
-        value = JSONObject(value).toMap(),
-        metadata = JSONObject(metadata).toStringMap(),
-        location = if (latitude != null && longitude != null) {
-            Location(
-                latitude = latitude,
-                longitude = longitude,
-                accuracy = locationAccuracy,
-                altitude = altitude
-            )
-        } else null
+        value = JSONObject(valueJson).toMap(),
+        metadata = metadataJson?.let { JSONObject(it).toStringMap() },
+        source = source,
+        version = version
     )
 }
 
 fun JSONObject.toMap(): Map<String, Any> {
     val map = mutableMapOf<String, Any>()
     keys().forEach { key ->
-        map[key] = get(key)
+        val value = get(key)
+        map[key] = when (value) {
+            is JSONObject -> value.toMap()
+            else -> value
+        }
     }
     return map
 }

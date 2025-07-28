@@ -19,6 +19,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.domain.app.core.plugin.Plugin
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,7 +28,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    var showQuickAdd by remember { mutableStateOf(false) }
+    val selectedPlugin by viewModel.selectedPlugin.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -40,7 +41,12 @@ fun DashboardScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showQuickAdd = true },
+                onClick = { 
+                    // Show quick add for first manual entry plugin
+                    uiState.manualEntryPlugins.firstOrNull()?.let {
+                        viewModel.onPluginTileClick(it)
+                    }
+                },
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
                 Icon(AppIcons.Action.add, contentDescription = "Quick Add")
@@ -88,10 +94,7 @@ fun DashboardScreen(
                         plugin = plugin,
                         isCollecting = uiState.pluginStates[plugin.id]?.isCollecting ?: false,
                         onClick = {
-                            if (plugin.supportsManualEntry()) {
-                                viewModel.onPluginTileClick(plugin)
-                                showQuickAdd = true
-                            }
+                            viewModel.onPluginTileClick(plugin)
                         }
                     )
                 }
@@ -100,15 +103,22 @@ fun DashboardScreen(
     }
 
     // Quick Add Bottom Sheet
-    if (showQuickAdd) {
+    if (uiState.showQuickAdd && selectedPlugin != null) {
         QuickAddBottomSheet(
-            plugins = uiState.manualEntryPlugins,
-            onDismiss = { showQuickAdd = false },
-            onPluginSelected = { plugin ->
-                viewModel.onQuickAdd(plugin)
-                showQuickAdd = false
+            plugin = selectedPlugin,
+            onDismiss = { viewModel.dismissQuickAdd() },
+            onDataSubmit = { plugin, data ->
+                viewModel.onQuickAdd(plugin, data)
             }
         )
+    }
+    
+    // Success feedback
+    if (uiState.showSuccessFeedback) {
+        LaunchedEffect(Unit) {
+            delay(2000)
+            viewModel.clearSuccessFeedback()
+        }
     }
 }
 
@@ -201,3 +211,4 @@ fun PluginTile(
         }
     }
 }
+
