@@ -282,10 +282,9 @@ class PluginManager @Inject constructor(
     /**
      * Check if plugin has specific permission
      */
-    fun hasPermission(pluginId: String, capability: PluginCapability): Boolean {
+    suspend fun hasPermission(pluginId: String, capability: PluginCapability): Boolean {
         return permissionManager.hasPermission(pluginId, capability)
-    }
-    
+    }    
     /**
      * Request permissions for a plugin
      */

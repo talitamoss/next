@@ -10,8 +10,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.domain.app.core.plugin.PluginCapability
-import com.domain.app.core.plugin.getDescription
-import com.domain.app.core.plugin.getRiskLevel
 import com.domain.app.core.plugin.security.*
 import com.domain.app.ui.theme.AppIcons
 import java.text.SimpleDateFormat
@@ -62,7 +60,7 @@ fun SecurityHistoryDialog(
 }
 
 @Composable
-fun SecurityEventCard(event: SecurityEvent) {
+private fun SecurityEventCard(event: SecurityEvent) {
     Card(
         colors = CardDefaults.cardColors(
             containerColor = when (event) {
@@ -108,77 +106,6 @@ fun SecurityEventCard(event: SecurityEvent) {
             }
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SimplePermissionDialog(
-    capability: PluginCapability,
-    onGrant: () -> Unit,
-    onDeny: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDeny,
-        title = {
-            Text("Grant Permission?")
-        },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "Grant ${capability.name.replace("_", " ").lowercase()} permission?",
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Text(
-                        text = capability.getDescription(),
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                
-                if (capability.getRiskLevel() != com.domain.app.core.plugin.RiskLevel.LOW) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = AppIcons.Status.warning,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            Text(
-                                text = "Risk Level: ${capability.getRiskLevel()}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onGrant) {
-                Text("Grant")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDeny) {
-                Text("Deny")
-            }
-        }
-    )
 }
 
 private fun getEventIcon(event: SecurityEvent): androidx.compose.ui.graphics.vector.ImageVector {

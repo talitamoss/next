@@ -1,7 +1,8 @@
 package com.domain.app.ui.dashboard
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -127,16 +128,17 @@ fun DashboardScreen(
     }
 
     // Quick Add Bottom Sheet with permission check
-    if (uiState.showQuickAdd && selectedPlugin != null) {
+    val currentPlugin = selectedPlugin
+    if (uiState.showQuickAdd && currentPlugin != null) {
         if (uiState.needsPermission) {
             PluginPermissionQuickDialog(
-                plugin = selectedPlugin,
+                plugin = currentPlugin,
                 onGrant = { viewModel.grantQuickAddPermission() },
                 onDeny = { viewModel.dismissQuickAdd() }
             )
         } else {
             QuickAddBottomSheet(
-                plugin = selectedPlugin,
+                plugin = currentPlugin,
                 onDismiss = { viewModel.dismissQuickAdd() },
                 onDataSubmit = { plugin, data ->
                     viewModel.onQuickAdd(plugin, data)
@@ -164,7 +166,7 @@ fun DashboardScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun DashboardPluginTile(
     plugin: Plugin,
@@ -176,7 +178,7 @@ fun DashboardPluginTile(
     Card(
         modifier = Modifier
             .aspectRatio(1f)
-            .clickable(
+            .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             ),

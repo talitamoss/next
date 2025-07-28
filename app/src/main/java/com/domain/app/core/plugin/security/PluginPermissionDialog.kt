@@ -17,7 +17,9 @@ import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginCapability
 import com.domain.app.core.plugin.getRiskLevel
 import com.domain.app.core.plugin.getDescription
-import com.domain.app.core.plugin.security.RiskWarning
+import com.domain.app.core.plugin.RiskLevel
+import com.domain.app.core.plugin.RiskWarning
+import com.domain.app.core.plugin.security.PluginTrustLevel
 import com.domain.app.ui.theme.AppIcons
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,7 +74,7 @@ fun PluginPermissionDialog(
             ) {
                 // Trust level indicator
                 item {
-                    TrustLevelIndicator(plugin.trustLevel)
+                    PluginTrustLevelCard(plugin.trustLevel)
                 }
                 
                 // Plugin description
@@ -137,7 +139,8 @@ fun PluginPermissionDialog(
                 }
                 
                 // Privacy policy
-                if (!plugin.securityManifest.privacyPolicy.isNullOrBlank()) {
+                val privacyPolicyText = plugin.securityManifest.privacyPolicy
+                if (!privacyPolicyText.isNullOrBlank()) {
                     item {
                         Card(
                             colors = CardDefaults.cardColors(
@@ -154,7 +157,7 @@ fun PluginPermissionDialog(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = plugin.securityManifest.privacyPolicy,
+                                    text = privacyPolicyText,
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -190,10 +193,10 @@ fun PermissionItem(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = when (capability.getRiskLevel()) {
-                com.domain.app.core.plugin.RiskLevel.LOW -> MaterialTheme.colorScheme.surface
-                com.domain.app.core.plugin.RiskLevel.MEDIUM -> MaterialTheme.colorScheme.secondaryContainer
-                com.domain.app.core.plugin.RiskLevel.HIGH -> MaterialTheme.colorScheme.tertiaryContainer
-                com.domain.app.core.plugin.RiskLevel.CRITICAL -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                RiskLevel.LOW -> MaterialTheme.colorScheme.surface
+                RiskLevel.MEDIUM -> MaterialTheme.colorScheme.secondaryContainer
+                RiskLevel.HIGH -> MaterialTheme.colorScheme.tertiaryContainer
+                RiskLevel.CRITICAL -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
             }
         )
     ) {
@@ -210,10 +213,10 @@ fun PermissionItem(
                     .clip(CircleShape)
                     .background(
                         when (capability.getRiskLevel()) {
-                            com.domain.app.core.plugin.RiskLevel.LOW -> MaterialTheme.colorScheme.primary
-                            com.domain.app.core.plugin.RiskLevel.MEDIUM -> MaterialTheme.colorScheme.secondary
-                            com.domain.app.core.plugin.RiskLevel.HIGH -> MaterialTheme.colorScheme.tertiary
-                            com.domain.app.core.plugin.RiskLevel.CRITICAL -> MaterialTheme.colorScheme.error
+                            RiskLevel.LOW -> MaterialTheme.colorScheme.primary
+                            RiskLevel.MEDIUM -> MaterialTheme.colorScheme.secondary
+                            RiskLevel.HIGH -> MaterialTheme.colorScheme.tertiary
+                            RiskLevel.CRITICAL -> MaterialTheme.colorScheme.error
                         }
                     ),
                 contentAlignment = Alignment.Center
@@ -247,10 +250,10 @@ fun PermissionItem(
                 text = capability.getRiskLevel().name,
                 style = MaterialTheme.typography.labelSmall,
                 color = when (capability.getRiskLevel()) {
-                    com.domain.app.core.plugin.RiskLevel.LOW -> MaterialTheme.colorScheme.primary
-                    com.domain.app.core.plugin.RiskLevel.MEDIUM -> MaterialTheme.colorScheme.secondary
-                    com.domain.app.core.plugin.RiskLevel.HIGH -> MaterialTheme.colorScheme.tertiary
-                    com.domain.app.core.plugin.RiskLevel.CRITICAL -> MaterialTheme.colorScheme.error
+                    RiskLevel.LOW -> MaterialTheme.colorScheme.primary
+                    RiskLevel.MEDIUM -> MaterialTheme.colorScheme.secondary
+                    RiskLevel.HIGH -> MaterialTheme.colorScheme.tertiary
+                    RiskLevel.CRITICAL -> MaterialTheme.colorScheme.error
                 }
             )
         }
@@ -258,16 +261,16 @@ fun PermissionItem(
 }
 
 @Composable
-fun TrustLevelIndicator(trustLevel: com.domain.app.core.plugin.security.PluginTrustLevel) {
+fun PluginTrustLevelCard(trustLevel: PluginTrustLevel) {
     Card(
         colors = CardDefaults.cardColors(
             containerColor = when (trustLevel) {
-                com.domain.app.core.plugin.security.PluginTrustLevel.OFFICIAL -> MaterialTheme.colorScheme.primaryContainer
-                com.domain.app.core.plugin.security.PluginTrustLevel.VERIFIED -> MaterialTheme.colorScheme.secondaryContainer
-                com.domain.app.core.plugin.security.PluginTrustLevel.COMMUNITY -> MaterialTheme.colorScheme.surfaceVariant
-                com.domain.app.core.plugin.security.PluginTrustLevel.UNTRUSTED -> MaterialTheme.colorScheme.errorContainer
-                com.domain.app.core.plugin.security.PluginTrustLevel.BLOCKED -> MaterialTheme.colorScheme.error
-                com.domain.app.core.plugin.security.PluginTrustLevel.QUARANTINED -> MaterialTheme.colorScheme.errorContainer
+                PluginTrustLevel.OFFICIAL -> MaterialTheme.colorScheme.primaryContainer
+                PluginTrustLevel.VERIFIED -> MaterialTheme.colorScheme.secondaryContainer
+                PluginTrustLevel.COMMUNITY -> MaterialTheme.colorScheme.surfaceVariant
+                PluginTrustLevel.UNTRUSTED -> MaterialTheme.colorScheme.errorContainer
+                PluginTrustLevel.BLOCKED -> MaterialTheme.colorScheme.error
+                PluginTrustLevel.QUARANTINED -> MaterialTheme.colorScheme.errorContainer
             }
         )
     ) {
@@ -280,31 +283,102 @@ fun TrustLevelIndicator(trustLevel: com.domain.app.core.plugin.security.PluginTr
         ) {
             Icon(
                 imageVector = when (trustLevel) {
-                    com.domain.app.core.plugin.security.PluginTrustLevel.OFFICIAL -> AppIcons.Status.success
-                    com.domain.app.core.plugin.security.PluginTrustLevel.VERIFIED -> AppIcons.Security.shield
+                    PluginTrustLevel.OFFICIAL -> AppIcons.Status.success
+                    PluginTrustLevel.VERIFIED -> AppIcons.Security.shield
                     else -> AppIcons.Status.warning
                 },
                 contentDescription = null,
                 tint = when (trustLevel) {
-                    com.domain.app.core.plugin.security.PluginTrustLevel.OFFICIAL -> MaterialTheme.colorScheme.onPrimaryContainer
-                    com.domain.app.core.plugin.security.PluginTrustLevel.VERIFIED -> MaterialTheme.colorScheme.onSecondaryContainer
+                    PluginTrustLevel.OFFICIAL -> MaterialTheme.colorScheme.onPrimaryContainer
+                    PluginTrustLevel.VERIFIED -> MaterialTheme.colorScheme.onSecondaryContainer
                     else -> MaterialTheme.colorScheme.onErrorContainer
                 }
             )
             Text(
                 text = when (trustLevel) {
-                    com.domain.app.core.plugin.security.PluginTrustLevel.OFFICIAL -> "Official Plugin"
-                    com.domain.app.core.plugin.security.PluginTrustLevel.VERIFIED -> "Verified Plugin"
-                    com.domain.app.core.plugin.security.PluginTrustLevel.COMMUNITY -> "Community Plugin"
-                    com.domain.app.core.plugin.security.PluginTrustLevel.UNTRUSTED -> "Untrusted Plugin"
-                    com.domain.app.core.plugin.security.PluginTrustLevel.BLOCKED -> "Blocked Plugin"
-                    com.domain.app.core.plugin.security.PluginTrustLevel.QUARANTINED -> "Quarantined Plugin"
+                    PluginTrustLevel.OFFICIAL -> "Official Plugin"
+                    PluginTrustLevel.VERIFIED -> "Verified Plugin"
+                    PluginTrustLevel.COMMUNITY -> "Community Plugin"
+                    PluginTrustLevel.UNTRUSTED -> "Untrusted Plugin"
+                    PluginTrustLevel.BLOCKED -> "Blocked Plugin"
+                    PluginTrustLevel.QUARANTINED -> "Quarantined Plugin"
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SimplePermissionDialog(
+    capability: PluginCapability,
+    onGrant: () -> Unit,
+    onDeny: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDeny,
+        title = {
+            Text("Grant Permission?")
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Grant ${capability.name.replace("_", " ").lowercase()} permission?",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Text(
+                        text = capability.getDescription(),
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                
+                if (capability.getRiskLevel() != RiskLevel.LOW) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = AppIcons.Status.warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = "Risk Level: ${capability.getRiskLevel()}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onGrant) {
+                Text("Grant")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDeny) {
+                Text("Deny")
+            }
+        }
+    )
 }
 
 private fun getIconForCapability(capability: PluginCapability): androidx.compose.ui.graphics.vector.ImageVector {

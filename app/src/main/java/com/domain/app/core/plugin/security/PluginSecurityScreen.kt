@@ -15,6 +15,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginCapability
+import com.domain.app.core.plugin.getDescription
+import com.domain.app.core.plugin.getRiskLevel
+import com.domain.app.core.plugin.RiskLevel
+import com.domain.app.core.plugin.security.*
 import com.domain.app.ui.theme.AppIcons
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -247,7 +251,7 @@ fun PluginSecurityHeader(
 
 @Composable
 fun SecuritySummaryCard(
-    summary: com.domain.app.core.plugin.security.SecuritySummary?,
+    summary: SecuritySummary?,
     onViewHistory: () -> Unit
 ) {
     Card(
@@ -457,6 +461,56 @@ fun SettingsSectionHeader(
         color = color,
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
     )
+}
+
+@Composable
+fun TrustLevelIndicator(trustLevel: PluginTrustLevel) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = when (trustLevel) {
+                PluginTrustLevel.OFFICIAL -> MaterialTheme.colorScheme.primaryContainer
+                PluginTrustLevel.VERIFIED -> MaterialTheme.colorScheme.secondaryContainer
+                PluginTrustLevel.COMMUNITY -> MaterialTheme.colorScheme.surfaceVariant
+                PluginTrustLevel.UNTRUSTED -> MaterialTheme.colorScheme.errorContainer
+                PluginTrustLevel.BLOCKED -> MaterialTheme.colorScheme.error
+                PluginTrustLevel.QUARANTINED -> MaterialTheme.colorScheme.errorContainer
+            }
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = when (trustLevel) {
+                    PluginTrustLevel.OFFICIAL -> AppIcons.Status.success
+                    PluginTrustLevel.VERIFIED -> AppIcons.Security.shield
+                    else -> AppIcons.Status.warning
+                },
+                contentDescription = null,
+                tint = when (trustLevel) {
+                    PluginTrustLevel.OFFICIAL -> MaterialTheme.colorScheme.onPrimaryContainer
+                    PluginTrustLevel.VERIFIED -> MaterialTheme.colorScheme.onSecondaryContainer
+                    else -> MaterialTheme.colorScheme.onErrorContainer
+                }
+            )
+            Text(
+                text = when (trustLevel) {
+                    PluginTrustLevel.OFFICIAL -> "Official Plugin"
+                    PluginTrustLevel.VERIFIED -> "Verified Plugin"
+                    PluginTrustLevel.COMMUNITY -> "Community Plugin"
+                    PluginTrustLevel.UNTRUSTED -> "Untrusted Plugin"
+                    PluginTrustLevel.BLOCKED -> "Blocked Plugin"
+                    PluginTrustLevel.QUARANTINED -> "Quarantined Plugin"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
 }
 
 private fun getIconForCapability(capability: PluginCapability): androidx.compose.ui.graphics.vector.ImageVector {

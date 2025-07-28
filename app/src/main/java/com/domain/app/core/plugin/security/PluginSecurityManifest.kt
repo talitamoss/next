@@ -1,6 +1,7 @@
 package com.domain.app.core.plugin.security
 
 import com.domain.app.core.plugin.PluginCapability
+import com.domain.app.core.plugin.DataSensitivity
 
 /**
  * Security manifest that defines what a plugin can access and do.
@@ -30,17 +31,6 @@ enum class DataAccessScope {
     BIOMETRIC,            // Access health sensors
     EXPORT_DATA,          // Can export user data
     DELETE_DATA           // Can delete data
-}
-
-/**
- * Data sensitivity levels for privacy protection
- */
-enum class DataSensitivity {
-    PUBLIC,               // Can be shared freely (e.g., themes)
-    NORMAL,               // Standard privacy (e.g., water intake)
-    SENSITIVE,            // Health data (e.g., medication)
-    PRIVATE,              // Never share (e.g., journal entries)
-    REGULATED             // Subject to regulations (e.g., medical data)
 }
 
 /**
