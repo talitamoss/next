@@ -60,12 +60,19 @@ class SettingsViewModel @Inject constructor(
             val plugin = pluginManager.getPlugin(pluginId) ?: return@launch
             val currentState = _uiState.value.pluginStates[pluginId]
             
-            if (currentState?.isEnabled == true) {
+            // Check if plugin is currently collecting (enabled)
+            if (currentState?.isCollecting == true) {
                 // Disabling - just disable
                 pluginManager.disablePlugin(pluginId)
+                _uiState.update { 
+                    it.copy(message = "${plugin.metadata.name} disabled") 
+                }
             } else {
                 // Enabling - check permissions first
-                val hasPermissions = permissionManager.hasAnyPermissions(pluginId)
+                val hasPermissions = permissionManager.hasPermission(
+                    pluginId, 
+                    PluginCapability.COLLECT_DATA
+                )
                 
                 if (!hasPermissions && plugin.trustLevel != PluginTrustLevel.OFFICIAL) {
                     // Show permission request dialog
@@ -78,6 +85,9 @@ class SettingsViewModel @Inject constructor(
                 } else {
                     // Already has permissions or is official plugin
                     pluginManager.enablePlugin(pluginId)
+                    _uiState.update { 
+                        it.copy(message = "${plugin.metadata.name} enabled") 
+                    }
                 }
             }
         }
@@ -87,29 +97,35 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val plugin = _uiState.value.pendingPlugin ?: return@launch
             
+            // Grant all requested permissions
             permissionManager.grantPermissions(
                 pluginId = plugin.id,
                 permissions = plugin.securityManifest.requestedCapabilities,
                 grantedBy = "user_settings"
             )
             
+            // Now enable the plugin
             pluginManager.enablePlugin(plugin.id)
             
             _uiState.update {
                 it.copy(
                     pendingPlugin = null,
-                    showPermissionRequest = false
+                    showPermissionRequest = false,
+                    message = "${plugin.metadata.name} enabled with permissions granted"
                 )
             }
         }
     }
     
     fun denyPendingPermissions() {
+        val plugin = _uiState.value.pendingPlugin
         _uiState.update {
             it.copy(
                 pendingPlugin = null,
                 showPermissionRequest = false,
-                message = "Plugin cannot be enabled without permissions"
+                message = if (plugin != null) 
+                    "${plugin.metadata.name} cannot be enabled without permissions" 
+                else null
             )
         }
     }
@@ -128,10 +144,26 @@ class SettingsViewModel @Inject constructor(
     
     fun toggleDashboard(pluginId: String) {
         viewModelScope.launch {
+            val plugin = pluginManager.getPlugin(pluginId) ?: return@launch
+            
             if (_uiState.value.dashboardPluginIds.contains(pluginId)) {
                 preferencesManager.removeFromDashboard(pluginId)
+                _uiState.update { 
+                    it.copy(message = "${plugin.metadata.name} removed from dashboard") 
+                }
             } else {
+                // Check if we've reached the maximum
+                if (_uiState.value.dashboardPluginIds.size >= 6) {
+                    _uiState.update { 
+                        it.copy(message = "Maximum 6 plugins allowed on dashboard") 
+                    }
+                    return@launch
+                }
+                
                 preferencesManager.addToDashboard(pluginId)
+                _uiState.update { 
+                    it.copy(message = "${plugin.metadata.name} added to dashboard") 
+                }
             }
         }
     }
@@ -156,8 +188,28 @@ class SettingsViewModel @Inject constructor(
     
     fun clearAllData() {
         viewModelScope.launch {
-            dataRepository.cleanupOldData(0)
-            _uiState.update { it.copy(message = "All data cleared") }
+            // Show confirmation dialog
+            _uiState.update { 
+                it.copy(showClearDataConfirmation = true) 
+            }
+        }
+    }
+    
+    fun confirmClearAllData() {
+        viewModelScope.launch {
+            dataRepository.cleanupOldData(0) // This will delete all data
+            _uiState.update { 
+                it.copy(
+                    message = "All data cleared",
+                    showClearDataConfirmation = false
+                ) 
+            }
+        }
+    }
+    
+    fun cancelClearData() {
+        _uiState.update { 
+            it.copy(showClearDataConfirmation = false) 
         }
     }
     
@@ -172,6 +224,7 @@ data class SettingsUiState(
     val dashboardPluginIds: Set<String> = emptySet(),
     val pendingPlugin: Plugin? = null,
     val showPermissionRequest: Boolean = false,
+    val showClearDataConfirmation: Boolean = false,
     val navigateToSecurity: String? = null,
     val isLoading: Boolean = false,
     val message: String? = null
