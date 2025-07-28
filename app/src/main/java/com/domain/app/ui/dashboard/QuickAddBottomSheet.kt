@@ -1,3 +1,4 @@
+// app/src/main/java/com/domain/app/ui/dashboard/QuickAddBottomSheet.kt
 package com.domain.app.ui.dashboard
 
 import androidx.compose.foundation.clickable
@@ -92,6 +93,27 @@ fun QuickAddBottomSheet(
                         onDismiss = { showPluginDialog = false },
                         onConfirm = { amount ->
                             onDataSubmit(plugin, mapOf("amount" to amount))
+                            showPluginDialog = false
+                            scope.launch {
+                                sheetState.hide()
+                                onDismiss()
+                            }
+                        }
+                    )
+                }
+            }
+            "mood" -> {
+                val config = plugin.getQuickAddConfig()
+                if (config != null) {
+                    MoodQuickAddDialog(
+                        options = config.options ?: emptyList(),
+                        onDismiss = { showPluginDialog = false },
+                        onConfirm = { moodValue, note ->
+                            val data = mutableMapOf<String, Any>(
+                                "value" to moodValue
+                            )
+                            note?.let { data["note"] = it }
+                            onDataSubmit(plugin, data)
                             showPluginDialog = false
                             scope.launch {
                                 sheetState.hide()

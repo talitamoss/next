@@ -17,6 +17,8 @@ class PluginRegistry @Inject constructor() {
     init {
         // Register built-in plugins
         registerBuiltInPlugins()
+	register(MoodPlugin())
+
     }
     
     /**
