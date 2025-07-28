@@ -39,7 +39,15 @@ fun DashboardScreen(
                 ),
                 actions = {
                     TextButton(
-                        onClick = { navController.navigate("settings") }
+                        onClick = { 
+                            // Navigate to settings screen with the bottom nav
+                            navController.navigate("settings") {
+                                // Clear backstack to root
+                                popUpTo(navController.graph.id) {
+                                    inclusive = false
+                                }
+                            }
+                        }
                     ) {
                         Text("Manage")
                     }

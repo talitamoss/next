@@ -41,29 +41,24 @@ fun SettingsScreen(
         ) {
             // Dashboard Management Section
             item {
-                SettingsSectionHeader(title = "Dashboard Layout")
+                SettingsSectionHeader(title = "Dashboard Plugins")
             }
             
             item {
-                DashboardManagementItem(
-                    dashboardCount = uiState.dashboardPluginIds.size,
-                    onClick = { /* TODO: Navigate to dashboard settings */ }
+                Text(
+                    text = "Toggle which plugins appear on your dashboard",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 )
             }
             
-            item { Divider(modifier = Modifier.padding(vertical = 16.dp)) }
-            
-            // Plugin Management Section
-            item {
-                SettingsSectionHeader(title = "Plugins")
-            }
-            
+            // Show all plugins with dashboard toggle
             items(uiState.plugins) { plugin ->
-                PluginSettingsItem(
+                DashboardPluginItem(
                     plugin = plugin,
-                    isEnabled = uiState.pluginStates[plugin.id]?.isEnabled ?: false,
-                    isCollecting = uiState.pluginStates[plugin.id]?.isCollecting ?: false,
-                    onToggle = { viewModel.togglePlugin(plugin.id) }
+                    isOnDashboard = uiState.dashboardPluginIds.contains(plugin.id),
+                    onToggle = { viewModel.toggleDashboard(plugin.id) }
                 )
             }
             
@@ -188,10 +183,9 @@ fun SettingsItem(
 }
 
 @Composable
-fun PluginSettingsItem(
+fun DashboardPluginItem(
     plugin: Plugin,
-    isEnabled: Boolean,
-    isCollecting: Boolean,
+    isOnDashboard: Boolean,
     onToggle: () -> Unit
 ) {
     ListItem(
@@ -199,9 +193,9 @@ fun PluginSettingsItem(
         supportingContent = { 
             Column {
                 Text(plugin.metadata.description)
-                if (isCollecting) {
+                if (isOnDashboard) {
                     Text(
-                        text = "Collecting data",
+                        text = "Shown on dashboard",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -209,48 +203,18 @@ fun PluginSettingsItem(
             }
         },
         leadingContent = {
-            Box(
-                modifier = Modifier.size(40.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = plugin.metadata.name.first().toString(),
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
+            Icon(
+                imageVector = AppIcons.getPluginIcon(plugin.id),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp)
+            )
         },
         trailingContent = {
             Switch(
-                checked = isEnabled,
+                checked = isOnDashboard,
                 onCheckedChange = { onToggle() }
             )
         }
-    )
-}
-
-@Composable
-fun DashboardManagementItem(
-    dashboardCount: Int,
-    onClick: () -> Unit
-) {
-    ListItem(
-        headlineContent = { Text("Dashboard Plugins") },
-        supportingContent = { 
-            Text("$dashboardCount of 6 plugins shown on dashboard") 
-        },
-        leadingContent = {
-            Icon(
-                imageVector = AppIcons.Navigation.dashboard,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        },
-        trailingContent = {
-            Icon(
-                imageVector = AppIcons.Control.chevronRight,
-                contentDescription = null
-            )
-        },
-        modifier = Modifier.clickable { onClick() }
     )
 }
