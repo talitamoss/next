@@ -12,13 +12,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.domain.app.ui.contacts.AddContactScreen
 import com.domain.app.ui.contacts.ContactsScreen
 import com.domain.app.ui.dashboard.DashboardScreen
 import com.domain.app.ui.data.DataScreen
@@ -106,14 +106,10 @@ fun MainScreen() {
                             } == true,
                             onClick = {
                                 navController.navigate(item.route) {
-                                    // Pop up to the start destination of the graph to
-                                    // avoid building up a large stack of destinations
                                     popUpTo(navController.graph.findStartDestination().id) {
                                         saveState = true
                                     }
-                                    // Avoid multiple copies of the same destination
                                     launchSingleTop = true
-                                    // Restore state when reselecting a previously selected item
                                     restoreState = true
                                 }
                             }
@@ -131,149 +127,25 @@ fun MainScreen() {
             // Main screens (with bottom nav)
             composable(Screen.Dashboard.route) {
                 DashboardScreen(
-                    onNavigateToPlugin = { pluginId ->
-                        // Navigate to plugin detail if needed
-                    },
-                    onNavigateToSettings = {
-                        navController.navigate(Screen.Settings.route)
-                    }
+                    navController = navController
                 )
             }
             
             composable(Screen.Data.route) {
                 DataScreen(
-                    onNavigateToDetail = { dataPointId ->
-                        // Navigate to data detail if needed
-                    }
+                    navController = navController
                 )
             }
             
             composable(Screen.Social.route) {
                 SocialFeedScreen(
-                    onNavigateToContacts = {
-                        navController.navigate(Screen.Contacts.route)
-                    },
-                    onNavigateToAddContact = {
-                        navController.navigate(Screen.AddContact.route)
-                    },
-                    onNavigateToContactDetail = { contactId ->
-                        navController.navigate(Screen.ContactDetail.createRoute(contactId))
-                    }
+                    navController = navController
                 )
             }
             
             composable(Screen.Settings.route) {
                 SettingsScreen(
-                    onNavigateBack = {
-                        navController.popBackStack()
-                    }
-                )
-            }
-            
-            // Sub-screens (without bottom nav)
-            composable(Screen.Contacts.route) {
-                ContactsScreen(
-                    onNavigateBack = {
-                        navController.popBackStack()
-                    },
-                    onNavigateToAddContact = {
-                        navController.navigate(Screen.AddContact.route)
-                    },
-                    onNavigateToContactDetail = { contactId ->
-                        navController.navigate(Screen.ContactDetail.createRoute(contactId))
-                    }
-                )
-            }
-            
-            composable(Screen.AddContact.route) {
-                AddContactScreen(
-                    onNavigateBack = {
-                        navController.popBackStack()
-                    },
-                    onContactAdded = { contactId ->
-                        // Navigate back to contacts or to the new contact detail
-                        navController.popBackStack()
-                    }
-                )
-            }
-            
-            composable(
-                route = Screen.ContactDetail.route,
-                arguments = Screen.ContactDetail.arguments
-            ) { backStackEntry ->
-                val contactId = backStackEntry.arguments?.getString("contactId") ?: ""
-                
-                // TODO: Create ContactDetailScreen
-                PlaceholderScreen(
-                    title = "Contact Detail",
-                    subtitle = "Contact ID: $contactId",
-                    onNavigateBack = {
-                        navController.popBackStack()
-                    }
-                )
-            }
-        }
-    }
-}
-
-/**
- * Placeholder screen for unimplemented screens
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun PlaceholderScreen(
-    title: String,
-    subtitle: String = "",
-    onNavigateBack: (() -> Unit)? = null
-) {
-    Scaffold(
-        topBar = {
-            if (onNavigateBack != null) {
-                TopAppBar(
-                    title = { Text(title) },
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(Icons.Default.ArrowBack, "Back")
-                        }
-                    }
-                )
-            } else {
-                TopAppBar(
-                    title = { Text(title) }
-                )
-            }
-        }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Construction,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.headlineMedium
-                )
-                if (subtitle.isNotEmpty()) {
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Text(
-                    text = "Coming Soon",
-                    style = MaterialTheme.typography.bodyLarge
+                    navController = navController
                 )
             }
         }
@@ -288,26 +160,3 @@ data class BottomNavItem(
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val label: String
 )
-
-/**
- * Screen routes for navigation
- */
-sealed class Screen(val route: String) {
-    // Main screens (shown in bottom nav)
-    object Dashboard : Screen("dashboard")
-    object Data : Screen("data")
-    object Social : Screen("social")
-    object Settings : Screen("settings")
-    
-    // Sub screens
-    object Contacts : Screen("contacts")
-    object AddContact : Screen("add_contact")
-    object ContactDetail : Screen("contact/{contactId}") {
-        fun createRoute(contactId: String) = "contact/$contactId"
-        val arguments = listOf(
-            androidx.navigation.navArgument("contactId") {
-                type = androidx.navigation.NavType.StringType
-            }
-        )
-    }
-}

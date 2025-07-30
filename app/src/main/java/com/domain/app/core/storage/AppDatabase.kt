@@ -5,51 +5,50 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import android.content.Context
-import net.sqlcipher.database.SQLiteDatabase
-import net.sqlcipher.database.SupportFactory
+import com.domain.app.core.storage.converter.Converters
 import com.domain.app.core.storage.dao.DataPointDao
 import com.domain.app.core.storage.dao.PluginStateDao
 import com.domain.app.core.storage.entity.DataPointEntity
 import com.domain.app.core.storage.entity.PluginStateEntity
-import com.domain.app.core.storage.converter.Converters
 
+/**
+ * Main application database
+ * 
+ * File location: app/src/main/java/com/domain/app/core/storage/AppDatabase.kt
+ */
 @Database(
     entities = [
         DataPointEntity::class,
         PluginStateEntity::class
     ],
     version = 1,
-    exportSchema = false
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
-    
     abstract fun dataPointDao(): DataPointDao
     abstract fun pluginStateDao(): PluginStateDao
     
     companion object {
+        private const val DATABASE_NAME = "app_database"
+        
         @Volatile
         private var INSTANCE: AppDatabase? = null
         
-        fun getInstance(context: Context, passphrase: ByteArray): AppDatabase {
+        fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
-                val factory = SupportFactory(passphrase)
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    "app_database"
-                )
-                    .openHelperFactory(factory)
-                    .fallbackToDestructiveMigration()
-                    .build()
-                INSTANCE = instance
-                instance
+                INSTANCE ?: buildDatabase(context).also { INSTANCE = it }
             }
         }
         
-        fun closeDatabase() {
-            INSTANCE?.close()
-            INSTANCE = null
+        private fun buildDatabase(context: Context): AppDatabase {
+            return Room.databaseBuilder(
+                context.applicationContext,
+                AppDatabase::class.java,
+                DATABASE_NAME
+            )
+            .fallbackToDestructiveMigration() // For development only
+            .build()
         }
     }
 }

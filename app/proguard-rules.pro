@@ -1,5 +1,3 @@
-# File location: app/proguard-rules.pro
-
 # Add project specific ProGuard rules here.
 # You can control the set of applied configuration files using the
 # proguardFiles setting in build.gradle.
@@ -41,30 +39,10 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
-# Briar P2P
--keep class org.briarproject.** { *; }
--keep class org.torproject.** { *; }
--dontwarn org.briarproject.**
--dontwarn org.torproject.**
-
 # Keep native methods
 -keepclasseswithmembernames class * {
     native <methods>;
 }
-
-# OkHttp (used by Briar)
--dontwarn okhttp3.**
--dontwarn okio.**
--dontwarn javax.annotation.**
--keepnames class okhttp3.internal.publicsuffix.PublicSuffixDatabase
-
-# Bouncy Castle (used by Briar)
--keep class org.bouncycastle.** { *; }
--dontwarn org.bouncycastle.**
-
-# Java Crypto
--keep class javax.crypto.** { *; }
--keep class java.security.** { *; }
 
 # Room Database
 -keep class * extends androidx.room.RoomDatabase

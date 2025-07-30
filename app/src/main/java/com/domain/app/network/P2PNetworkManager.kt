@@ -5,24 +5,33 @@ import com.domain.app.core.data.DataRepository
 import com.domain.app.network.protocol.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import timber.log.Timber
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Main P2P Network Manager - coordinates all P2P operations
+ * Main P2P Network Manager - coordinates all BitChat P2P operations
+ * Implements pull-based feed architecture for behavioral data sharing
  * 
  * File location: app/src/main/java/com/domain/app/network/P2PNetworkManager.kt
  */
 @Singleton
 class P2PNetworkManager @Inject constructor(
-    private val p2pService: SimpleP2PService,
+    private val bitChatService: BitChatService,
     private val protocol: P2PProtocolHandler,
     private val dataRepository: DataRepository,
     private val contentStore: ContentStore,
     private val coroutineScope: CoroutineScope
 ) {
+    
+    private val json = Json { 
+        ignoreUnknownKeys = true
+        prettyPrint = false
+    }
     
     // Pending requests waiting for responses
     private val pendingRequests = ConcurrentHashMap<String, CompletableDeferred<P2PMessage>>()
@@ -35,11 +44,15 @@ class P2PNetworkManager @Inject constructor(
     private val _networkEvents = MutableSharedFlow<NetworkEvent>()
     val networkEvents: SharedFlow<NetworkEvent> = _networkEvents.asSharedFlow()
     
+    // Local peer info
+    private var localPeerId: String = ""
+    private var localNickname: String = ""
+    
     init {
-        // Set up message listener
-        p2pService.addMessageListener { contactId, rawMessage ->
+        // Set up message listener for BitChat
+        bitChatService.addMessageHandler { peerId, rawMessage ->
             coroutineScope.launch {
-                handleIncomingMessage(contactId, rawMessage)
+                handleIncomingMessage(peerId, rawMessage)
             }
         }
     }
@@ -47,223 +60,111 @@ class P2PNetworkManager @Inject constructor(
     /**
      * Initialize the network manager
      */
-    suspend fun initialize(nickname: String, password: String): Result<String> {
+    suspend fun initialize(nickname: String): Result<Unit> {
         return try {
-            // Initialize P2P service
-            p2pService.initialize()
+            localNickname = nickname
+            localPeerId = generatePeerId()
             
-            // Create or load account
-            val linkResult = p2pService.createOrLoadAccount(nickname, password)
+            // Initialize BitChat service
+            val result = bitChatService.initialize()
             
-            linkResult.onSuccess { link ->
-                _networkEvents.emit(NetworkEvent.Initialized(link))
+            result.onSuccess {
+                _networkEvents.emit(NetworkEvent.Initialized(localPeerId))
+                
+                // Start periodic feed refresh
+                startPeriodicFeedRefresh()
             }
             
-            linkResult
+            result
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
     
     /**
-     * Add a contact and establish connection
+     * Pull feed from all connected peers
+     * This is the core of the pull-based architecture
      */
-    suspend fun addContact(contactLink: String, nickname: String? = null): Result<Contact> {
-        return p2pService.addContact(contactLink).also { result ->
-            result.onSuccess { contact ->
-                // Store nickname locally if provided
-                if (nickname != null) {
-                    contentStore.setContactNickname(contact.id, nickname)
-                }
-                
-                _networkEvents.emit(NetworkEvent.ContactAdded(contact))
-                
-                // Send initial ping to establish connection
-                sendPing(contact.id)
-            }
-        }
-    }
-    
-    /**
-     * Get all contacts with their online status
-     */
-    suspend fun getContactsWithStatus(): List<ContactWithStatus> {
-        val contacts = p2pService.getContacts().getOrElse { emptyList() }
-        
-        return contacts.map { contact ->
-            ContactWithStatus(
-                contact = contact,
-                nickname = contentStore.getContactNickname(contact.id),
-                isOnline = checkIfOnline(contact.id),
-                lastSeen = contentStore.getLastSeen(contact.id)
-            )
-        }
-    }
-    
-    /**
-     * Refresh feed from all contacts
-     */
-    suspend fun refreshFeed() {
-        _networkEvents.emit(NetworkEvent.FeedRefreshStarted)
-        
-        val contacts = p2pService.getContacts().getOrElse { emptyList() }
-        val allItems = mutableListOf<FeedItem>()
-        
-        // Request feed from each contact
-        coroutineScope {
-            contacts.map { contact ->
-                async {
-                    requestFeedFromContact(contact.id)
-                }
-            }.awaitAll().forEach { items ->
-                allItems.addAll(items)
-            }
-        }
-        
-        // Sort by timestamp and update state
-        _feedItems.value = allItems.sortedByDescending { it.timestamp }
-        _networkEvents.emit(NetworkEvent.FeedRefreshCompleted(allItems.size))
-    }
-    
-    /**
-     * Share data with specific contacts
-     */
-    suspend fun shareData(
-        dataPoint: DataPoint,
-        withContacts: List<String> = emptyList(),
-        ephemeral: Boolean = false,
-        expiresIn: Long? = null
-    ): Result<Unit> {
+    suspend fun pullFeedFromPeers(): Result<List<FeedItem>> {
         return try {
-            // Store in content store first
-            val contentId = contentStore.storeContent(dataPoint)
+            val allFeedItems = mutableListOf<FeedItem>()
             
-            // Create feed item for this content
-            val feedItem = FeedItem(
-                contentId = contentId,
-                contentType = dataPoint.pluginId,
-                title = dataPoint.metadata["title"] as? String,
-                preview = createPreview(dataPoint),
-                timestamp = dataPoint.timestamp.toEpochMilli(),
-                encrypted = true
-            )
+            // Get current connected peers
+            val peers = bitChatService.connectedPeers.value
             
-            // Add to our available content
-            contentStore.addAvailableContent(feedItem, withContacts)
-            
-            // Notify specific contacts if requested
-            if (withContacts.isNotEmpty()) {
-                val message = protocol.createDataShare(
-                    dataType = dataPoint.pluginId,
-                    data = dataPoint,
-                    ephemeral = ephemeral,
-                    expiresIn = expiresIn
-                )
-                
-                withContacts.forEach { contactId ->
-                    p2pService.sendMessage(contactId, message)
+            // Request feed from each peer
+            peers.forEach { peer ->
+                try {
+                    val feedRequest = FeedRequest(
+                        requesterId = localPeerId,
+                        since = getLastSyncTime(peer.id),
+                        limit = 50,
+                        contentTypes = listOf("behavioral_data", "text_post")
+                    )
+                    
+                    // Send request and wait for response
+                    val response = sendRequestAndWaitForResponse(
+                        peerId = peer.id,
+                        request = protocol.createFeedRequest(
+                            since = Instant.ofEpochMilli(feedRequest.since ?: 0),
+                            limit = feedRequest.limit,
+                            contentTypes = feedRequest.contentTypes
+                        ),
+                        timeoutMs = 5000
+                    )
+                    
+                    // Process response
+                    response?.let {
+                        val feedResponse = protocol.extractPayload<FeedResponse>(it).getOrNull()
+                        feedResponse?.items?.forEach { item ->
+                            allFeedItems.add(
+                                FeedItem(
+                                    id = item.id,
+                                    contentId = item.contentId,
+                                    contentType = item.contentType,
+                                    timestamp = item.timestamp,
+                                    authorId = peer.id,
+                                    authorName = peer.name,
+                                    preview = item.preview
+                                )
+                            )
+                        }
+                    }
+                    
+                    _networkEvents.emit(NetworkEvent.PeerSynced(peer.id))
+                    
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to pull feed from peer ${peer.id}")
+                    _networkEvents.emit(NetworkEvent.PeerSyncFailed(peer.id, e))
                 }
             }
             
-            Result.success(Unit)
+            // Update feed cache
+            _feedItems.value = allFeedItems.sortedByDescending { it.timestamp }
+            
+            // Save sync times
+            peers.forEach { peer ->
+                saveLastSyncTime(peer.id, System.currentTimeMillis())
+            }
+            
+            Result.success(allFeedItems)
+            
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
     
     /**
-     * Fetch specific content from a peer
+     * Handle feed request from a peer (when they pull from us)
      */
-    suspend fun fetchContent(
-        contentId: String,
-        fromPeer: String,
-        requestType: ContentRequest.RequestType = ContentRequest.RequestType.FULL
-    ): Result<Any> {
-        val request = protocol.createContentRequest(contentId, requestType)
-        
-        return sendRequestAndWaitForResponse(fromPeer, request) { response ->
-            when (response.type) {
-                MessageType.CONTENT_RESPONSE -> {
-                    val contentResponse = protocol.extractPayload<ContentResponse>(response).getOrThrow()
-                    if (contentResponse.error != null) {
-                        Result.failure(Exception(contentResponse.error.message))
-                    } else {
-                        Result.success(contentResponse.data ?: "")
-                    }
-                }
-                MessageType.ERROR -> {
-                    val error = protocol.extractPayload<ErrorInfo>(response).getOrThrow()
-                    Result.failure(Exception(error.message))
-                }
-                else -> Result.failure(Exception("Unexpected response type"))
-            }
-        }
-    }
-    
-    /**
-     * Handle incoming messages
-     */
-    private suspend fun handleIncomingMessage(contactId: String, rawMessage: String) {
-        val parseResult = protocol.parseMessage(rawMessage)
-        
-        parseResult.fold(
-            onSuccess = { message ->
-                // Update last seen
-                contentStore.updateLastSeen(contactId)
-                
-                // Check if this is a response to a pending request
-                pendingRequests[message.id]?.complete(message)
-                
-                // Handle based on message type
-                when (message.type) {
-                    MessageType.PING -> handlePing(contactId, message)
-                    MessageType.PONG -> handlePong(contactId, message)
-                    MessageType.FEED_REQUEST -> handleFeedRequest(contactId, message)
-                    MessageType.FEED_RESPONSE -> handleFeedResponse(contactId, message)
-                    MessageType.CONTENT_REQUEST -> handleContentRequest(contactId, message)
-                    MessageType.CONTENT_RESPONSE -> handleContentResponse(contactId, message)
-                    MessageType.DATA_SHARE -> handleDataShare(contactId, message)
-                    MessageType.ERROR -> handleError(contactId, message)
-                    else -> {
-                        // Unknown message type
-                    }
-                }
-            },
-            onFailure = { error ->
-                _networkEvents.emit(NetworkEvent.Error(contactId, error))
-            }
-        )
-    }
-    
-    /**
-     * Handle ping request
-     */
-    private suspend fun handlePing(contactId: String, message: P2PMessage) {
-        val pong = protocol.createPong(message.id)
-        p2pService.sendMessage(contactId, pong)
-    }
-    
-    /**
-     * Handle pong response
-     */
-    private suspend fun handlePong(contactId: String, message: P2PMessage) {
-        // Contact is online, update status
-        contentStore.markContactOnline(contactId)
-    }
-    
-    /**
-     * Handle feed request from a peer
-     */
-    private suspend fun handleFeedRequest(contactId: String, message: P2PMessage) {
+    private suspend fun handleFeedRequest(peerId: String, message: P2PMessage) {
         val request = protocol.extractPayload<FeedRequest>(message).getOrThrow()
         
-        // Get available content for this contact
-        val availableItems = contentStore.getAvailableContentFor(contactId)
+        // Get available content for this peer
+        val availableItems = contentStore.getAvailableContent(peerId)
             .filter { item ->
                 // Filter by timestamp if requested
-                request.since?.let { since ->
-                    item.timestamp > since
-                } ?: true
+                request.since?.let { item.timestamp > it } ?: true
             }
             .filter { item ->
                 // Filter by content type if requested
@@ -273,36 +174,149 @@ class P2PNetworkManager @Inject constructor(
         
         // Send response
         val response = protocol.createFeedResponse(message.id, availableItems)
-        p2pService.sendMessage(contactId, response)
+        sendMessage(peerId, response)
     }
     
     /**
-     * Handle feed response from a peer
+     * Share behavioral data with peers
      */
-    private suspend fun handleFeedResponse(contactId: String, message: P2PMessage) {
-        val response = protocol.extractPayload<FeedResponse>(message).getOrThrow()
-        
-        // Add items to feed cache
-        response.items.forEach { item ->
-            contentStore.addFeedItem(contactId, item)
+    suspend fun shareBehavioralData(dataPoint: DataPoint): Result<Unit> {
+        return try {
+            // Convert data point to shareable format
+            val shareData = DataShare(
+                dataType = "behavioral_data",
+                data = json.encodeToString(dataPoint),
+                metadata = mapOf(
+                    "plugin_id" to dataPoint.pluginId,
+                    "data_type" to dataPoint.type
+                ),
+                ephemeral = false
+            )
+            
+            // Add to our content store (available for peers to pull)
+            contentStore.addContent(
+                ContentMetadata(
+                    id = dataPoint.id,
+                    contentId = dataPoint.id,
+                    contentType = "behavioral_data",
+                    timestamp = dataPoint.timestamp.toEpochMilli(),
+                    size = shareData.data.length.toLong(),
+                    mimeType = "application/json",
+                    metadata = shareData.metadata
+                )
+            )
+            
+            _networkEvents.emit(NetworkEvent.DataShared(dataPoint.id))
+            Result.success(Unit)
+            
+        } catch (e: Exception) {
+            Result.failure(e)
         }
-        
-        _networkEvents.emit(NetworkEvent.FeedUpdated(contactId, response.items.size))
     }
     
     /**
-     * Handle content request from a peer
+     * Handle incoming message from BitChat
      */
-    private suspend fun handleContentRequest(contactId: String, message: P2PMessage) {
+    private suspend fun handleIncomingMessage(peerId: String, rawMessage: ByteArray) {
+        try {
+            val messageString = String(rawMessage, Charsets.UTF_8)
+            val message = protocol.parseMessage(messageString).getOrThrow()
+            
+            Timber.d("Received ${message.type} from $peerId")
+            
+            when (message.type) {
+                MessageType.PING -> handlePing(peerId, message)
+                MessageType.PONG -> handlePong(peerId, message)
+                MessageType.FEED_REQUEST -> handleFeedRequest(peerId, message)
+                MessageType.FEED_RESPONSE -> handleFeedResponse(peerId, message)
+                MessageType.CONTENT_REQUEST -> handleContentRequest(peerId, message)
+                MessageType.CONTENT_RESPONSE -> handleContentResponse(peerId, message)
+                MessageType.DATA_SHARE -> handleDataShare(peerId, message)
+                MessageType.ERROR -> handleError(peerId, message)
+                MessageType.DATA_ACKNOWLEDGMENT -> {} // TODO: Implement
+                MessageType.PROFILE_UPDATE -> {} // TODO: Implement
+                MessageType.STATUS_UPDATE -> {} // TODO: Implement
+            }
+            
+            // Check if this completes a pending request
+            pendingRequests[message.id]?.complete(message)
+            
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to handle message from $peerId")
+        }
+    }
+    
+    /**
+     * Send a message to a peer
+     */
+    private suspend fun sendMessage(peerId: String, message: String): Result<Unit> {
+        return bitChatService.sendMessage(peerId, message.toByteArray(Charsets.UTF_8))
+    }
+    
+    /**
+     * Send request and wait for response
+     */
+    private suspend fun sendRequestAndWaitForResponse(
+        peerId: String,
+        request: String,
+        timeoutMs: Long
+    ): P2PMessage? {
+        return withTimeoutOrNull(timeoutMs) {
+            val message = protocol.parseMessage(request).getOrThrow()
+            val deferred = CompletableDeferred<P2PMessage>()
+            
+            pendingRequests[message.id] = deferred
+            
+            try {
+                sendMessage(peerId, request)
+                deferred.await()
+            } finally {
+                pendingRequests.remove(message.id)
+            }
+        }
+    }
+    
+    /**
+     * Start periodic feed refresh
+     */
+    private fun startPeriodicFeedRefresh() {
+        coroutineScope.launch {
+            while (isActive) {
+                delay(30000) // Refresh every 30 seconds
+                
+                if (bitChatService.connectedPeers.value.isNotEmpty()) {
+                    pullFeedFromPeers()
+                }
+            }
+        }
+    }
+    
+    // Message handlers
+    
+    private suspend fun handlePing(peerId: String, message: P2PMessage) {
+        val pong = protocol.createPong(message.id)
+        sendMessage(peerId, pong)
+    }
+    
+    private suspend fun handlePong(peerId: String, message: P2PMessage) {
+        _networkEvents.emit(NetworkEvent.PeerResponded(peerId))
+    }
+    
+    private suspend fun handleFeedResponse(peerId: String, message: P2PMessage) {
+        // Feed response handling is done in the request/response flow
+        pendingRequests[message.id]?.complete(message)
+    }
+    
+    private suspend fun handleContentRequest(peerId: String, message: P2PMessage) {
         val request = protocol.extractPayload<ContentRequest>(message).getOrThrow()
         
-        // Check if content is available for this contact
-        if (!contentStore.isContentAvailableFor(request.contentId, contactId)) {
+        // Check if content is available for this peer
+        if (!contentStore.isContentAvailableFor(request.contentId, peerId)) {
             val error = protocol.createError(
                 code = "CONTENT_NOT_AVAILABLE",
                 message = "Content not available or access denied"
             )
-            p2pService.sendMessage(contactId, error)
+            sendMessage(peerId, error)
             return
         }
         
@@ -319,146 +333,72 @@ class P2PNetworkManager @Inject constructor(
             }
         }
         
-        // Send response
-        val response = ContentResponse(
-            contentId = request.contentId,
-            requestType = request.requestType,
-            data = content
-        )
-        
-        val responseMessage = P2PMessage(
-            type = MessageType.CONTENT_RESPONSE,
-            payload = protocol.json.encodeToString(response)
-        )
-        
-        p2pService.sendMessage(contactId, protocol.json.encodeToString(responseMessage))
+        content?.let {
+            val response = protocol.createContentResponse(
+                requestId = message.id,
+                content = it
+            )
+            sendMessage(peerId, response)
+        }
     }
     
-    /**
-     * Handle data share from a peer
-     */
-    private suspend fun handleDataShare(contactId: String, message: P2PMessage) {
+    private suspend fun handleContentResponse(peerId: String, message: P2PMessage) {
+        // Content response handling
+        pendingRequests[message.id]?.complete(message)
+    }
+    
+    private suspend fun handleDataShare(peerId: String, message: P2PMessage) {
         val share = protocol.extractPayload<DataShare>(message).getOrThrow()
         
-        // Store received data
-        contentStore.storeReceivedContent(contactId, share)
-        
-        // Send acknowledgment
-        val ack = P2PMessage(
-            type = MessageType.DATA_ACKNOWLEDGMENT,
-            payload = """{"messageId":"${message.id}"}"""
-        )
-        p2pService.sendMessage(contactId, protocol.json.encodeToString(ack))
-        
-        _networkEvents.emit(NetworkEvent.DataReceived(contactId, share.dataType))
-    }
-    
-    /**
-     * Handle error message
-     */
-    private suspend fun handleError(contactId: String, message: P2PMessage) {
-        val error = protocol.extractPayload<ErrorInfo>(message).getOrThrow()
-        _networkEvents.emit(NetworkEvent.Error(contactId, Exception(error.message)))
-    }
-    
-    /**
-     * Send ping to check if contact is online
-     */
-    private suspend fun sendPing(contactId: String): Boolean {
-        val ping = protocol.createPing()
-        
-        return try {
-            withTimeout(5000) { // 5 second timeout
-                sendRequestAndWaitForResponse(contactId, ping) { response ->
-                    response.type == MessageType.PONG
+        // Store shared data
+        when (share.dataType) {
+            "behavioral_data" -> {
+                // Parse and store behavioral data
+                try {
+                    val dataPoint = json.decodeFromString<DataPoint>(share.data)
+                    // Modify the data point to indicate it's from a peer
+                    val peerDataPoint = dataPoint.copy(
+                        metadata = dataPoint.metadata?.plus(mapOf("from_peer" to peerId)) ?: mapOf("from_peer" to peerId)
+                    )
+                    dataRepository.insertDataPoints(listOf(peerDataPoint))
+                    _networkEvents.emit(NetworkEvent.DataReceived(peerId, peerDataPoint.id))
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to parse behavioral data from $peerId")
                 }
             }
-            true
-        } catch (e: TimeoutCancellationException) {
-            false
-        }
-    }
-    
-    /**
-     * Check if contact is online
-     */
-    private suspend fun checkIfOnline(contactId: String): Boolean {
-        val lastSeen = contentStore.getLastSeen(contactId)
-        
-        return if (lastSeen != null && 
-            Instant.now().minusSeconds(300).isBefore(lastSeen)) {
-            // Seen in last 5 minutes, assume online
-            true
-        } else {
-            // Try to ping
-            sendPing(contactId)
-        }
-    }
-    
-    /**
-     * Request feed from specific contact
-     */
-    private suspend fun requestFeedFromContact(contactId: String): List<FeedItem> {
-        val request = protocol.createFeedRequest(
-            since = contentStore.getLastFeedUpdate(contactId)
-        )
-        
-        return try {
-            sendRequestAndWaitForResponse(contactId, request) { response ->
-                when (response.type) {
-                    MessageType.FEED_RESPONSE -> {
-                        val feedResponse = protocol.extractPayload<FeedResponse>(response).getOrThrow()
-                        feedResponse.items
-                    }
-                    else -> emptyList()
-                }
+            else -> {
+                Timber.w("Unknown data type received: ${share.dataType}")
             }
-        } catch (e: Exception) {
-            emptyList()
         }
     }
     
-    /**
-     * Send request and wait for response
-     */
-    private suspend fun <T> sendRequestAndWaitForResponse(
-        contactId: String,
-        request: String,
-        timeout: Long = 30000,
-        handler: (P2PMessage) -> T
-    ): T {
-        val messageId = P2PMessage.generateMessageId()
-        val deferred = CompletableDeferred<P2PMessage>()
-        
-        // Store pending request
-        pendingRequests[messageId] = deferred
-        
-        try {
-            // Send request
-            p2pService.sendMessage(contactId, request)
-            
-            // Wait for response
-            val response = withTimeout(timeout) {
-                deferred.await()
-            }
-            
-            return handler(response)
-        } finally {
-            // Clean up
-            pendingRequests.remove(messageId)
-        }
+    private suspend fun handleError(peerId: String, message: P2PMessage) {
+        val error = protocol.extractPayload<ErrorInfo>(message).getOrNull()
+        Timber.e("Error from $peerId: ${error?.message}")
+        _networkEvents.emit(NetworkEvent.PeerError(peerId, error?.message ?: "Unknown error"))
+    }
+    
+    // Helper functions
+    
+    private fun generatePeerId(): String {
+        return "peer_${System.currentTimeMillis()}_${(1000..9999).random()}"
+    }
+    
+    private suspend fun getLastSyncTime(peerId: String): Long? {
+        // In a real implementation, this would retrieve from storage
+        return null
+    }
+    
+    private suspend fun saveLastSyncTime(peerId: String, timestamp: Long) {
+        // In a real implementation, this would save to storage
     }
     
     /**
-     * Create preview for data point
+     * Stop the network manager
      */
-    private fun createPreview(dataPoint: DataPoint): String {
-        return when (dataPoint.pluginId) {
-            "mood" -> "Mood update"
-            "water" -> "Hydration tracked"
-            "exercise" -> "Activity logged"
-            else -> "New entry"
-        }
+    fun stop() {
+        coroutineScope.cancel()
+        bitChatService.stop()
     }
 }
 
@@ -466,21 +406,27 @@ class P2PNetworkManager @Inject constructor(
  * Network events
  */
 sealed class NetworkEvent {
-    data class Initialized(val contactLink: String) : NetworkEvent()
-    data class ContactAdded(val contact: Contact) : NetworkEvent()
-    object FeedRefreshStarted : NetworkEvent()
-    data class FeedRefreshCompleted(val itemCount: Int) : NetworkEvent()
-    data class FeedUpdated(val contactId: String, val newItems: Int) : NetworkEvent()
-    data class DataReceived(val fromContact: String, val dataType: String) : NetworkEvent()
-    data class Error(val contactId: String?, val error: Throwable) : NetworkEvent()
+    data class Initialized(val peerId: String) : NetworkEvent()
+    data class PeerConnected(val peerId: String) : NetworkEvent()
+    data class PeerDisconnected(val peerId: String) : NetworkEvent()
+    data class PeerSynced(val peerId: String) : NetworkEvent()
+    data class PeerSyncFailed(val peerId: String, val error: Throwable) : NetworkEvent()
+    data class PeerResponded(val peerId: String) : NetworkEvent()
+    data class PeerError(val peerId: String, val error: String) : NetworkEvent()
+    data class DataShared(val dataId: String) : NetworkEvent()
+    data class DataReceived(val peerId: String, val dataId: String) : NetworkEvent()
+    data class FeedUpdated(val peerId: String, val itemCount: Int) : NetworkEvent()
 }
 
 /**
- * Contact with additional status information
+ * Feed item model
  */
-data class ContactWithStatus(
-    val contact: Contact,
-    val nickname: String?,
-    val isOnline: Boolean,
-    val lastSeen: Instant?
+data class FeedItem(
+    val id: String,
+    val contentId: String,
+    val contentType: String,
+    val timestamp: Long,
+    val authorId: String,
+    val authorName: String,
+    val preview: String? = null
 )

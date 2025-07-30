@@ -59,10 +59,5 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
         
-        <!-- Briar Services -->
-        <service
-            android:name="org.briarproject.briar.android.BriarService"
-            android:exported="false" />
-            
     </application>
 </manifest>

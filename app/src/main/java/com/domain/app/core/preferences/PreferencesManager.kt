@@ -6,95 +6,122 @@ import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "app_preferences")
+// Extension property for DataStore
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "app_preferences")
 
+/**
+ * Manages application preferences
+ * 
+ * File location: app/src/main/java/com/domain/app/core/preferences/PreferencesManager.kt
+ */
 @Singleton
 class PreferencesManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val dataStore = context.dataStore
     
+    // Preference keys
     companion object {
-        private val DASHBOARD_PLUGINS_KEY = stringSetPreferencesKey("dashboard_plugins")
-        private val DASHBOARD_ORDER_KEY = stringPreferencesKey("dashboard_order")
-        private const val MAX_DASHBOARD_PLUGINS = 6
+        val ENABLED_PLUGINS = stringSetPreferencesKey("enabled_plugins")
+        val SYNC_ON_STARTUP = booleanPreferencesKey("sync_on_startup")
+        val THEME_MODE = stringPreferencesKey("theme_mode")
+        val BACKUP_FREQUENCY = stringPreferencesKey("backup_frequency")
+        val LAST_BACKUP = longPreferencesKey("last_backup")
     }
     
     /**
-     * Get the list of plugin IDs that should be shown on the dashboard
+     * Get enabled plugins
      */
-    val dashboardPlugins: Flow<List<String>> = dataStore.data
-        .map { preferences ->
-            val pluginsSet = preferences[DASHBOARD_PLUGINS_KEY] ?: emptySet()
-            val orderString = preferences[DASHBOARD_ORDER_KEY] ?: ""
-            
-            if (orderString.isNotEmpty()) {
-                // Return in saved order
-                orderString.split(",").filter { it in pluginsSet }
-            } else {
-                // Return in default order
-                pluginsSet.toList()
-            }
-        }
+    val enabledPlugins: Flow<Set<String>> = dataStore.data.map { preferences ->
+        preferences[ENABLED_PLUGINS] ?: emptySet()
+    }
     
     /**
-     * Update the dashboard plugins
+     * Add plugin to enabled list
      */
-    suspend fun updateDashboardPlugins(pluginIds: List<String>) {
+    suspend fun enablePlugin(pluginId: String) {
         dataStore.edit { preferences ->
-            // Limit to maximum allowed
-            val limitedIds = pluginIds.take(MAX_DASHBOARD_PLUGINS)
-            
-            preferences[DASHBOARD_PLUGINS_KEY] = limitedIds.toSet()
-            preferences[DASHBOARD_ORDER_KEY] = limitedIds.joinToString(",")
+            val current = preferences[ENABLED_PLUGINS] ?: emptySet()
+            preferences[ENABLED_PLUGINS] = current + pluginId
         }
     }
     
     /**
-     * Add a plugin to the dashboard
+     * Remove plugin from enabled list
      */
-    suspend fun addToDashboard(pluginId: String) {
+    suspend fun disablePlugin(pluginId: String) {
         dataStore.edit { preferences ->
-            val current = preferences[DASHBOARD_PLUGINS_KEY] ?: emptySet()
-            if (current.size < MAX_DASHBOARD_PLUGINS) {
-                preferences[DASHBOARD_PLUGINS_KEY] = current + pluginId
-                
-                // Update order
-                val currentOrder = preferences[DASHBOARD_ORDER_KEY]?.split(",") ?: emptyList()
-                preferences[DASHBOARD_ORDER_KEY] = (currentOrder + pluginId).joinToString(",")
-            }
+            val current = preferences[ENABLED_PLUGINS] ?: emptySet()
+            preferences[ENABLED_PLUGINS] = current - pluginId
         }
     }
     
     /**
-     * Remove a plugin from the dashboard
+     * Check if plugin is enabled
      */
-    suspend fun removeFromDashboard(pluginId: String) {
+    suspend fun isPluginEnabled(pluginId: String): Boolean {
+        return dataStore.data.first()[ENABLED_PLUGINS]?.contains(pluginId) ?: false
+    }
+    
+    /**
+     * Get theme mode
+     */
+    val themeMode: Flow<String> = dataStore.data.map { preferences ->
+        preferences[THEME_MODE] ?: "system"
+    }
+    
+    /**
+     * Set theme mode
+     */
+    suspend fun setThemeMode(mode: String) {
         dataStore.edit { preferences ->
-            val current = preferences[DASHBOARD_PLUGINS_KEY] ?: emptySet()
-            preferences[DASHBOARD_PLUGINS_KEY] = current - pluginId
-            
-            // Update order
-            val currentOrder = preferences[DASHBOARD_ORDER_KEY]?.split(",") ?: emptyList()
-            preferences[DASHBOARD_ORDER_KEY] = currentOrder.filter { it != pluginId }.joinToString(",")
+            preferences[THEME_MODE] = mode
         }
     }
     
     /**
-     * Check if a plugin is on the dashboard
+     * Get backup frequency
      */
-    fun isOnDashboard(pluginId: String): Flow<Boolean> {
-        return dashboardPlugins.map { it.contains(pluginId) }
+    val backupFrequency: Flow<String> = dataStore.data.map { preferences ->
+        preferences[BACKUP_FREQUENCY] ?: "weekly"
     }
     
     /**
-     * Get the number of plugins on dashboard
+     * Set backup frequency
      */
-    fun getDashboardPluginCount(): Flow<Int> {
-        return dashboardPlugins.map { it.size }
+    suspend fun setBackupFrequency(frequency: String) {
+        dataStore.edit { preferences ->
+            preferences[BACKUP_FREQUENCY] = frequency
+        }
+    }
+    
+    /**
+     * Update last backup time
+     */
+    suspend fun updateLastBackupTime() {
+        dataStore.edit { preferences ->
+            preferences[LAST_BACKUP] = System.currentTimeMillis()
+        }
+    }
+    
+    /**
+     * Get last backup time
+     */
+    val lastBackupTime: Flow<Long> = dataStore.data.map { preferences ->
+        preferences[LAST_BACKUP] ?: 0L
+    }
+    
+    /**
+     * Clear all preferences (for testing/reset)
+     */
+    suspend fun clearAll() {
+        dataStore.edit { preferences ->
+            preferences.clear()
+        }
     }
 }

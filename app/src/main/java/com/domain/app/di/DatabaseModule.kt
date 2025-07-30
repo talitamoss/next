@@ -1,11 +1,7 @@
 package com.domain.app.di
 
 import android.content.Context
-import com.domain.app.App
 import com.domain.app.core.storage.AppDatabase
-import com.domain.app.core.storage.dao.DataPointDao
-import com.domain.app.core.storage.dao.PluginStateDao
-import com.domain.app.core.storage.encryption.EncryptionManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -13,33 +9,27 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
+/**
+ * Database dependency injection module
+ * 
+ * File location: app/src/main/java/com/domain/app/di/DatabaseModule.kt
+ */
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
     
     @Provides
     @Singleton
-    fun provideEncryptionManager(@ApplicationContext context: Context): EncryptionManager {
-        return (context as App).encryptionManager
-    }
-    
-    @Provides
-    @Singleton
     fun provideAppDatabase(
-        @ApplicationContext context: Context,
-        encryptionManager: EncryptionManager
+        @ApplicationContext context: Context
     ): AppDatabase {
-        val dbKey = encryptionManager.getDatabaseKey()
-        return AppDatabase.getInstance(context, dbKey)
+        return AppDatabase.getInstance(context)
     }
     
     @Provides
-    fun provideDataPointDao(database: AppDatabase): DataPointDao {
-        return database.dataPointDao()
-    }
+    fun provideDataPointDao(database: AppDatabase) = database.dataPointDao()
     
     @Provides
-    fun providePluginStateDao(database: AppDatabase): PluginStateDao {
-        return database.pluginStateDao()
-    }
+    fun providePluginStateDao(database: AppDatabase) = database.pluginStateDao()
 }
+

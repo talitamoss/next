@@ -5,6 +5,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import java.time.Instant
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -68,6 +69,7 @@ enum class MessageType {
  */
 @Serializable
 data class FeedRequest(
+    val requesterId: String,
     val since: Long? = null,  // Timestamp to get updates since
     val limit: Int = 50,      // Maximum items to return
     val contentTypes: List<String>? = null  // Filter by content type
@@ -88,6 +90,7 @@ data class FeedResponse(
  */
 @Serializable
 data class FeedItem(
+    val id: String,
     val contentId: String,
     val contentType: String,
     val title: String? = null,
@@ -95,6 +98,19 @@ data class FeedItem(
     val timestamp: Long,
     val size: Long? = null,
     val encrypted: Boolean = true
+)
+
+/**
+ * Content metadata (not serializable, for internal use)
+ */
+data class ContentMetadata(
+    val id: String,
+    val contentId: String,
+    val contentType: String,
+    val timestamp: Long,
+    val size: Long,
+    val mimeType: String,
+    val metadata: Map<String, String> = emptyMap()
 )
 
 /**
@@ -155,6 +171,29 @@ class P2PProtocolHandler @Inject constructor() {
     private val json = Json { 
         ignoreUnknownKeys = true  // For backward compatibility
         prettyPrint = false       // Compact for network
+        encodeDefaults = true
+    }
+    
+    /**
+     * Parse a raw message string
+     */
+    fun parseMessage(rawMessage: String): Result<P2PMessage> {
+        return try {
+            Result.success(json.decodeFromString(rawMessage))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Extract payload from a message
+     */
+    inline fun <reified T> extractPayload(message: P2PMessage): Result<T> {
+        return try {
+            Result.success(json.decodeFromString(message.payload))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
     
     /**
@@ -188,6 +227,7 @@ class P2PProtocolHandler @Inject constructor() {
         contentTypes: List<String>? = null
     ): String {
         val request = FeedRequest(
+            requesterId = "self", // This should be passed in
             since = since?.toEpochMilli(),
             limit = limit,
             contentTypes = contentTypes
@@ -206,14 +246,26 @@ class P2PProtocolHandler @Inject constructor() {
      */
     fun createFeedResponse(
         requestId: String,
-        items: List<FeedItem>
+        items: List<ContentMetadata>
     ): String {
+        val feedItems = items.map { metadata ->
+            FeedItem(
+                id = UUID.randomUUID().toString(),
+                contentId = metadata.contentId,
+                contentType = metadata.contentType,
+                timestamp = metadata.timestamp,
+                size = metadata.size,
+                encrypted = true
+            )
+        }
+        
         val response = FeedResponse(
-            items = items,
+            items = feedItems,
             hasMore = false  // TODO: Implement pagination
         )
         
         val message = P2PMessage(
+            id = requestId,
             type = MessageType.FEED_RESPONSE,
             payload = json.encodeToString(response)
         )
@@ -233,6 +285,40 @@ class P2PProtocolHandler @Inject constructor() {
         val message = P2PMessage(
             type = MessageType.CONTENT_REQUEST,
             payload = json.encodeToString(request)
+        )
+        
+        return json.encodeToString(message)
+    }
+    
+    /**
+     * Create content response
+     */
+    fun createContentResponse(
+        requestId: String,
+        content: Any
+    ): String {
+        val response = when (content) {
+            is ContentMetadata -> ContentResponse(
+                contentId = content.contentId,
+                requestType = ContentRequest.RequestType.METADATA_ONLY,
+                data = json.encodeToString(content.metadata)
+            )
+            is ByteArray -> ContentResponse(
+                contentId = requestId,
+                requestType = ContentRequest.RequestType.FULL,
+                data = content.encodeToBase64()
+            )
+            else -> ContentResponse(
+                contentId = requestId,
+                requestType = ContentRequest.RequestType.FULL,
+                data = content.toString()
+            )
+        }
+        
+        val message = P2PMessage(
+            id = requestId,
+            type = MessageType.CONTENT_RESPONSE,
+            payload = json.encodeToString(response)
         )
         
         return json.encodeToString(message)
@@ -263,39 +349,7 @@ class P2PProtocolHandler @Inject constructor() {
     }
     
     /**
-     * Parse incoming message
-     */
-    fun parseMessage(rawMessage: String): Result<P2PMessage> {
-        return try {
-            val message = json.decodeFromString<P2PMessage>(rawMessage)
-            
-            // Validate protocol version
-            if (message.version > PROTOCOL_VERSION) {
-                return Result.failure(
-                    ProtocolException("Unsupported protocol version: ${message.version}")
-                )
-            }
-            
-            Result.success(message)
-        } catch (e: Exception) {
-            Result.failure(ProtocolException("Failed to parse message", e))
-        }
-    }
-    
-    /**
-     * Extract typed payload from message
-     */
-    inline fun <reified T> extractPayload(message: P2PMessage): Result<T> {
-        return try {
-            val payload = json.decodeFromString<T>(message.payload)
-            Result.success(payload)
-        } catch (e: Exception) {
-            Result.failure(ProtocolException("Failed to extract payload", e))
-        }
-    }
-    
-    /**
-     * Create error response
+     * Create error message
      */
     fun createError(
         code: String,
@@ -311,13 +365,9 @@ class P2PProtocolHandler @Inject constructor() {
         
         return json.encodeToString(msg)
     }
-    
-    companion object {
-        const val PROTOCOL_VERSION = 1
-    }
 }
 
-/**
- * Protocol-specific exceptions
- */
-class ProtocolException(message: String, cause: Throwable? = null) : Exception(message, cause)
+// Extension function to encode ByteArray to Base64
+private fun ByteArray.encodeToBase64(): String {
+    return java.util.Base64.getEncoder().encodeToString(this)
+}

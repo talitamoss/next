@@ -21,7 +21,7 @@ object SocialModule {
     /**
      * Feature flag to control which implementation to use
      * Set to true for UI development with mocks
-     * Set to false for real Briar implementation
+     * Set to false for real BitChat implementation
      */
     private const val USE_MOCK_SOCIAL = true
     
@@ -31,7 +31,8 @@ object SocialModule {
         @ApplicationContext context: Context,
         mockRepository: MockSocialRepository
         // TODO: Add real implementation parameters when ready
-        // realBriarManager: BriarManager,
+        // bitChatService: BitChatService,
+        // networkManager: P2PNetworkManager,
         // dataRepository: DataRepository,
         // encryptionManager: EncryptionManager
     ): SocialRepository {
@@ -39,7 +40,7 @@ object SocialModule {
             mockRepository
         } else {
             // TODO: Return real implementation when backend is ready
-            // RealSocialRepository(realBriarManager, dataRepository, encryptionManager)
+            // BitChatSocialRepository(bitChatService, networkManager, dataRepository, encryptionManager)
             throw NotImplementedError("Real social repository not yet implemented. Set USE_MOCK_SOCIAL = true")
         }
     }

@@ -32,6 +32,11 @@ class DataRepository @Inject constructor(
     }
     
     /**
+     * Insert data points (alias for saveDataPoints for compatibility)
+     */
+    suspend fun insertDataPoints(dataPoints: List<DataPoint>) = saveDataPoints(dataPoints)
+    
+    /**
      * Get data for a specific plugin
      */
     fun getPluginData(pluginId: String): Flow<List<DataPoint>> {
@@ -62,21 +67,6 @@ class DataRepository @Inject constructor(
     }
     
     /**
-     * Get latest data points with limit
-     */
-    fun getLatestDataPoints(limit: Int): Flow<List<DataPoint>> {
-        return database.dataPointDao().getLatestDataPoints(limit)
-            .map { entities -> entities.map { it.toDataPoint() } }
-    }
-    
-    /**
-     * Get count of data points for a plugin
-     */
-    suspend fun getDataCount(pluginId: String): Int = withContext(Dispatchers.IO) {
-        database.dataPointDao().getCountByPlugin(pluginId)
-    }
-    
-    /**
      * Get unsynced data for backup/sync
      */
     suspend fun getUnsyncedData(): List<DataPoint> = withContext(Dispatchers.IO) {
@@ -87,25 +77,39 @@ class DataRepository @Inject constructor(
     /**
      * Mark data as synced
      */
-    suspend fun markDataAsSynced(dataPointIds: List<String>) = withContext(Dispatchers.IO) {
+    suspend fun markAsSynced(dataPointIds: List<String>) = withContext(Dispatchers.IO) {
         database.dataPointDao().markAsSynced(dataPointIds)
     }
     
     /**
-     * Clean up old data
+     * Delete old data
      */
-    suspend fun cleanupOldData(daysToKeep: Int) = withContext(Dispatchers.IO) {
-        val cutoffDate = Instant.now().minus(daysToKeep.toLong(), ChronoUnit.DAYS)
-        database.dataPointDao().deleteOlderThan(cutoffDate)
+    suspend fun deleteOldData(olderThan: Instant) = withContext(Dispatchers.IO) {
+        database.dataPointDao().deleteOlderThan(olderThan)
     }
     
     /**
-     * Get aggregated statistics for a plugin
+     * Get count of data points for a plugin
+     */
+    suspend fun getPluginDataCount(pluginId: String): Int = withContext(Dispatchers.IO) {
+        database.dataPointDao().getCountByPlugin(pluginId)
+    }
+    
+    /**
+     * Get the latest data points across all plugins
+     */
+    fun getLatestDataPoints(limit: Int = 10): Flow<List<DataPoint>> {
+        return database.dataPointDao().getLatestDataPoints(limit)
+            .map { entities -> entities.map { it.toDataPoint() } }
+    }
+    
+    /**
+     * Get plugin statistics
      */
     suspend fun getPluginStatistics(
         pluginId: String,
-        start: Instant,
-        end: Instant
+        start: Instant = Instant.now().minus(7, ChronoUnit.DAYS),
+        end: Instant = Instant.now()
     ): PluginStatistics = withContext(Dispatchers.IO) {
         val dataPoints = getPluginDataInRange(pluginId, start, end)
         

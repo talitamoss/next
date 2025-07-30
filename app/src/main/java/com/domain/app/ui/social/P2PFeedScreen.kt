@@ -9,18 +9,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.google.accompanist.swiperefresh.SwipeRefresh
-import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 /**
- * P2P Feed Screen - Pull-based social feed
+ * P2P Feed Screen - Shows messages and data from peers
  * 
  * File location: app/src/main/java/com/domain/app/ui/social/P2PFeedScreen.kt
  */
@@ -28,241 +27,183 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun P2PFeedScreen(
     onNavigateToContacts: () -> Unit,
+    onNavigateToAddContact: () -> Unit,
+    onNavigateToContactDetail: (String) -> Unit,
     viewModel: P2PFeedViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val feedItems by viewModel.feedItems.collectAsStateWithLifecycle()
-    val connectedPeers by viewModel.connectedPeers.collectAsStateWithLifecycle()
     
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { 
-                    Column {
-                        Text("P2P Feed")
-                        Text(
-                            text = "${connectedPeers.size} peers connected",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                },
+                title = { Text("P2P Feed") },
                 actions = {
-                    IconButton(onClick = onNavigateToContacts) {
-                        Icon(Icons.Default.People, "Manage Contacts")
+                    IconButton(onClick = { viewModel.refreshFeed() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
-                    IconButton(onClick = { viewModel.pullFeed() }) {
-                        Icon(Icons.Default.Refresh, "Pull Feed")
+                    IconButton(onClick = onNavigateToContacts) {
+                        Icon(Icons.Default.People, contentDescription = "Contacts")
+                    }
+                    IconButton(onClick = onNavigateToAddContact) {
+                        Icon(Icons.Default.PersonAdd, contentDescription = "Add Contact")
                     }
                 }
             )
         },
-        bottomBar = {
-            // Message input bar
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                tonalElevation = 3.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = uiState.messageInput,
-                        onValueChange = viewModel::updateMessageInput,
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("Share something...") },
-                        singleLine = true
-                    )
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
-                    IconButton(
-                        onClick = { viewModel.postMessage(uiState.messageInput) },
-                        enabled = uiState.messageInput.isNotBlank() && !uiState.isPosting
-                    ) {
-                        if (uiState.isPosting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(Icons.Default.Send, "Post")
-                        }
-                    }
-                }
-            }
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = { /* TODO: Post message */ },
+                text = { Text("Post") },
+                icon = { Icon(Icons.Default.Edit, contentDescription = null) }
+            )
         }
     ) { paddingValues ->
-        SwipeRefresh(
-            state = rememberSwipeRefreshState(uiState.isRefreshing),
-            onRefresh = { viewModel.pullFeed() },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            if (feedItems.isEmpty() && !uiState.isRefreshing) {
-                // Empty state
+        when {
+            uiState.isLoading && uiState.feedItems.isEmpty() -> {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.WifiTetheringOff,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            "No messages yet",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            "Pull to refresh or post something!",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    CircularProgressIndicator()
                 }
-            } else {
-                // Feed list
+            }
+            
+            uiState.feedItems.isEmpty() -> {
+                EmptyFeedState(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    onAddContact = onNavigateToAddContact
+                )
+            }
+            
+            else -> {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(feedItems) { item ->
-                        FeedItemCard(item)
+                    items(uiState.feedItems) { item ->
+                        FeedItemCard(
+                            item = item,
+                            onContactClick = { onNavigateToContactDetail(item.authorId) }
+                        )
                     }
                 }
             }
-        }
-    }
-    
-    // Error handling
-    uiState.error?.let { error ->
-        Snackbar(
-            modifier = Modifier.padding(16.dp),
-            action = {
-                TextButton(onClick = viewModel::clearError) {
-                    Text("Dismiss")
-                }
-            }
-        ) {
-            Text(error)
         }
     }
 }
 
 @Composable
+fun EmptyFeedState(
+    modifier: Modifier = Modifier,
+    onAddContact: () -> Unit
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.RssFeed,
+            contentDescription = null,
+            modifier = Modifier.size(64.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Text(
+            text = "No feed items yet",
+            style = MaterialTheme.typography.headlineSmall
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        Text(
+            text = "Add contacts to see their shared data",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        FilledTonalButton(onClick = onAddContact) {
+            Icon(Icons.Default.PersonAdd, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Add Contact")
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun FeedItemCard(
-    item: FeedItem
+    item: com.domain.app.network.FeedItem,
+    onContactClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = if (item.isLocal) {
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
-        } else {
-            CardDefaults.cardColors()
-        }
+        onClick = { /* TODO: View details */ },
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
-            // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Avatar placeholder
-                    Surface(
-                        modifier = Modifier.size(40.dp),
-                        shape = MaterialTheme.shapes.medium,
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = item.fromPeer.nickname.first().toString(),
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        }
-                    }
-                    
-                    Column {
-                        Text(
-                            text = item.fromPeer.nickname,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = formatTimestamp(item.message.timestamp),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                TextButton(onClick = onContactClick) {
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = item.authorName,
+                        style = MaterialTheme.typography.titleSmall
+                    )
                 }
                 
-                // Status indicators
-                Row {
-                    if (item.isLocal) {
-                        Icon(
-                            Icons.Default.CloudDone,
-                            contentDescription = "Available for peers",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    
-                    if (item.message.ttl < 7) {
-                        Text(
-                            text = "TTL: ${item.message.ttl}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                Text(
+                    text = formatTimestamp(item.timestamp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             
             Spacer(modifier = Modifier.height(8.dp))
             
-            // Message content
             Text(
-                text = item.message.content,
-                style = MaterialTheme.typography.bodyMedium
+                text = item.preview ?: "Behavioral data",
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
             )
             
-            // Future: Add behavioral data visualization here
-            when (item.message.type) {
-                MessageType.BEHAVIORAL -> {
-                    // Show data visualization
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    ) {
-                        Text(
-                            text = "📊 Behavioral data will appear here",
-                            modifier = Modifier.padding(8.dp),
-                            style = MaterialTheme.typography.bodySmall
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Row {
+                AssistChip(
+                    onClick = { },
+                    label = { Text(item.contentType) },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.DataUsage,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
                         )
                     }
-                }
-                else -> { /* Regular message */ }
+                )
             }
         }
     }
@@ -270,22 +211,6 @@ fun FeedItemCard(
 
 fun formatTimestamp(timestamp: Long): String {
     val instant = Instant.ofEpochMilli(timestamp)
-    val now = Instant.now()
-    
-    return when {
-        instant.isAfter(now.minusSeconds(60)) -> "Just now"
-        instant.isAfter(now.minusSeconds(3600)) -> {
-            val minutes = (now.epochSecond - instant.epochSecond) / 60
-            "$minutes min ago"
-        }
-        instant.isAfter(now.minusSeconds(86400)) -> {
-            val hours = (now.epochSecond - instant.epochSecond) / 3600
-            "$hours hours ago"
-        }
-        else -> {
-            DateTimeFormatter.ofPattern("MMM d, HH:mm")
-                .withZone(ZoneId.systemDefault())
-                .format(instant)
-        }
-    }
+    val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT)
+    return instant.atZone(ZoneId.systemDefault()).format(formatter)
 }

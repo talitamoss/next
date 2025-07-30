@@ -98,10 +98,6 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     kapt("androidx.room:room-compiler:2.6.1")
     
-    // Briar P2P
-    implementation("org.briarproject:briar-android:1.5.3")
-    implementation("org.briarproject:briar-core:1.5.3")
-    
     // Logging
     implementation("com.jakewharton.timber:timber:5.0.1")
     

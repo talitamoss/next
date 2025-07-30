@@ -3,229 +3,226 @@ package com.domain.app.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.data.DataRepository
-import com.domain.app.core.plugin.Plugin
-import com.domain.app.core.plugin.PluginCapability
-import com.domain.app.core.plugin.PluginManager
-import com.domain.app.core.plugin.PluginState
-import com.domain.app.core.plugin.security.PluginPermissionManager
-import com.domain.app.core.plugin.security.PluginTrustLevel
 import com.domain.app.core.preferences.PreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
+/**
+ * ViewModel for Settings screen
+ * 
+ * File location: app/src/main/java/com/domain/app/ui/settings/SettingsViewModel.kt
+ */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val pluginManager: PluginManager,
-    private val dataRepository: DataRepository,
     private val preferencesManager: PreferencesManager,
-    private val permissionManager: PluginPermissionManager
+    private val dataRepository: DataRepository
 ) : ViewModel() {
     
+    // UI State
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
     
+    // Theme mode
+    val themeMode = preferencesManager.themeMode
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = "system"
+        )
+    
+    // Backup frequency
+    val backupFrequency = preferencesManager.backupFrequency
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = "weekly"
+        )
+    
+    // Last backup time
+    val lastBackupTime = preferencesManager.lastBackupTime
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 0L
+        )
+    
     init {
-        loadPlugins()
-        observePluginStates()
-        observeDashboardPlugins()
+        loadStorageInfo()
     }
     
-    private fun loadPlugins() {
-        val plugins = pluginManager.getAllActivePlugins()
-        _uiState.update { it.copy(plugins = plugins) }
-    }
-    
-    private fun observePluginStates() {
-        pluginManager.pluginStates
-            .onEach { states ->
-                _uiState.update { it.copy(pluginStates = states) }
-            }
-            .launchIn(viewModelScope)
-    }
-    
-    private fun observeDashboardPlugins() {
-        preferencesManager.dashboardPlugins
-            .onEach { dashboardIds ->
-                _uiState.update { 
-                    it.copy(dashboardPluginIds = dashboardIds.toSet()) 
-                }
-            }
-            .launchIn(viewModelScope)
-    }
-    
-    fun togglePlugin(pluginId: String) {
+    /**
+     * Load storage information
+     */
+    private fun loadStorageInfo() {
         viewModelScope.launch {
-            val plugin = pluginManager.getPlugin(pluginId) ?: return@launch
-            val currentState = _uiState.value.pluginStates[pluginId]
-            
-            // Check if plugin is currently collecting (enabled)
-            if (currentState?.isCollecting == true) {
-                // Disabling - just disable
-                pluginManager.disablePlugin(pluginId)
-                _uiState.update { 
-                    it.copy(message = "${plugin.metadata.name} disabled") 
-                }
-            } else {
-                // Enabling - check permissions first
-                val hasPermissions = permissionManager.hasPermission(
-                    pluginId, 
-                    PluginCapability.COLLECT_DATA
-                )
+            try {
+                // This is a simplified version - in reality you'd calculate actual storage
+                val dataPointCount = 0 // Would sum all plugin data counts
+                val estimatedSize = dataPointCount * 1024L // Rough estimate: 1KB per data point
                 
-                if (!hasPermissions && plugin.trustLevel != PluginTrustLevel.OFFICIAL) {
-                    // Show permission request dialog
-                    _uiState.update {
-                        it.copy(
-                            pendingPlugin = plugin,
-                            showPermissionRequest = true
-                        )
-                    }
-                } else {
-                    // Already has permissions or is official plugin
-                    pluginManager.enablePlugin(pluginId)
-                    _uiState.update { 
-                        it.copy(message = "${plugin.metadata.name} enabled") 
-                    }
+                _uiState.update { state ->
+                    state.copy(
+                        storageUsed = estimatedSize,
+                        dataPointCount = dataPointCount
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update { state ->
+                    state.copy(error = e.message)
                 }
             }
         }
     }
     
-    fun grantPendingPermissions() {
+    /**
+     * Update theme mode
+     */
+    fun updateThemeMode(mode: String) {
         viewModelScope.launch {
-            val plugin = _uiState.value.pendingPlugin ?: return@launch
-            
-            // Grant all requested permissions
-            permissionManager.grantPermissions(
-                pluginId = plugin.id,
-                permissions = plugin.securityManifest.requestedCapabilities,
-                grantedBy = "user_settings"
-            )
-            
-            // Now enable the plugin
-            pluginManager.enablePlugin(plugin.id)
-            
-            _uiState.update {
-                it.copy(
-                    pendingPlugin = null,
-                    showPermissionRequest = false,
-                    message = "${plugin.metadata.name} enabled with permissions granted"
-                )
-            }
+            preferencesManager.setThemeMode(mode)
         }
     }
     
-    fun denyPendingPermissions() {
-        val plugin = _uiState.value.pendingPlugin
-        _uiState.update {
-            it.copy(
-                pendingPlugin = null,
-                showPermissionRequest = false,
-                message = if (plugin != null) 
-                    "${plugin.metadata.name} cannot be enabled without permissions" 
-                else null
-            )
-        }
-    }
-    
-    fun navigateToPluginSecurity(pluginId: String) {
-        _uiState.update {
-            it.copy(navigateToSecurity = pluginId)
-        }
-    }
-    
-    fun clearNavigation() {
-        _uiState.update {
-            it.copy(navigateToSecurity = null)
-        }
-    }
-    
-    fun toggleDashboard(pluginId: String) {
+    /**
+     * Update backup frequency
+     */
+    fun updateBackupFrequency(frequency: String) {
         viewModelScope.launch {
-            val plugin = pluginManager.getPlugin(pluginId) ?: return@launch
-            
-            if (_uiState.value.dashboardPluginIds.contains(pluginId)) {
-                preferencesManager.removeFromDashboard(pluginId)
-                _uiState.update { 
-                    it.copy(message = "${plugin.metadata.name} removed from dashboard") 
-                }
-            } else {
-                // Check if we've reached the maximum
-                if (_uiState.value.dashboardPluginIds.size >= 6) {
-                    _uiState.update { 
-                        it.copy(message = "Maximum 6 plugins allowed on dashboard") 
-                    }
-                    return@launch
-                }
-                
-                preferencesManager.addToDashboard(pluginId)
-                _uiState.update { 
-                    it.copy(message = "${plugin.metadata.name} added to dashboard") 
-                }
-            }
+            preferencesManager.setBackupFrequency(frequency)
         }
     }
     
-    fun reorderDashboard(pluginIds: List<String>) {
-        viewModelScope.launch {
-            preferencesManager.updateDashboardPlugins(pluginIds)
-        }
-    }
-    
+    /**
+     * Export all data
+     */
     fun exportData() {
         viewModelScope.launch {
-            _uiState.update { it.copy(message = "Export feature coming soon") }
+            _uiState.update { it.copy(isExporting = true, error = null) }
+            
+            try {
+                // TODO: Implement actual export functionality
+                // This would:
+                // 1. Gather all data from database
+                // 2. Create a JSON or CSV file
+                // 3. Save to user-selected location
+                
+                _uiState.update { it.copy(
+                    isExporting = false,
+                    lastExportTime = System.currentTimeMillis()
+                )}
+            } catch (e: Exception) {
+                _uiState.update { it.copy(
+                    isExporting = false,
+                    error = e.message
+                )}
+            }
         }
     }
     
-    fun importData() {
+    /**
+     * Import data from file
+     */
+    fun importData(uri: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(message = "Import feature coming soon") }
+            _uiState.update { it.copy(isImporting = true, error = null) }
+            
+            try {
+                // TODO: Implement actual import functionality
+                // This would:
+                // 1. Read the file from URI
+                // 2. Parse the data
+                // 3. Validate and insert into database
+                
+                _uiState.update { it.copy(
+                    isImporting = false,
+                    lastImportTime = System.currentTimeMillis()
+                )}
+                
+                // Reload storage info after import
+                loadStorageInfo()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(
+                    isImporting = false,
+                    error = e.message
+                )}
+            }
         }
     }
     
+    /**
+     * Clear all data
+     */
     fun clearAllData() {
         viewModelScope.launch {
-            // Show confirmation dialog
-            _uiState.update { 
-                it.copy(showClearDataConfirmation = true) 
+            _uiState.update { it.copy(isClearingData = true, error = null) }
+            
+            try {
+                // TODO: Implement actual data clearing
+                // This would delete all data points from the database
+                
+                _uiState.update { it.copy(
+                    isClearingData = false,
+                    storageUsed = 0,
+                    dataPointCount = 0
+                )}
+            } catch (e: Exception) {
+                _uiState.update { it.copy(
+                    isClearingData = false,
+                    error = e.message
+                )}
             }
         }
     }
     
-    fun confirmClearAllData() {
+    /**
+     * Clean up old data (older than specified days)
+     */
+    fun cleanupOldData(daysToKeep: Int) {
         viewModelScope.launch {
-            dataRepository.cleanupOldData(0) // This will delete all data
-            _uiState.update { 
-                it.copy(
-                    message = "All data cleared",
-                    showClearDataConfirmation = false
-                ) 
+            try {
+                val cutoffDate = Instant.now().minus(daysToKeep.toLong(), ChronoUnit.DAYS)
+                dataRepository.deleteOldData(cutoffDate)
+                
+                // Reload storage info
+                loadStorageInfo()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message) }
             }
         }
     }
     
-    fun cancelClearData() {
-        _uiState.update { 
-            it.copy(showClearDataConfirmation = false) 
+    /**
+     * Toggle developer mode
+     */
+    fun toggleDeveloperMode() {
+        _uiState.update { state ->
+            state.copy(isDeveloperMode = !state.isDeveloperMode)
         }
     }
     
-    fun dismissMessage() {
-        _uiState.update { it.copy(message = null) }
+    /**
+     * Clear error
+     */
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
     }
 }
 
+/**
+ * UI state for settings screen
+ */
 data class SettingsUiState(
-    val plugins: List<Plugin> = emptyList(),
-    val pluginStates: Map<String, PluginState> = emptyMap(),
-    val dashboardPluginIds: Set<String> = emptySet(),
-    val pendingPlugin: Plugin? = null,
-    val showPermissionRequest: Boolean = false,
-    val showClearDataConfirmation: Boolean = false,
-    val navigateToSecurity: String? = null,
-    val isLoading: Boolean = false,
-    val message: String? = null
+    val storageUsed: Long = 0,
+    val dataPointCount: Int = 0,
+    val isExporting: Boolean = false,
+    val isImporting: Boolean = false,
+    val isClearingData: Boolean = false,
+    val lastExportTime: Long? = null,
+    val lastImportTime: Long? = null,
+    val isDeveloperMode: Boolean = false,
+    val error: String? = null
 )

@@ -1,185 +1,134 @@
 package com.domain.app.core.plugin.security
 
 import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
-import com.domain.app.core.plugin.PluginCapability
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.permissionDataStore by preferencesDataStore(name = "plugin_permissions")
+// Extension property for DataStore
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "plugin_permissions")
 
+/**
+ * Manages plugin permissions and security policies
+ * 
+ * File location: app/src/main/java/com/domain/app/core/plugin/security/PluginPermissionManager.kt
+ */
 @Singleton
 class PluginPermissionManager @Inject constructor(
-    private val context: Context,
-    private val securityMonitor: SecurityMonitor
+    @ApplicationContext private val context: Context
 ) {
-    private val dataStore = context.permissionDataStore
+    private val dataStore = context.dataStore
+    
+    // Preference keys
+    private fun pluginPermissionsKey(pluginId: String) = stringSetPreferencesKey("plugin_permissions_$pluginId")
+    private fun pluginDeniedTimeKey(pluginId: String) = longPreferencesKey("plugin_denied_time_$pluginId")
+    private fun pluginGrantedByKey(pluginId: String) = stringPreferencesKey("plugin_granted_by_$pluginId")
     
     /**
      * Grant permissions to a plugin
      */
     suspend fun grantPermissions(
         pluginId: String,
-        permissions: Set<PluginCapability>,
-        grantedBy: String
+        capabilities: Set<PluginCapability>,
+        grantedBy: String = "user"
     ) {
-        dataStore.edit { prefs ->
-            permissions.forEach { capability ->
-                val key = stringSetPreferencesKey("${pluginId}_permissions")
-                val current = prefs[key] ?: emptySet()
-                prefs[key] = current + capability.name
-                
-                // Record security event
-                securityMonitor.recordSecurityEvent(
-                    SecurityEvent.PermissionGranted(
-                        pluginId = pluginId,
-                        capability = capability,
-                        grantedBy = grantedBy
-                    )
-                )
-            }
+        dataStore.edit { preferences ->
+            val key = pluginPermissionsKey(pluginId)
+            val currentPermissions = preferences[key] ?: emptySet()
+            preferences[key] = currentPermissions + capabilities.map { it.name }
             
-            // Store grant metadata
-            prefs[stringPreferencesKey("${pluginId}_granted_by")] = grantedBy
-            prefs[longPreferencesKey("${pluginId}_granted_at")] = System.currentTimeMillis()
+            // Record who granted the permissions
+            preferences[pluginGrantedByKey(pluginId)] = grantedBy
+            preferences[pluginDeniedTimeKey(pluginId)] = 0L
         }
     }
     
     /**
-     * Revoke all permissions for a plugin
+     * Revoke permissions from a plugin
      */
-    suspend fun revokePermissions(pluginId: String) {
-        dataStore.edit { prefs ->
-            val key = stringSetPreferencesKey("${pluginId}_permissions")
-            val revokedPermissions = prefs[key] ?: emptySet()
-            
-            prefs.remove(key)
-            prefs.remove(stringPreferencesKey("${pluginId}_granted_by"))
-            prefs.remove(longPreferencesKey("${pluginId}_granted_at"))
-            
-            // Record security events
-            revokedPermissions.forEach { permissionName ->
-                PluginCapability.values().find { it.name == permissionName }?.let { capability ->
-                    securityMonitor.recordSecurityEvent(
-                        SecurityEvent.PermissionDenied(
-                            pluginId = pluginId,
-                            capability = capability,
-                            reason = "Permissions revoked by user"
-                        )
-                    )
-                }
-            }
-        }
-    }
-    
-    /**
-     * Revoke specific permissions
-     */
-    suspend fun revokeSpecificPermissions(
+    suspend fun revokePermissions(
         pluginId: String,
-        permissions: Set<PluginCapability>
+        capabilities: Set<PluginCapability>
     ) {
-        dataStore.edit { prefs ->
-            val key = stringSetPreferencesKey("${pluginId}_permissions")
-            val current = prefs[key] ?: emptySet()
-            val permissionNames = permissions.map { it.name }.toSet()
-            prefs[key] = current - permissionNames
+        dataStore.edit { preferences ->
+            val key = pluginPermissionsKey(pluginId)
+            val currentPermissions = preferences[key] ?: emptySet()
+            preferences[key] = currentPermissions - capabilities.map { it.name }
             
-            // Record security events
-            permissions.forEach { capability ->
-                securityMonitor.recordSecurityEvent(
-                    SecurityEvent.PermissionDenied(
-                        pluginId = pluginId,
-                        capability = capability,
-                        reason = "Permission revoked by user"
-                    )
-                )
+            // If all permissions revoked, mark as denied
+            if (preferences[key]?.isEmpty() == true) {
+                preferences[pluginDeniedTimeKey(pluginId)] = System.currentTimeMillis()
+                preferences.remove(pluginGrantedByKey(pluginId))
             }
         }
     }
     
     /**
-     * Check if plugin has a specific permission
+     * Revoke all permissions from a plugin
      */
-    suspend fun hasPermission(pluginId: String, capability: PluginCapability): Boolean {
-        val key = stringSetPreferencesKey("${pluginId}_permissions")
-        return dataStore.data.map { prefs ->
-            prefs[key]?.contains(capability.name) ?: false
-        }.first()
-    }
-    
-    /**
-     * Get all granted permissions for a plugin
-     */
-    suspend fun getGrantedPermissions(pluginId: String): Set<PluginCapability> {
-        val key = stringSetPreferencesKey("${pluginId}_permissions")
-        return dataStore.data.map { prefs ->
-            val permissionNames = prefs[key] ?: emptySet()
-            permissionNames.mapNotNull { name ->
-                PluginCapability.values().find { it.name == name }
-            }.toSet()
-        }.first()
-    }
-    
-    /**
-     * Get granted permissions as a flow
-     */
-    fun getGrantedPermissionsFlow(pluginId: String): Flow<Set<PluginCapability>> {
-        val key = stringSetPreferencesKey("${pluginId}_permissions")
-        return dataStore.data.map { prefs ->
-            val permissionNames = prefs[key] ?: emptySet()
-            permissionNames.mapNotNull { name ->
-                PluginCapability.values().find { it.name == name }
-            }.toSet()
+    suspend fun revokeAllPermissions(pluginId: String) {
+        dataStore.edit { preferences ->
+            preferences.remove(pluginPermissionsKey(pluginId))
+            preferences.remove(pluginGrantedByKey(pluginId))
+            preferences[pluginDeniedTimeKey(pluginId)] = System.currentTimeMillis()
         }
     }
     
     /**
-     * Get permission grant metadata
+     * Check if a plugin has a specific capability
      */
-    suspend fun getPermissionMetadata(pluginId: String): PermissionMetadata? {
-        return dataStore.data.map { prefs ->
-            val grantedBy = prefs[stringPreferencesKey("${pluginId}_granted_by")]
-            val grantedAt = prefs[longPreferencesKey("${pluginId}_granted_at")]
-            
-            if (grantedBy != null && grantedAt != null) {
-                PermissionMetadata(
-                    pluginId = pluginId,
-                    grantedBy = grantedBy,
-                    grantedAt = grantedAt
-                )
-            } else {
-                null
-            }
+    suspend fun hasCapability(pluginId: String, capability: PluginCapability): Boolean {
+        return dataStore.data.map { preferences ->
+            val permissions = preferences[pluginPermissionsKey(pluginId)] ?: emptySet()
+            permissions.contains(capability.name)
         }.first()
     }
     
     /**
-     * Check if any permissions are granted to a plugin
+     * Get all granted capabilities for a plugin
      */
-    suspend fun hasAnyPermissions(pluginId: String): Boolean {
-        val key = stringSetPreferencesKey("${pluginId}_permissions")
-        return dataStore.data.map { prefs ->
-            !prefs[key].isNullOrEmpty()
+    suspend fun getGrantedCapabilities(pluginId: String): Set<PluginCapability> {
+        return dataStore.data.map { preferences ->
+            val permissions = preferences[pluginPermissionsKey(pluginId)] ?: emptySet()
+            permissions.mapNotNull { permissionName ->
+                try {
+                    PluginCapability.valueOf(permissionName)
+                } catch (e: IllegalArgumentException) {
+                    null
+                }
+            }.toSet()
         }.first()
     }
     
     /**
-     * Clear all permissions for all plugins (dangerous!)
+     * Get all plugins with specific capability
+     */
+    suspend fun getPluginsWithCapability(capability: PluginCapability): Set<String> {
+        return dataStore.data.map { preferences ->
+            preferences.asMap()
+                .filterKeys { it is Preferences.Key<Set<String>> && it.name.startsWith("plugin_permissions_") }
+                .filter { (_, value) ->
+                    (value as? Set<*>)?.contains(capability.name) == true
+                }
+                .map { (key, _) ->
+                    key.name.removePrefix("plugin_permissions_")
+                }
+                .toSet()
+        }.first()
+    }
+    
+    /**
+     * Clear all permission data (for testing/reset)
      */
     suspend fun clearAllPermissions() {
-        dataStore.edit { prefs ->
-            prefs.clear()
+        dataStore.edit { preferences ->
+            preferences.clear()
         }
     }
 }
-
-data class PermissionMetadata(
-    val pluginId: String,
-    val grantedBy: String,
-    val grantedAt: Long
-)

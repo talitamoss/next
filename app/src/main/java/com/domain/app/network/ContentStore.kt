@@ -1,313 +1,191 @@
 package com.domain.app.network
 
-import com.domain.app.core.data.DataPoint
-import com.domain.app.network.protocol.DataShare
+import com.domain.app.network.protocol.ContentMetadata
 import com.domain.app.network.protocol.FeedItem
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import java.time.Instant
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Local storage for P2P content and metadata
+ * Content store for managing shared data in the P2P network
+ * Handles content availability, caching, and access control
  * 
  * File location: app/src/main/java/com/domain/app/network/ContentStore.kt
  */
 @Singleton
 class ContentStore @Inject constructor() {
     
-    // Contact nicknames (local only)
-    private val contactNicknames = ConcurrentHashMap<String, String>()
+    // Content metadata storage
+    private val contentMetadata = ConcurrentHashMap<String, ContentMetadata>()
     
-    // Contact last seen timestamps
-    private val contactLastSeen = ConcurrentHashMap<String, Instant>()
+    // Content data storage (in-memory cache)
+    private val contentData = ConcurrentHashMap<String, ByteArray>()
     
-    // Available content for sharing
-    private val availableContent = ConcurrentHashMap<String, AvailableContent>()
+    // Feed items by peer
+    private val peerFeeds = ConcurrentHashMap<String, MutableList<FeedItem>>()
     
-    // Feed items from contacts
-    private val feedCache = ConcurrentHashMap<String, MutableList<FeedItem>>()
+    // Access control - which peers can access which content
+    private val contentAccess = ConcurrentHashMap<String, MutableSet<String>>()
     
-    // Received content from peers
-    private val receivedContent = ConcurrentHashMap<String, ReceivedContent>()
-    
-    // Content access permissions
-    private val contentPermissions = ConcurrentHashMap<String, Set<String>>()
-    
-    // Last feed update times
-    private val lastFeedUpdate = ConcurrentHashMap<String, Instant>()
-    
-    private val json = Json { 
-        prettyPrint = false
-        ignoreUnknownKeys = true 
-    }
+    // Observable state of available content
+    private val _availableContent = MutableStateFlow<List<ContentMetadata>>(emptyList())
+    val availableContent: StateFlow<List<ContentMetadata>> = _availableContent.asStateFlow()
     
     /**
-     * Store content and return its ID
+     * Add content to the store
      */
-    fun storeContent(dataPoint: DataPoint): String {
-        val contentId = generateContentId()
-        val content = AvailableContent(
-            id = contentId,
-            dataPoint = dataPoint,
-            createdAt = Instant.now()
-        )
+    fun addContent(metadata: ContentMetadata, data: ByteArray? = null) {
+        contentMetadata[metadata.id] = metadata
+        data?.let { contentData[metadata.id] = it }
         
-        availableContent[contentId] = content
-        return contentId
-    }
-    
-    /**
-     * Add content to available list with optional access restrictions
-     */
-    fun addAvailableContent(
-        feedItem: FeedItem,
-        allowedContacts: List<String> = emptyList()
-    ) {
-        if (allowedContacts.isNotEmpty()) {
-            contentPermissions[feedItem.contentId] = allowedContacts.toSet()
-        }
-        // If no specific contacts listed, it's available to all
-    }
-    
-    /**
-     * Get available content for a specific contact
-     */
-    fun getAvailableContentFor(contactId: String): List<FeedItem> {
-        return availableContent.values
-            .filter { content ->
-                // Check if this contact has permission
-                val permissions = contentPermissions[content.id]
-                permissions == null || permissions.contains(contactId)
-            }
-            .map { content ->
-                FeedItem(
-                    contentId = content.id,
-                    contentType = content.dataPoint.pluginId,
-                    title = content.dataPoint.metadata["title"] as? String,
-                    preview = createPreview(content.dataPoint),
-                    timestamp = content.createdAt.toEpochMilli(),
-                    encrypted = true
-                )
-            }
-            .sortedByDescending { it.timestamp }
-    }
-    
-    /**
-     * Check if content is available for a contact
-     */
-    fun isContentAvailableFor(contentId: String, contactId: String): Boolean {
-        val permissions = contentPermissions[contentId]
-        return permissions == null || permissions.contains(contactId)
-    }
-    
-    /**
-     * Get content metadata only
-     */
-    fun getContentMetadata(contentId: String): String? {
-        val content = availableContent[contentId] ?: return null
+        // By default, make content available to all peers
+        contentAccess.getOrPut(metadata.id) { mutableSetOf() }.add("*")
         
-        val metadata = mapOf(
-            "id" to contentId,
-            "type" to content.dataPoint.pluginId,
-            "timestamp" to content.createdAt.toEpochMilli(),
-            "hasData" to true
-        )
-        
-        return json.encodeToString(metadata)
+        updateAvailableContent()
     }
     
     /**
-     * Get content preview
+     * Get content metadata
      */
-    fun getContentPreview(contentId: String): String? {
-        val content = availableContent[contentId] ?: return null
-        
-        val preview = mapOf(
-            "id" to contentId,
-            "type" to content.dataPoint.pluginId,
-            "preview" to createPreview(content.dataPoint),
-            "timestamp" to content.createdAt.toEpochMilli()
-        )
-        
-        return json.encodeToString(preview)
+    fun getContentMetadata(contentId: String): ContentMetadata? {
+        return contentMetadata[contentId]
     }
     
     /**
-     * Get full content
+     * Get content preview (first 256 bytes or less)
      */
-    fun getFullContent(contentId: String): String? {
-        val content = availableContent[contentId] ?: return null
-        return json.encodeToString(content.dataPoint)
-    }
-    
-    /**
-     * Store received content from a peer
-     */
-    fun storeReceivedContent(fromContact: String, dataShare: DataShare) {
-        val contentId = generateContentId()
-        val received = ReceivedContent(
-            id = contentId,
-            fromContact = fromContact,
-            dataShare = dataShare,
-            receivedAt = Instant.now()
-        )
-        
-        receivedContent[contentId] = received
-        
-        // Create feed item for display
-        val feedItem = FeedItem(
-            contentId = contentId,
-            contentType = dataShare.dataType,
-            title = dataShare.metadata["title"],
-            preview = dataShare.metadata["preview"] ?: "Shared ${dataShare.dataType}",
-            timestamp = Instant.now().toEpochMilli(),
-            encrypted = true
-        )
-        
-        addFeedItem(fromContact, feedItem)
-    }
-    
-    /**
-     * Add feed item from a contact
-     */
-    fun addFeedItem(contactId: String, item: FeedItem) {
-        feedCache.computeIfAbsent(contactId) { mutableListOf() }.add(item)
-    }
-    
-    /**
-     * Get all feed items
-     */
-    fun getAllFeedItems(): List<Pair<String, FeedItem>> {
-        return feedCache.flatMap { (contactId, items) ->
-            items.map { item -> contactId to item }
-        }.sortedByDescending { it.second.timestamp }
-    }
-    
-    /**
-     * Set contact nickname
-     */
-    fun setContactNickname(contactId: String, nickname: String) {
-        contactNicknames[contactId] = nickname
-    }
-    
-    /**
-     * Get contact nickname
-     */
-    fun getContactNickname(contactId: String): String? {
-        return contactNicknames[contactId]
-    }
-    
-    /**
-     * Update last seen time for contact
-     */
-    fun updateLastSeen(contactId: String) {
-        contactLastSeen[contactId] = Instant.now()
-    }
-    
-    /**
-     * Mark contact as online
-     */
-    fun markContactOnline(contactId: String) {
-        updateLastSeen(contactId)
-    }
-    
-    /**
-     * Get last seen time
-     */
-    fun getLastSeen(contactId: String): Instant? {
-        return contactLastSeen[contactId]
-    }
-    
-    /**
-     * Get last feed update time
-     */
-    fun getLastFeedUpdate(contactId: String): Instant? {
-        return lastFeedUpdate[contactId]
-    }
-    
-    /**
-     * Update last feed update time
-     */
-    fun updateLastFeedUpdate(contactId: String) {
-        lastFeedUpdate[contactId] = Instant.now()
-    }
-    
-    /**
-     * Clear old content based on age
-     */
-    fun cleanupOldContent(olderThan: Instant) {
-        // Remove old available content
-        availableContent.entries.removeIf { (_, content) ->
-            content.createdAt.isBefore(olderThan)
-        }
-        
-        // Remove old received content
-        receivedContent.entries.removeIf { (_, content) ->
-            content.receivedAt.isBefore(olderThan)
-        }
-        
-        // Clean up feed cache
-        feedCache.forEach { (_, items) ->
-            items.removeIf { item ->
-                Instant.ofEpochMilli(item.timestamp).isBefore(olderThan)
-            }
+    fun getContentPreview(contentId: String): ByteArray? {
+        return contentData[contentId]?.let { data ->
+            if (data.size <= 256) data else data.copyOf(256)
         }
     }
     
     /**
-     * Generate unique content ID
+     * Get full content data
      */
-    private fun generateContentId(): String {
-        return "content_${System.currentTimeMillis()}_${(0..99999).random()}"
+    fun getFullContent(contentId: String): ByteArray? {
+        return contentData[contentId]
     }
     
     /**
-     * Create preview text for data point
+     * Check if content is available for a specific peer
      */
-    private fun createPreview(dataPoint: DataPoint): String {
-        return when (dataPoint.pluginId) {
-            "mood" -> {
-                val mood = dataPoint.value["mood"] as? String
-                if (mood != null) "Feeling $mood" else "Mood update"
-            }
-            "water" -> {
-                val amount = dataPoint.value["amount"] as? Number
-                if (amount != null) "Drank ${amount}ml" else "Hydration tracked"
-            }
-            "exercise" -> {
-                val type = dataPoint.value["type"] as? String
-                if (type != null) "$type completed" else "Activity logged"
-            }
-            "note" -> {
-                val text = dataPoint.value["text"] as? String
-                text?.take(50)?.plus("...") ?: "Note added"
-            }
-            else -> "New ${dataPoint.pluginId} entry"
+    fun isContentAvailableFor(contentId: String, peerId: String): Boolean {
+        val accessSet = contentAccess[contentId] ?: return false
+        return accessSet.contains("*") || accessSet.contains(peerId)
+    }
+    
+    /**
+     * Get all content available for a peer
+     */
+    fun getAvailableContent(peerId: String): List<ContentMetadata> {
+        return contentMetadata.values.filter { metadata ->
+            isContentAvailableFor(metadata.id, peerId)
         }
+    }
+    
+    /**
+     * Add a feed item from a peer
+     */
+    fun addFeedItem(peerId: String, item: FeedItem) {
+        peerFeeds.getOrPut(peerId) { mutableListOf() }.add(item)
+    }
+    
+    /**
+     * Get feed items from a specific peer
+     */
+    fun getFeedItems(peerId: String): List<FeedItem> {
+        return peerFeeds[peerId]?.toList() ?: emptyList()
+    }
+    
+    /**
+     * Get all feed items from all peers
+     */
+    fun getAllFeedItems(): List<FeedItem> {
+        return peerFeeds.values.flatten()
+    }
+    
+    /**
+     * Clear feed items older than specified timestamp
+     */
+    fun clearOldFeedItems(olderThan: Long) {
+        peerFeeds.forEach { (_, items) ->
+            items.removeAll { it.timestamp < olderThan }
+        }
+    }
+    
+    /**
+     * Set access control for content
+     */
+    fun setContentAccess(contentId: String, allowedPeers: Set<String>) {
+        contentAccess[contentId] = allowedPeers.toMutableSet()
+    }
+    
+    /**
+     * Grant access to content for a specific peer
+     */
+    fun grantAccess(contentId: String, peerId: String) {
+        contentAccess.getOrPut(contentId) { mutableSetOf() }.add(peerId)
+    }
+    
+    /**
+     * Revoke access to content for a specific peer
+     */
+    fun revokeAccess(contentId: String, peerId: String) {
+        contentAccess[contentId]?.remove(peerId)
+    }
+    
+    /**
+     * Remove content from the store
+     */
+    fun removeContent(contentId: String) {
+        contentMetadata.remove(contentId)
+        contentData.remove(contentId)
+        contentAccess.remove(contentId)
+        updateAvailableContent()
+    }
+    
+    /**
+     * Clear all content from a specific peer
+     */
+    fun clearPeerContent(peerId: String) {
+        peerFeeds.remove(peerId)
+    }
+    
+    /**
+     * Get storage statistics
+     */
+    fun getStorageStats(): StorageStats {
+        val totalSize = contentData.values.sumOf { it.size.toLong() }
+        val contentCount = contentMetadata.size
+        val peerCount = peerFeeds.size
+        val feedItemCount = peerFeeds.values.sumOf { it.size }
+        
+        return StorageStats(
+            totalSizeBytes = totalSize,
+            contentCount = contentCount,
+            peerCount = peerCount,
+            feedItemCount = feedItemCount
+        )
+    }
+    
+    /**
+     * Update the observable state of available content
+     */
+    private fun updateAvailableContent() {
+        _availableContent.value = contentMetadata.values.toList()
     }
 }
 
 /**
- * Available content wrapper
+ * Storage statistics
  */
-private data class AvailableContent(
-    val id: String,
-    val dataPoint: DataPoint,
-    val createdAt: Instant
-)
-
-/**
- * Received content wrapper
- */
-private data class ReceivedContent(
-    val id: String,
-    val fromContact: String,
-    val dataShare: DataShare,
-    val receivedAt: Instant
+data class StorageStats(
+    val totalSizeBytes: Long,
+    val contentCount: Int,
+    val peerCount: Int,
+    val feedItemCount: Int
 )
