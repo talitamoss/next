@@ -40,6 +40,9 @@ android {
     buildFeatures {
         compose = true
     }
+    packagingOptions {
+        doNotStrip.add("**/*.so") // prevents stripping of native .so libraries
+    }
 }
 
 dependencies {
