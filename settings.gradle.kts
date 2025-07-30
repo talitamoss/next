@@ -16,9 +16,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Add Briar repository
+        maven { url = uri("https://briarproject.org/maven") }
     }
 }
-
 rootProject.name = "next"
 include(":app")
- 
