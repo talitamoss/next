@@ -6,8 +6,11 @@ import com.domain.app.core.data.DataRepository
 import com.domain.app.core.event.Event
 import com.domain.app.core.event.EventBus
 import com.domain.app.core.plugin.Plugin
+import com.domain.app.core.plugin.PluginCapability
 import com.domain.app.core.plugin.PluginManager
 import com.domain.app.core.plugin.PluginState
+import com.domain.app.core.plugin.security.PluginPermissionManager
+import com.domain.app.core.preferences.PreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -18,7 +21,9 @@ import javax.inject.Inject
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val pluginManager: PluginManager,
-    private val dataRepository: DataRepository
+    private val dataRepository: DataRepository,
+    private val preferencesManager: PreferencesManager,
+    private val permissionManager: PluginPermissionManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -30,6 +35,8 @@ class DashboardViewModel @Inject constructor(
     init {
         loadPlugins()
         observePluginStates()
+        observeDashboardPlugins()
+        observePluginPermissions()
         loadDataCounts()
         observeEvents()
     }
@@ -39,15 +46,40 @@ class DashboardViewModel @Inject constructor(
             pluginManager.initializePlugins()
             
             val allPlugins = pluginManager.getAllActivePlugins()
-            val manualEntryPlugins = allPlugins.filter { it.supportsManualEntry() }
-            
             _uiState.update {
-                it.copy(
-                    plugins = allPlugins,
-                    manualEntryPlugins = manualEntryPlugins
-                )
+                it.copy(allPlugins = allPlugins)
             }
         }
+    }
+    
+    private fun observeDashboardPlugins() {
+        // Combine dashboard plugin IDs with actual plugin instances
+        combine(
+            preferencesManager.dashboardPlugins,
+            _uiState.map { it.allPlugins }
+        ) { dashboardIds, allPlugins ->
+            dashboardIds.mapNotNull { id ->
+                allPlugins.find { it.id == id }
+            }
+        }
+        .onEach { dashboardPlugins ->
+            _uiState.update {
+                it.copy(dashboardPlugins = dashboardPlugins)
+            }
+        }
+        .launchIn(viewModelScope)
+        
+        // Track dashboard count
+        preferencesManager.getDashboardPluginCount()
+            .onEach { count ->
+                _uiState.update {
+                    it.copy(
+                        dashboardPluginCount = count,
+                        canAddMorePlugins = count < 6
+                    )
+                }
+            }
+            .launchIn(viewModelScope)
     }
     
     private fun observePluginStates() {
@@ -63,9 +95,28 @@ class DashboardViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
     
+    private fun observePluginPermissions() {
+        viewModelScope.launch {
+            // Check permissions for all plugins
+            val allPlugins = pluginManager.getAllActivePlugins()
+            val permissionMap = mutableMapOf<String, Boolean>()
+            
+            allPlugins.forEach { plugin ->
+                val hasPermissions = permissionManager.hasPermission(
+                    plugin.id, 
+                    PluginCapability.COLLECT_DATA
+                )
+                permissionMap[plugin.id] = hasPermissions
+            }
+            
+            _uiState.update {
+                it.copy(pluginPermissions = permissionMap)
+            }
+        }
+    }
+    
     private fun loadDataCounts() {
         viewModelScope.launch {
-            // Today's count
             val todayStart = Instant.now().truncatedTo(ChronoUnit.DAYS)
             dataRepository.getRecentData(24)
                 .map { dataPoints ->
@@ -77,7 +128,6 @@ class DashboardViewModel @Inject constructor(
         }
         
         viewModelScope.launch {
-            // This week's count
             val weekStart = Instant.now().minus(7, ChronoUnit.DAYS)
             dataRepository.getRecentData(24 * 7)
                 .map { dataPoints ->
@@ -93,7 +143,6 @@ class DashboardViewModel @Inject constructor(
         EventBus.events
             .filterIsInstance<Event.DataCollected>()
             .onEach { event ->
-                // Show success feedback
                 _uiState.update {
                     it.copy(
                         lastDataPoint = event.dataPoint,
@@ -105,10 +154,58 @@ class DashboardViewModel @Inject constructor(
     }
     
     fun onPluginTileClick(plugin: Plugin) {
-        if (plugin.supportsManualEntry()) {
-            _selectedPlugin.value = plugin
-            _uiState.update { it.copy(showQuickAdd = true) }
+        viewModelScope.launch {
+            val hasPermissions = permissionManager.hasPermission(
+                plugin.id,
+                PluginCapability.COLLECT_DATA
+            )
+            
+            if (!hasPermissions) {
+                _selectedPlugin.value = plugin
+                _uiState.update { 
+                    it.copy(
+                        showQuickAdd = true,
+                        needsPermission = true
+                    )
+                }
+            } else if (plugin.supportsManualEntry()) {
+                _selectedPlugin.value = plugin
+                _uiState.update { 
+                    it.copy(
+                        showQuickAdd = true,
+                        needsPermission = false
+                    )
+                }
+            }
         }
+    }
+    
+    fun grantQuickAddPermission() {
+        viewModelScope.launch {
+            val plugin = _selectedPlugin.value ?: return@launch
+            
+            permissionManager.grantPermissions(
+                pluginId = plugin.id,
+                permissions = plugin.securityManifest.requestedCapabilities,
+                grantedBy = "user_quick_add"
+            )
+            
+            // Re-check permissions
+            observePluginPermissions()
+            
+            // Continue with quick add
+            _uiState.update {
+                it.copy(needsPermission = false)
+            }
+        }
+    }
+    
+    fun onAddPluginClick() {
+        _uiState.update { it.copy(showPluginSelector = true) }
+    }
+    
+    fun dismissPluginSelector() {
+        _uiState.update { it.copy(showPluginSelector = false) }
     }
     
     fun onQuickAdd(plugin: Plugin, data: Map<String, Any>) {
@@ -140,7 +237,12 @@ class DashboardViewModel @Inject constructor(
     
     fun dismissQuickAdd() {
         _selectedPlugin.value = null
-        _uiState.update { it.copy(showQuickAdd = false) }
+        _uiState.update { 
+            it.copy(
+                showQuickAdd = false,
+                needsPermission = false
+            )
+        }
     }
     
     fun clearError() {
@@ -153,13 +255,18 @@ class DashboardViewModel @Inject constructor(
 }
 
 data class DashboardUiState(
-    val plugins: List<Plugin> = emptyList(),
-    val manualEntryPlugins: List<Plugin> = emptyList(),
+    val allPlugins: List<Plugin> = emptyList(),
+    val dashboardPlugins: List<Plugin> = emptyList(),
     val pluginStates: Map<String, PluginState> = emptyMap(),
+    val pluginPermissions: Map<String, Boolean> = emptyMap(),
     val todayEntryCount: Int = 0,
     val weekEntryCount: Int = 0,
     val activePluginCount: Int = 0,
+    val dashboardPluginCount: Int = 0,
+    val canAddMorePlugins: Boolean = true,
     val showQuickAdd: Boolean = false,
+    val showPluginSelector: Boolean = false,
+    val needsPermission: Boolean = false,
     val isProcessing: Boolean = false,
     val error: String? = null,
     val lastDataPoint: com.domain.app.core.data.DataPoint? = null,

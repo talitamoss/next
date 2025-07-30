@@ -1,3 +1,4 @@
+// app/src/main/java/com/domain/app/ui/data/DataScreen.kt
 package com.domain.app.ui.data
 
 import androidx.compose.foundation.layout.*
@@ -153,6 +154,16 @@ fun DataPointCard(
                             val amount = dataPoint.value["amount"] as? Number
                             val unit = dataPoint.value["unit"] as? String ?: "ml"
                             "$amount $unit"
+                        }
+                        "mood" -> {
+                            val moodValue = dataPoint.value["mood"] as? Number
+                            val emoji = dataPoint.value["emoji"] as? String ?: ""
+                            val note = dataPoint.value["note"] as? String
+                            if (note.isNullOrBlank()) {
+                                "$emoji Mood level $moodValue"
+                            } else {
+                                "$emoji Mood level $moodValue - $note"
+                            }
                         }
                         "counter" -> {
                             val count = dataPoint.value["count"] as? Number

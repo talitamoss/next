@@ -14,6 +14,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.domain.app.core.plugin.Plugin
+import com.domain.app.ui.security.PluginPermissionDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,7 +30,14 @@ fun SettingsScreen(
                 title = { Text("Settings") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+                ),
+                actions = {
+                    IconButton(
+                        onClick = { navController.navigate("security_audit") }
+                    ) {
+                        Icon(AppIcons.Security.shield, contentDescription = "Security Audit")
+                    }
+                }
             )
         }
     ) { paddingValues ->
@@ -47,9 +55,11 @@ fun SettingsScreen(
             items(uiState.plugins) { plugin ->
                 PluginSettingsItem(
                     plugin = plugin,
-                    isEnabled = uiState.pluginStates[plugin.id]?.isEnabled ?: false,
-                    isCollecting = uiState.pluginStates[plugin.id]?.isCollecting ?: false,
-                    onToggle = { viewModel.togglePlugin(plugin.id) }
+                    isEnabled = uiState.pluginStates[plugin.id]?.isCollecting ?: false,
+                    isOnDashboard = uiState.dashboardPluginIds.contains(plugin.id),
+                    onToggle = { viewModel.togglePlugin(plugin.id) },
+                    onDashboardToggle = { viewModel.toggleDashboard(plugin.id) },
+                    onSecurityClick = { viewModel.navigateToPluginSecurity(plugin.id) }
                 )
             }
             
@@ -138,6 +148,60 @@ fun SettingsScreen(
             }
         }
     }
+    
+    // Navigate to plugin security if needed
+    uiState.navigateToSecurity?.let { pluginId ->
+        LaunchedEffect(pluginId) {
+            navController.navigate("plugin_security/$pluginId")
+            viewModel.clearNavigation()
+        }
+    }
+    
+    // Permission request dialog
+    if (uiState.showPermissionRequest) {
+        uiState.pendingPlugin?.let { plugin ->
+            PluginPermissionDialog(
+                plugin = plugin,
+                requestedPermissions = plugin.securityManifest.requestedCapabilities,
+                onGrant = { viewModel.grantPendingPermissions() },
+                onDeny = { viewModel.denyPendingPermissions() }
+            )
+        }
+    }
+    
+    // Clear data confirmation dialog
+    if (uiState.showClearDataConfirmation) {
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelClearData() },
+            title = { Text("Clear All Data?") },
+            text = {
+                Text("This will permanently delete all your recorded data. This action cannot be undone.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.confirmClearAllData() },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete All")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelClearData() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    // Show message if any
+    uiState.message?.let { message ->
+        LaunchedEffect(message) {
+            kotlinx.coroutines.delay(2000)
+            viewModel.dismissMessage()
+        }
+    }
 }
 
 @Composable
@@ -173,43 +237,84 @@ fun SettingsItem(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PluginSettingsItem(
     plugin: Plugin,
     isEnabled: Boolean,
-    isCollecting: Boolean,
-    onToggle: () -> Unit
+    isOnDashboard: Boolean,
+    onToggle: () -> Unit,
+    onDashboardToggle: () -> Unit,
+    onSecurityClick: () -> Unit
 ) {
-    ListItem(
-        headlineContent = { Text(plugin.metadata.name) },
-        supportingContent = { 
-            Column {
-                Text(plugin.metadata.description)
-                if (isCollecting) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        onClick = onSecurityClick
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Collecting data",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        text = plugin.metadata.name,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = plugin.metadata.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
-        },
-        leadingContent = {
-            Box(
-                modifier = Modifier.size(40.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = plugin.metadata.name.first().toString(),
-                    style = MaterialTheme.typography.titleMedium
+                
+                Switch(
+                    checked = isEnabled,
+                    onCheckedChange = { onToggle() }
                 )
             }
-        },
-        trailingContent = {
-            Switch(
-                checked = isEnabled,
-                onCheckedChange = { onToggle() }
-            )
+            
+            // Plugin actions
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Dashboard toggle
+                FilterChip(
+                    selected = isOnDashboard,
+                    onClick = onDashboardToggle,
+                    label = { Text("Dashboard") },
+                    leadingIcon = if (isOnDashboard) {
+                        {
+                            Icon(
+                                imageVector = AppIcons.Action.check,
+                                contentDescription = null,
+                                modifier = Modifier.size(FilterChipDefaults.IconSize)
+                            )
+                        }
+                    } else null
+                )
+                
+                // Security info
+                AssistChip(
+                    onClick = onSecurityClick,
+                    label = { Text("Security") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = AppIcons.Security.shield,
+                            contentDescription = null,
+                            modifier = Modifier.size(AssistChipDefaults.IconSize)
+                        )
+                    }
+                )
+            }
         }
-    )
+    }
 }

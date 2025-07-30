@@ -2,9 +2,10 @@ package com.domain.app.core.plugin
 
 import android.content.Context
 import com.domain.app.core.data.DataPoint
-import com.domain.app.core.data.toEntity
+import com.domain.app.core.data.DataRepository
 import com.domain.app.core.event.Event
 import com.domain.app.core.event.EventBus
+import com.domain.app.core.plugin.security.*
 import com.domain.app.core.storage.AppDatabase
 import com.domain.app.core.storage.entity.PluginStateEntity
 import kotlinx.coroutines.*
@@ -13,11 +14,18 @@ import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Central manager for plugin lifecycle and operations.
+ * Handles plugin initialization, state management, and secure data operations.
+ */
 @Singleton
 class PluginManager @Inject constructor(
     private val context: Context,
     private val database: AppDatabase,
-    private val pluginRegistry: PluginRegistry
+    private val dataRepository: DataRepository,
+    private val pluginRegistry: PluginRegistry,
+    private val permissionManager: PluginPermissionManager,
+    private val securityMonitor: SecurityMonitor
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val activePlugins = mutableMapOf<String, Plugin>()
@@ -85,8 +93,45 @@ class PluginManager @Inject constructor(
         val plugin = activePlugins[pluginId] ?: return@withContext
         
         try {
-            // Just update the state - plugins don't have startCollection method
+            // Check permissions
+            val grantedPermissions = permissionManager.getGrantedPermissions(pluginId)
+            val requiredPermissions = plugin.securityManifest.requestedCapabilities
+            
+            // Official plugins can be enabled without explicit permissions
+            if (plugin.trustLevel == PluginTrustLevel.OFFICIAL && !grantedPermissions.containsAll(requiredPermissions)) {
+                // Auto-grant permissions for official plugins
+                permissionManager.grantPermissions(
+                    pluginId = pluginId,
+                    permissions = requiredPermissions,
+                    grantedBy = "system_auto"
+                )
+            } else if (!grantedPermissions.containsAll(requiredPermissions)) {
+                // Non-official plugins need explicit permissions
+                val missingPermissions = requiredPermissions - grantedPermissions
+                
+                securityMonitor.recordSecurityEvent(
+                    SecurityEvent.PermissionDenied(
+                        pluginId = pluginId,
+                        capability = missingPermissions.first(),
+                        reason = "Missing required permissions to enable plugin"
+                    )
+                )
+                
+                return@withContext
+            }
+            
+            // Update database state
             database.pluginStateDao().updateCollectingState(pluginId, true)
+            database.pluginStateDao().insertOrUpdate(
+                database.pluginStateDao().getState(pluginId)?.copy(
+                    isEnabled = true,
+                    isCollecting = true
+                ) ?: PluginStateEntity(
+                    pluginId = pluginId,
+                    isEnabled = true,
+                    isCollecting = true
+                )
+            )
             database.pluginStateDao().clearErrors(pluginId)
             
             EventBus.emit(Event.PluginStateChanged(pluginId, true))
@@ -103,8 +148,18 @@ class PluginManager @Inject constructor(
         val plugin = activePlugins[pluginId] ?: return@withContext
         
         try {
-            // Just update the state - plugins don't have stopCollection method
+            // Update database state
             database.pluginStateDao().updateCollectingState(pluginId, false)
+            database.pluginStateDao().insertOrUpdate(
+                database.pluginStateDao().getState(pluginId)?.copy(
+                    isEnabled = false,
+                    isCollecting = false
+                ) ?: PluginStateEntity(
+                    pluginId = pluginId,
+                    isEnabled = false,
+                    isCollecting = false
+                )
+            )
             
             EventBus.emit(Event.PluginStateChanged(pluginId, false))
             
@@ -149,11 +204,18 @@ class PluginManager @Inject constructor(
             return@withContext null
         }
         
+        // Create sandbox for secure execution
+        val grantedCapabilities = permissionManager.getGrantedPermissions(pluginId)
+        val sandbox = PluginSandbox(plugin, grantedCapabilities, securityMonitor)
+        
         try {
-            val dataPoint = plugin.createManualEntry(data)
-            if (dataPoint != null) {
+            val result = sandbox.executeInSandbox("data.write") {
+                plugin.createManualEntry(data)
+            }
+            
+            result.getOrNull()?.let { dataPoint ->
                 // Save to database
-                database.dataPointDao().insert(dataPoint.toEntity())
+                dataRepository.saveDataPoint(dataPoint)
                 
                 // Emit event
                 EventBus.emit(Event.DataCollected(dataPoint))
@@ -167,11 +229,16 @@ class PluginManager @Inject constructor(
                         lastCollection = Instant.now()
                     )
                 )
+                
+                return@withContext dataPoint
             }
-            return@withContext dataPoint
+            
+            return@withContext null
         } catch (e: Exception) {
             handlePluginError(pluginId, e)
             return@withContext null
+        } finally {
+            sandbox.cleanup()
         }
     }
     
@@ -188,6 +255,24 @@ class PluginManager @Inject constructor(
         } catch (e: Exception) {
             handlePluginError(pluginId, e)
         }
+    }
+    
+    /**
+     * Get secure data repository for a plugin
+     */
+    fun getSecureDataRepository(pluginId: String): SecureDataRepository? {
+        val plugin = activePlugins[pluginId] ?: return null
+        val grantedCapabilities = runBlocking { 
+            permissionManager.getGrantedPermissions(pluginId) 
+        }
+        
+        return SecureDataRepository(
+            actualRepository = dataRepository,
+            pluginId = pluginId,
+            grantedCapabilities = grantedCapabilities,
+            dataAccessScopes = plugin.securityManifest.dataAccess,
+            securityMonitor = securityMonitor
+        )
     }
     
     /**
@@ -209,7 +294,15 @@ class PluginManager @Inject constructor(
             pluginId, 
             error.message ?: "Unknown error"
         )
-        // In production, add proper logging
+        
+        securityMonitor.recordSecurityEvent(
+            SecurityEvent.SecurityViolation(
+                pluginId = pluginId,
+                violationType = "PLUGIN_ERROR",
+                details = error.message ?: "Unknown error",
+                severity = ViolationSeverity.MEDIUM
+            )
+        )
     }
 }
 

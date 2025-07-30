@@ -1,7 +1,8 @@
 package com.domain.app.ui.dashboard
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -19,6 +20,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.domain.app.core.plugin.Plugin
+import com.domain.app.core.plugin.security.PluginTrustLevel
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,21 +38,21 @@ fun DashboardScreen(
                 title = { Text("Dashboard") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { 
-                    // Show quick add for first manual entry plugin
-                    uiState.manualEntryPlugins.firstOrNull()?.let {
-                        viewModel.onPluginTileClick(it)
+                ),
+                actions = {
+                    TextButton(
+                        onClick = { 
+                            navController.navigate("settings") {
+                                popUpTo(navController.graph.id) {
+                                    inclusive = false
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Manage")
                     }
-                },
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(AppIcons.Action.add, contentDescription = "Quick Add")
-            }
+                }
+            )
         }
     ) { paddingValues ->
         Column(
@@ -82,34 +84,76 @@ fun DashboardScreen(
                 )
             }
 
-            // Plugin Grid
+            // Dashboard Grid - Fixed 2x3 grid
             LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
+                columns = GridCells.Fixed(2),
                 contentPadding = PaddingValues(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
             ) {
-                items(uiState.plugins) { plugin ->
-                    PluginTile(
+                // Show dashboard plugins
+                items(uiState.dashboardPlugins) { plugin ->
+                    DashboardPluginTile(
                         plugin = plugin,
                         isCollecting = uiState.pluginStates[plugin.id]?.isCollecting ?: false,
+                        hasPermissions = uiState.pluginPermissions[plugin.id] ?: false,
                         onClick = {
                             viewModel.onPluginTileClick(plugin)
+                        },
+                        onLongClick = {
+                            navController.navigate("plugin_security/${plugin.id}")
                         }
                     )
+                }
+                
+                // Add empty slots if less than 6 plugins
+                val emptySlots = 6 - uiState.dashboardPlugins.size
+                if (emptySlots > 0 && uiState.canAddMorePlugins) {
+                    item {
+                        AddPluginTile(
+                            onClick = { viewModel.onAddPluginClick() }
+                        )
+                    }
+                    
+                    // Fill remaining slots with empty tiles
+                    repeat(emptySlots - 1) {
+                        item {
+                            EmptyPluginTile()
+                        }
+                    }
                 }
             }
         }
     }
 
-    // Quick Add Bottom Sheet
-    if (uiState.showQuickAdd && selectedPlugin != null) {
-        QuickAddBottomSheet(
-            plugin = selectedPlugin,
-            onDismiss = { viewModel.dismissQuickAdd() },
-            onDataSubmit = { plugin, data ->
-                viewModel.onQuickAdd(plugin, data)
-            }
+    // Quick Add Bottom Sheet with permission check
+    val currentPlugin = selectedPlugin
+    if (uiState.showQuickAdd && currentPlugin != null) {
+        if (uiState.needsPermission) {
+            PluginPermissionQuickDialog(
+                plugin = currentPlugin,
+                onGrant = { viewModel.grantQuickAddPermission() },
+                onDeny = { viewModel.dismissQuickAdd() }
+            )
+        } else {
+            QuickAddBottomSheet(
+                plugin = currentPlugin,
+                onDismiss = { viewModel.dismissQuickAdd() },
+                onDataSubmit = { plugin, data ->
+                    viewModel.onQuickAdd(plugin, data)
+                }
+            )
+        }
+    }
+    
+    // Plugin Selector Bottom Sheet
+    if (uiState.showPluginSelector) {
+        PluginSelectorBottomSheet(
+            availablePlugins = uiState.allPlugins.filter { plugin ->
+                !uiState.dashboardPlugins.any { it.id == plugin.id }
+            },
+            onDismiss = { viewModel.dismissPluginSelector() }
         )
     }
     
@@ -122,93 +166,160 @@ fun DashboardScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun SummaryCard(
-    title: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-        }
-    }
-}
-
-@Composable
-fun PluginTile(
+fun DashboardPluginTile(
     plugin: Plugin,
     isCollecting: Boolean,
-    onClick: () -> Unit
+    hasPermissions: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .aspectRatio(1f)
-            .clickable { onClick() },
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = if (isCollecting) 
-                MaterialTheme.colorScheme.primaryContainer 
-            else 
-                MaterialTheme.colorScheme.surfaceVariant
+            containerColor = when {
+                !hasPermissions -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                isCollecting -> MaterialTheme.colorScheme.primaryContainer
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            }
         )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Box(
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Icon(
-                    imageVector = AppIcons.getPluginIcon(plugin.id),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = plugin.metadata.name,
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center,
-                maxLines = 1
-            )
-            if (isCollecting) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (hasPermissions) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = AppIcons.getPluginIcon(plugin.id),
+                        contentDescription = null,
+                        tint = if (hasPermissions)
+                            MaterialTheme.colorScheme.onPrimary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Active",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
+                    text = plugin.metadata.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    color = if (hasPermissions)
+                        MaterialTheme.colorScheme.onSurface
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (!hasPermissions) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Needs permission",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else if (isCollecting) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Active",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            
+            // Trust indicator
+            if (plugin.trustLevel == PluginTrustLevel.OFFICIAL) {
+                Icon(
+                    imageVector = AppIcons.Security.shield,
+                    contentDescription = "Official plugin",
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PluginPermissionQuickDialog(
+    plugin: Plugin,
+    onGrant: () -> Unit,
+    onDeny: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDeny,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = AppIcons.getPluginIcon(plugin.id),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text("Enable ${plugin.metadata.name}?")
+            }
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("This plugin needs permissions to collect data.")
+                
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                ) {
+                    Text(
+                        text = "Required: ${plugin.securityManifest.requestedCapabilities.size} permissions",
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                
+                Text(
+                    text = "You can review detailed permissions in Settings.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            FilledTonalButton(onClick = onGrant) {
+                Text("Grant & Continue")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDeny) {
+                Text("Cancel")
+            }
+        }
+    )
+}

@@ -46,7 +46,6 @@ fun QuickAddBottomSheet(
                 headlineContent = { Text(plugin.metadata.name) },
                 supportingContent = { Text(plugin.metadata.description) },
                 leadingContent = {
-                    // Plugin icon placeholder
                     Surface(
                         modifier = Modifier.size(40.dp),
                         shape = MaterialTheme.shapes.small,
@@ -54,11 +53,7 @@ fun QuickAddBottomSheet(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
-                                text = when(plugin.id) {
-                                    "water" -> "💧"
-                                    "mood" -> "😊"
-                                    else -> plugin.metadata.name.first().toString()
-                                },
+                                text = getPluginEmoji(plugin.id),
                                 style = MaterialTheme.typography.titleMedium
                             )
                         }
@@ -83,32 +78,15 @@ fun QuickAddBottomSheet(
     
     // Plugin-specific dialogs
     if (showPluginDialog) {
-        when (plugin.id) {
-            "water" -> {
-                val config = plugin.getQuickAddConfig()
-                if (config != null) {
-                    WaterQuickAddDialog(
-                        options = config.options ?: emptyList(),
-                        onDismiss = { showPluginDialog = false },
-                        onConfirm = { amount ->
-                            onDataSubmit(plugin, mapOf("amount" to amount))
-                            showPluginDialog = false
-                            scope.launch {
-                                sheetState.hide()
-                                onDismiss()
-                            }
-                        }
-                    )
-                }
-            }
-            // Add other plugin-specific dialogs here
-            else -> {
-                // Generic input dialog for other plugins
-                GenericQuickAddDialog(
+        when {
+            // Check for multi-stage support first
+            plugin.getQuickAddStages() != null -> {
+                MultiStageQuickAddDialog(
                     plugin = plugin,
+                    stages = plugin.getQuickAddStages()!!,
                     onDismiss = { showPluginDialog = false },
-                    onConfirm = { data ->
-                        onDataSubmit(plugin, data)
+                    onComplete = { stageData ->
+                        onDataSubmit(plugin, stageData)
                         showPluginDialog = false
                         scope.launch {
                             sheetState.hide()
@@ -117,11 +95,68 @@ fun QuickAddBottomSheet(
                     }
                 )
             }
+            // Fall back to plugin-specific dialogs
+            else -> {
+                when (plugin.id) {
+                    "water" -> {
+                        val config = plugin.getQuickAddConfig()
+                        if (config != null) {
+                            WaterQuickAddDialog(
+                                options = config.options ?: emptyList(),
+                                onDismiss = { showPluginDialog = false },
+                                onConfirm = { amount ->
+                                    onDataSubmit(plugin, mapOf("amount" to amount))
+                                    showPluginDialog = false
+                                    scope.launch {
+                                        sheetState.hide()
+                                        onDismiss()
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    "mood" -> {
+                        val config = plugin.getQuickAddConfig()
+                        if (config != null) {
+                            MoodQuickAddDialog(
+                                options = config.options ?: emptyList(),
+                                onDismiss = { showPluginDialog = false },
+                                onConfirm = { moodValue, note ->
+                                    val data = mutableMapOf<String, Any>(
+                                        "value" to moodValue
+                                    )
+                                    note?.let { data["note"] = it }
+                                    onDataSubmit(plugin, data)
+                                    showPluginDialog = false
+                                    scope.launch {
+                                        sheetState.hide()
+                                        onDismiss()
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    else -> {
+                        // Generic input dialog for other plugins
+                        GenericQuickAddDialog(
+                            plugin = plugin,
+                            onDismiss = { showPluginDialog = false },
+                            onConfirm = { data ->
+                                onDataSubmit(plugin, data)
+                                showPluginDialog = false
+                                scope.launch {
+                                    sheetState.hide()
+                                    onDismiss()
+                                }
+                            }
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GenericQuickAddDialog(
     plugin: Plugin,
@@ -165,4 +200,14 @@ fun GenericQuickAddDialog(
             }
         }
     )
+}
+
+private fun getPluginEmoji(pluginId: String) = when(pluginId) {
+    "water" -> "💧"
+    "mood" -> "😊"
+    "sleep" -> "😴"
+    "exercise" -> "🏃"
+    "medication" -> "💊"
+    "counter" -> "🔢"
+    else -> "📊"
 }

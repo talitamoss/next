@@ -28,8 +28,12 @@ class DataViewModel @Inject constructor(
     
     private fun loadPluginInfo() {
         val plugins = pluginManager.getAllActivePlugins()
-        val pluginNames = plugins.associate { it.id to it.metadata.name }
-        val availablePlugins = plugins.map { it.id to it.metadata.name }
+        val pluginNames = plugins.associate { plugin -> 
+            plugin.id to plugin.metadata.name 
+        }
+        val availablePlugins = plugins.map { plugin -> 
+            plugin.id to plugin.metadata.name 
+        }
         
         _uiState.update {
             it.copy(
