@@ -36,7 +36,8 @@ fun AddContactScreen(
     
     // Get stored contact link
     val myContactLink = remember {
-        App.getStoredContactLink(context.applicationContext as App) ?: ""
+        val app = context.applicationContext as App
+        app.getStoredContactLink() ?: ""
     }
     
     Scaffold(
@@ -49,6 +50,9 @@ fun AddContactScreen(
                     }
                 }
             )
+        },
+        snackbarHost = {
+            SnackbarHost(hostState = viewModel.snackbarHostState)
         }
     ) { paddingValues ->
         Column(
@@ -99,7 +103,7 @@ fun AddContactScreen(
                             OutlinedButton(
                                 onClick = {
                                     clipboardManager.setText(AnnotatedString(myContactLink))
-                                    viewModel.showSnackbar("Copied to clipboard")
+                                    viewModel.showMessage("Copied to clipboard")
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -142,35 +146,28 @@ fun AddContactScreen(
                     
                     OutlinedTextField(
                         value = uiState.contactLink,
-                        onValueChange = viewModel::updateContactLink,
+                        onValueChange = viewModel::setContactLink,
                         label = { Text("Contact Link") },
                         placeholder = { Text("Paste contact link here") },
-                        singleLine = false,
-                        minLines = 3,
                         modifier = Modifier.fillMaxWidth(),
-                        trailingIcon = {
-                            if (uiState.contactLink.isNotEmpty()) {
-                                IconButton(onClick = { viewModel.updateContactLink("") }) {
-                                    Icon(Icons.Default.Clear, "Clear")
-                                }
-                            }
-                        }
+                        singleLine = false,
+                        minLines = 2,
+                        isError = uiState.error != null
                     )
                     
                     OutlinedTextField(
                         value = uiState.nickname,
-                        onValueChange = viewModel::updateNickname,
-                        label = { Text("Nickname (Optional)") },
-                        placeholder = { Text("How you'll identify this contact") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        onValueChange = viewModel::setNickname,
+                        label = { Text("Nickname (optional)") },
+                        placeholder = { Text("Give this contact a name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
                     )
                     
                     Button(
-                        onClick = {
-                            viewModel.addContact { contactId ->
-                                onContactAdded(contactId)
-                            }
+                        onClick = { 
+                            viewModel.addContact()
+                            onContactAdded(uiState.contactLink)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = uiState.contactLink.isNotBlank() && !uiState.isLoading
@@ -178,28 +175,25 @@ fun AddContactScreen(
                         if (uiState.isLoading) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
                         } else {
-                            Icon(Icons.Default.PersonAdd, null)
-                            Spacer(modifier = Modifier.width(8.dp))
                             Text("Add Contact")
                         }
                     }
                     
-                    // Alternative methods
+                    // Alternative input methods
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Divider(modifier = Modifier.weight(1f))
+                        HorizontalDivider(modifier = Modifier.weight(1f))
                         Text(
                             "  OR  ",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Divider(modifier = Modifier.weight(1f))
+                        HorizontalDivider(modifier = Modifier.weight(1f))
                     }
                     
                     OutlinedButton(
@@ -214,7 +208,7 @@ fun AddContactScreen(
                     OutlinedButton(
                         onClick = {
                             clipboardManager.getText()?.let { clipText ->
-                                viewModel.updateContactLink(clipText.toString())
+                                viewModel.setContactLink(clipText.toString())
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -256,11 +250,11 @@ fun AddContactScreen(
     // Error handling
     uiState.error?.let { error ->
         AlertDialog(
-            onDismissRequest = viewModel::clearError,
+            onDismissRequest = viewModel::dismissError,
             title = { Text("Error") },
             text = { Text(error) },
             confirmButton = {
-                TextButton(onClick = viewModel::clearError) {
+                TextButton(onClick = viewModel::dismissError) {
                     Text("OK")
                 }
             }

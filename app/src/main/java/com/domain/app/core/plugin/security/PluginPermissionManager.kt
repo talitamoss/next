@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import com.domain.app.core.plugin.PluginCapability
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -16,8 +17,6 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 
 /**
  * Manages plugin permissions and security policies
- * 
- * File location: app/src/main/java/com/domain/app/core/plugin/security/PluginPermissionManager.kt
  */
 @Singleton
 class PluginPermissionManager @Inject constructor(
@@ -81,6 +80,13 @@ class PluginPermissionManager @Inject constructor(
     }
     
     /**
+     * Revoke all permissions (overload for backwards compatibility)
+     */
+    suspend fun revokePermissions(pluginId: String) {
+        revokeAllPermissions(pluginId)
+    }
+    
+    /**
      * Check if a plugin has a specific capability
      */
     suspend fun hasCapability(pluginId: String, capability: PluginCapability): Boolean {
@@ -88,6 +94,18 @@ class PluginPermissionManager @Inject constructor(
             val permissions = preferences[pluginPermissionsKey(pluginId)] ?: emptySet()
             permissions.contains(capability.name)
         }.first()
+    }
+    
+    /**
+     * Check if a plugin has a permission (backwards compatibility)
+     */
+    suspend fun hasPermission(pluginId: String, permission: String): Boolean {
+        return try {
+            val capability = PluginCapability.valueOf(permission)
+            hasCapability(pluginId, capability)
+        } catch (e: IllegalArgumentException) {
+            false
+        }
     }
     
     /**
@@ -107,12 +125,21 @@ class PluginPermissionManager @Inject constructor(
     }
     
     /**
+     * Get granted permissions (backwards compatibility)
+     */
+    suspend fun getGrantedPermissions(pluginId: String): Set<PluginCapability> {
+        return getGrantedCapabilities(pluginId)
+    }
+    
+    /**
      * Get all plugins with specific capability
      */
     suspend fun getPluginsWithCapability(capability: PluginCapability): Set<String> {
         return dataStore.data.map { preferences ->
             preferences.asMap()
-                .filterKeys { it is Preferences.Key<Set<String>> && it.name.startsWith("plugin_permissions_") }
+                .filterKeys { key ->
+                    key is Preferences.Key<*> && key.name.startsWith("plugin_permissions_")
+                }
                 .filter { (_, value) ->
                     (value as? Set<*>)?.contains(capability.name) == true
                 }
@@ -121,6 +148,35 @@ class PluginPermissionManager @Inject constructor(
                 }
                 .toSet()
         }.first()
+    }
+    
+    /**
+     * Get all plugin permissions (for UI display)
+     */
+    fun getAllPluginPermissions(): Flow<Map<String, Set<PluginCapability>>> {
+        return dataStore.data.map { preferences ->
+            preferences.asMap()
+                .filterKeys { key ->
+                    key is Preferences.Key<*> && key.name.startsWith("plugin_permissions_")
+                }
+                .mapNotNull { (key, value) ->
+                    val pluginId = key.name.removePrefix("plugin_permissions_")
+                    val permissions = (value as? Set<*>)?.mapNotNull { permission ->
+                        try {
+                            PluginCapability.valueOf(permission.toString())
+                        } catch (e: IllegalArgumentException) {
+                            null
+                        }
+                    }?.toSet() ?: emptySet()
+                    
+                    if (permissions.isNotEmpty()) {
+                        pluginId to permissions
+                    } else {
+                        null
+                    }
+                }
+                .toMap()
+        }
     }
     
     /**

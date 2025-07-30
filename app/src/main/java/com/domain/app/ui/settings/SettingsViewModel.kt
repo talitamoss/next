@@ -3,226 +3,181 @@ package com.domain.app.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.data.DataRepository
+import com.domain.app.core.plugin.Plugin
+import com.domain.app.core.plugin.PluginManager
 import com.domain.app.core.preferences.PreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.time.Instant
-import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
 /**
- * ViewModel for Settings screen
+ * ViewModel for the Settings screen
  * 
  * File location: app/src/main/java/com/domain/app/ui/settings/SettingsViewModel.kt
  */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    private val pluginManager: PluginManager,
     private val preferencesManager: PreferencesManager,
     private val dataRepository: DataRepository
 ) : ViewModel() {
     
-    // UI State
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
     
-    // Theme mode
-    val themeMode = preferencesManager.themeMode
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = "system"
-        )
-    
-    // Backup frequency
-    val backupFrequency = preferencesManager.backupFrequency
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = "weekly"
-        )
-    
-    // Last backup time
-    val lastBackupTime = preferencesManager.lastBackupTime
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = 0L
-        )
-    
     init {
-        loadStorageInfo()
+        loadSettings()
+        observePlugins()
     }
     
-    /**
-     * Load storage information
-     */
-    private fun loadStorageInfo() {
+    private fun loadSettings() {
         viewModelScope.launch {
-            try {
-                // This is a simplified version - in reality you'd calculate actual storage
-                val dataPointCount = 0 // Would sum all plugin data counts
-                val estimatedSize = dataPointCount * 1024L // Rough estimate: 1KB per data point
-                
-                _uiState.update { state ->
-                    state.copy(
-                        storageUsed = estimatedSize,
-                        dataPointCount = dataPointCount
+            // Load theme preference
+            preferencesManager.themeMode.collect { theme ->
+                _uiState.update { it.copy(currentTheme = theme.capitalize()) }
+            }
+        }
+    }
+    
+    private fun observePlugins() {
+        viewModelScope.launch {
+            // Get all plugins
+            val allPlugins = pluginManager.getAllPlugins()
+            _uiState.update { it.copy(allPlugins = allPlugins) }
+            
+            // Observe enabled plugins
+            preferencesManager.enabledPlugins.collect { enabledIds ->
+                _uiState.update { 
+                    it.copy(
+                        enabledPluginIds = enabledIds,
+                        enabledPluginsCount = enabledIds.size
                     )
                 }
-            } catch (e: Exception) {
-                _uiState.update { state ->
-                    state.copy(error = e.message)
-                }
+            }
+        }
+        
+        viewModelScope.launch {
+            // Observe dashboard plugins
+            preferencesManager.dashboardPlugins.collect { dashboardIds ->
+                _uiState.update { it.copy(dashboardPluginIds = dashboardIds) }
             }
         }
     }
     
-    /**
-     * Update theme mode
-     */
-    fun updateThemeMode(mode: String) {
+    fun showThemeDialog() {
+        _uiState.update { it.copy(showThemeDialog = true) }
+    }
+    
+    fun hideThemeDialog() {
+        _uiState.update { it.copy(showThemeDialog = false) }
+    }
+    
+    fun setTheme(theme: String) {
         viewModelScope.launch {
-            preferencesManager.setThemeMode(mode)
+            preferencesManager.setThemeMode(theme.lowercase())
         }
     }
     
-    /**
-     * Update backup frequency
-     */
-    fun updateBackupFrequency(frequency: String) {
-        viewModelScope.launch {
-            preferencesManager.setBackupFrequency(frequency)
-        }
+    fun showPluginManagement() {
+        _uiState.update { it.copy(showPluginManagement = true) }
     }
     
-    /**
-     * Export all data
-     */
-    fun exportData() {
+    fun hidePluginManagement() {
+        _uiState.update { it.copy(showPluginManagement = false) }
+    }
+    
+    fun togglePlugin(pluginId: String, enabled: Boolean) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isExporting = true, error = null) }
-            
-            try {
-                // TODO: Implement actual export functionality
-                // This would:
-                // 1. Gather all data from database
-                // 2. Create a JSON or CSV file
-                // 3. Save to user-selected location
-                
-                _uiState.update { it.copy(
-                    isExporting = false,
-                    lastExportTime = System.currentTimeMillis()
-                )}
-            } catch (e: Exception) {
-                _uiState.update { it.copy(
-                    isExporting = false,
-                    error = e.message
-                )}
+            if (enabled) {
+                // Initialize and enable plugin
+                pluginManager.initializePlugin(pluginId).fold(
+                    onSuccess = {
+                        _uiState.update { 
+                            it.copy(message = "Plugin enabled successfully")
+                        }
+                    },
+                    onFailure = { error ->
+                        _uiState.update { 
+                            it.copy(message = "Failed to enable plugin: ${error.message}")
+                        }
+                    }
+                )
+            } else {
+                // Disable plugin
+                pluginManager.disablePlugin(pluginId)
+                preferencesManager.removeFromDashboard(pluginId)
             }
         }
     }
     
-    /**
-     * Import data from file
-     */
-    fun importData(uri: String) {
+    fun toggleDashboard(pluginId: String, onDashboard: Boolean) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isImporting = true, error = null) }
-            
-            try {
-                // TODO: Implement actual import functionality
-                // This would:
-                // 1. Read the file from URI
-                // 2. Parse the data
-                // 3. Validate and insert into database
-                
-                _uiState.update { it.copy(
-                    isImporting = false,
-                    lastImportTime = System.currentTimeMillis()
-                )}
-                
-                // Reload storage info after import
-                loadStorageInfo()
-            } catch (e: Exception) {
-                _uiState.update { it.copy(
-                    isImporting = false,
-                    error = e.message
-                )}
+            if (onDashboard) {
+                preferencesManager.addToDashboard(pluginId)
+            } else {
+                preferencesManager.removeFromDashboard(pluginId)
             }
         }
     }
     
-    /**
-     * Clear all data
-     */
+    fun showExportDialog() {
+        _uiState.update { it.copy(showExportDialog = true) }
+    }
+    
+    fun hideExportDialog() {
+        _uiState.update { it.copy(showExportDialog = false) }
+    }
+    
+    fun exportData(format: ExportFormat) {
+        viewModelScope.launch {
+            // TODO: Implement data export
+            _uiState.update { 
+                it.copy(message = "Export feature coming soon")
+            }
+        }
+    }
+    
+    fun showClearDataDialog() {
+        _uiState.update { it.copy(showClearDataDialog = true) }
+    }
+    
+    fun hideClearDataDialog() {
+        _uiState.update { it.copy(showClearDataDialog = false) }
+    }
+    
     fun clearAllData() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isClearingData = true, error = null) }
+            // Clear all data
+            preferencesManager.clearAll()
+            // TODO: Clear database
             
-            try {
-                // TODO: Implement actual data clearing
-                // This would delete all data points from the database
-                
-                _uiState.update { it.copy(
-                    isClearingData = false,
-                    storageUsed = 0,
-                    dataPointCount = 0
-                )}
-            } catch (e: Exception) {
-                _uiState.update { it.copy(
-                    isClearingData = false,
-                    error = e.message
-                )}
+            _uiState.update { 
+                it.copy(
+                    message = "All data cleared successfully",
+                    showClearDataDialog = false
+                )
             }
         }
     }
     
-    /**
-     * Clean up old data (older than specified days)
-     */
-    fun cleanupOldData(daysToKeep: Int) {
-        viewModelScope.launch {
-            try {
-                val cutoffDate = Instant.now().minus(daysToKeep.toLong(), ChronoUnit.DAYS)
-                dataRepository.deleteOldData(cutoffDate)
-                
-                // Reload storage info
-                loadStorageInfo()
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message) }
-            }
-        }
-    }
-    
-    /**
-     * Toggle developer mode
-     */
-    fun toggleDeveloperMode() {
-        _uiState.update { state ->
-            state.copy(isDeveloperMode = !state.isDeveloperMode)
-        }
-    }
-    
-    /**
-     * Clear error
-     */
-    fun clearError() {
-        _uiState.update { it.copy(error = null) }
+    fun dismissMessage() {
+        _uiState.update { it.copy(message = null) }
     }
 }
 
 /**
- * UI state for settings screen
+ * UI State for Settings screen
  */
 data class SettingsUiState(
-    val storageUsed: Long = 0,
-    val dataPointCount: Int = 0,
-    val isExporting: Boolean = false,
-    val isImporting: Boolean = false,
-    val isClearingData: Boolean = false,
-    val lastExportTime: Long? = null,
-    val lastImportTime: Long? = null,
-    val isDeveloperMode: Boolean = false,
-    val error: String? = null
+    val currentTheme: String = "System",
+    val enabledPluginsCount: Int = 0,
+    val allPlugins: List<Plugin> = emptyList(),
+    val enabledPluginIds: Set<String> = emptySet(),
+    val dashboardPluginIds: Set<String> = emptySet(),
+    val showThemeDialog: Boolean = false,
+    val showPluginManagement: Boolean = false,
+    val showExportDialog: Boolean = false,
+    val showClearDataDialog: Boolean = false,
+    val message: String? = null
 )

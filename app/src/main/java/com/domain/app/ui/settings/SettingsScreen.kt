@@ -4,18 +4,24 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import com.domain.app.ui.theme.AppIcons
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.domain.app.core.plugin.Plugin
-import com.domain.app.ui.security.PluginPermissionDialog
 
+/**
+ * Settings screen for managing app preferences and plugins
+ * 
+ * File location: app/src/main/java/com/domain/app/ui/settings/SettingsScreen.kt
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -23,21 +29,12 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                ),
-                actions = {
-                    IconButton(
-                        onClick = { navController.navigate("security_audit") }
-                    ) {
-                        Icon(AppIcons.Security.shield, contentDescription = "Security Audit")
-                    }
-                }
+                title = { Text("Settings") }
             )
         }
     ) { paddingValues ->
@@ -47,211 +44,309 @@ fun SettingsScreen(
                 .padding(paddingValues),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
+            // Theme Section
+            item {
+                SettingsSection(title = "Appearance") {
+                    SettingsItem(
+                        icon = Icons.Default.Palette,
+                        title = "Theme",
+                        subtitle = uiState.currentTheme,
+                        onClick = viewModel::showThemeDialog
+                    )
+                }
+            }
+            
             // Plugin Management Section
             item {
-                SettingsSectionHeader(title = "Plugins")
+                SettingsSection(title = "Plugin Management") {
+                    SettingsItem(
+                        icon = Icons.Default.Extension,
+                        title = "Manage Plugins",
+                        subtitle = "${uiState.enabledPluginsCount} enabled",
+                        onClick = viewModel::showPluginManagement
+                    )
+                }
             }
             
-            items(uiState.plugins) { plugin ->
-                PluginSettingsItem(
-                    plugin = plugin,
-                    isEnabled = uiState.pluginStates[plugin.id]?.isCollecting ?: false,
-                    isOnDashboard = uiState.dashboardPluginIds.contains(plugin.id),
-                    onToggle = { viewModel.togglePlugin(plugin.id) },
-                    onDashboardToggle = { viewModel.toggleDashboard(plugin.id) },
-                    onSecurityClick = { viewModel.navigateToPluginSecurity(plugin.id) }
-                )
-            }
-            
-            item { Divider(modifier = Modifier.padding(vertical = 16.dp)) }
-            
-            // Data Management Section
+            // Data & Privacy Section
             item {
-                SettingsSectionHeader(title = "Data Management")
+                SettingsSection(title = "Data & Privacy") {
+                    SettingsItem(
+                        icon = Icons.Default.Security,
+                        title = "Security & Permissions",
+                        subtitle = "Manage plugin permissions",
+                        onClick = { /* TODO: Navigate to security */ }
+                    )
+                    
+                    SettingsItem(
+                        icon = Icons.Default.Backup,
+                        title = "Backup & Restore",
+                        subtitle = "Manage your data backups",
+                        onClick = { /* TODO: Navigate to backup */ }
+                    )
+                    
+                    SettingsItem(
+                        icon = Icons.Default.CloudUpload,
+                        title = "Export Data",
+                        subtitle = "Export your data in various formats",
+                        onClick = viewModel::showExportDialog
+                    )
+                    
+                    SettingsItem(
+                        icon = Icons.Default.DeleteForever,
+                        title = "Clear All Data",
+                        subtitle = "Permanently delete all app data",
+                        onClick = viewModel::showClearDataDialog,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
             }
-            
-            item {
-                SettingsItem(
-                    icon = AppIcons.Storage.cloudUpload,
-                    title = "Export Data",
-                    subtitle = "Export your data in CSV format",
-                    onClick = { viewModel.exportData() }
-                )
-            }
-            
-            item {
-                SettingsItem(
-                    icon = AppIcons.Storage.cloudDownload,
-                    title = "Import Data",
-                    subtitle = "Import data from a backup",
-                    onClick = { viewModel.importData() }
-                )
-            }
-            
-            item {
-                SettingsItem(
-                    icon = AppIcons.Action.delete,
-                    title = "Clear All Data",
-                    subtitle = "Delete all recorded data",
-                    onClick = { viewModel.clearAllData() }
-                )
-            }
-            
-            item { Divider(modifier = Modifier.padding(vertical = 16.dp)) }
-            
-            // Security Section
-            item {
-                SettingsSectionHeader(title = "Security")
-            }
-            
-            item {
-                SettingsItem(
-                    icon = AppIcons.Security.lock,
-                    title = "Change PIN",
-                    subtitle = "Update your security PIN",
-                    onClick = { /* TODO: Navigate to PIN change */ }
-                )
-            }
-            
-            item {
-                SettingsItem(
-                    icon = AppIcons.Security.shield,
-                    title = "Biometric Lock",
-                    subtitle = "Use fingerprint or face unlock",
-                    onClick = { /* TODO: Toggle biometric */ }
-                )
-            }
-            
-            item { Divider(modifier = Modifier.padding(vertical = 16.dp)) }
             
             // About Section
             item {
-                SettingsSectionHeader(title = "About")
-            }
-            
-            item {
-                SettingsItem(
-                    icon = AppIcons.Status.info,
-                    title = "Version",
-                    subtitle = "1.0.0",
-                    onClick = { }
-                )
-            }
-            
-            item {
-                SettingsItem(
-                    icon = AppIcons.Action.more,
-                    title = "Open Source",
-                    subtitle = "View source code on GitHub",
-                    onClick = { /* TODO: Open GitHub */ }
-                )
+                SettingsSection(title = "About") {
+                    SettingsItem(
+                        icon = Icons.Default.Info,
+                        title = "Version",
+                        subtitle = "1.0.0"
+                    )
+                    
+                    SettingsItem(
+                        icon = Icons.Default.Code,
+                        title = "Open Source Licenses",
+                        subtitle = "View open source licenses",
+                        onClick = { /* TODO: Show licenses */ }
+                    )
+                }
             }
         }
     }
     
-    // Navigate to plugin security if needed
-    uiState.navigateToSecurity?.let { pluginId ->
-        LaunchedEffect(pluginId) {
-            navController.navigate("plugin_security/$pluginId")
-            viewModel.clearNavigation()
-        }
+    // Dialogs
+    if (uiState.showThemeDialog) {
+        ThemeSelectionDialog(
+            currentTheme = uiState.currentTheme,
+            onThemeSelected = viewModel::setTheme,
+            onDismiss = viewModel::hideThemeDialog
+        )
     }
     
-    // Permission request dialog
-    if (uiState.showPermissionRequest) {
-        uiState.pendingPlugin?.let { plugin ->
-            PluginPermissionDialog(
-                plugin = plugin,
-                requestedPermissions = plugin.securityManifest.requestedCapabilities,
-                onGrant = { viewModel.grantPendingPermissions() },
-                onDeny = { viewModel.denyPendingPermissions() }
-            )
-        }
+    if (uiState.showPluginManagement) {
+        PluginManagementDialog(
+            plugins = uiState.allPlugins,
+            enabledPlugins = uiState.enabledPluginIds,
+            dashboardPlugins = uiState.dashboardPluginIds,
+            onTogglePlugin = viewModel::togglePlugin,
+            onToggleDashboard = viewModel::toggleDashboard,
+            onNavigateToSecurity = { pluginId ->
+                viewModel.hidePluginManagement()
+                // TODO: Navigate to plugin security
+            },
+            onDismiss = viewModel::hidePluginManagement
+        )
     }
     
-    // Clear data confirmation dialog
-    if (uiState.showClearDataConfirmation) {
+    if (uiState.showExportDialog) {
+        ExportDataDialog(
+            onExportFormat = viewModel::exportData,
+            onDismiss = viewModel::hideExportDialog
+        )
+    }
+    
+    if (uiState.showClearDataDialog) {
         AlertDialog(
-            onDismissRequest = { viewModel.cancelClearData() },
+            onDismissRequest = viewModel::hideClearDataDialog,
+            icon = {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
             title = { Text("Clear All Data?") },
-            text = {
-                Text("This will permanently delete all your recorded data. This action cannot be undone.")
+            text = { 
+                Text("This will permanently delete all your data, including all plugin data and preferences. This action cannot be undone.")
             },
             confirmButton = {
                 TextButton(
-                    onClick = { viewModel.confirmClearAllData() },
+                    onClick = {
+                        viewModel::clearAllData
+                        viewModel::hideClearDataDialog
+                    },
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Text("Delete All")
+                    Text("Clear All")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.cancelClearData() }) {
+                TextButton(onClick = viewModel::hideClearDataDialog) {
                     Text("Cancel")
                 }
             }
         )
     }
     
-    // Show message if any
+    // Success/Error messages
     uiState.message?.let { message ->
         LaunchedEffect(message) {
-            kotlinx.coroutines.delay(2000)
-            viewModel.dismissMessage()
+            // Show snackbar or toast
         }
     }
 }
 
 @Composable
-fun SettingsSectionHeader(
-    title: String
+private fun SettingsSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
 ) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-    )
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+        ) {
+            Column {
+                content()
+            }
+        }
+    }
 }
 
 @Composable
-fun SettingsItem(
+private fun SettingsItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
-    subtitle: String,
-    onClick: () -> Unit
+    subtitle: String? = null,
+    onClick: (() -> Unit)? = null,
+    tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface
 ) {
     ListItem(
         headlineContent = { Text(title) },
-        supportingContent = { Text(subtitle) },
+        supportingContent = subtitle?.let { { Text(it) } },
         leadingContent = {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = tint
             )
         },
-        modifier = Modifier.clickable { onClick() }
+        modifier = if (onClick != null) {
+            Modifier.clickable(onClick = onClick)
+        } else {
+            Modifier
+        }
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PluginSettingsItem(
+private fun ThemeSelectionDialog(
+    currentTheme: String,
+    onThemeSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val themes = listOf("System", "Light", "Dark")
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Choose Theme") },
+        text = {
+            Column {
+                themes.forEach { theme ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onThemeSelected(theme)
+                                onDismiss()
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = theme == currentTheme,
+                            onClick = {
+                                onThemeSelected(theme)
+                                onDismiss()
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(theme)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun PluginManagementDialog(
+    plugins: List<Plugin>,
+    enabledPlugins: Set<String>,
+    dashboardPlugins: Set<String>,
+    onTogglePlugin: (String, Boolean) -> Unit,
+    onToggleDashboard: (String, Boolean) -> Unit,
+    onNavigateToSecurity: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Manage Plugins") },
+        text = {
+            LazyColumn {
+                items(plugins) { plugin ->
+                    PluginManagementItem(
+                        plugin = plugin,
+                        isEnabled = enabledPlugins.contains(plugin.id),
+                        isOnDashboard = dashboardPlugins.contains(plugin.id),
+                        onToggleEnabled = { enabled ->
+                            onTogglePlugin(plugin.id, enabled)
+                        },
+                        onToggleDashboard = { onDashboard ->
+                            onToggleDashboard(plugin.id, onDashboard)
+                        },
+                        onSecurityClick = {
+                            onNavigateToSecurity(plugin.id)
+                        }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done")
+            }
+        }
+    )
+}
+
+@Composable
+private fun PluginManagementItem(
     plugin: Plugin,
     isEnabled: Boolean,
     isOnDashboard: Boolean,
-    onToggle: () -> Unit,
-    onDashboardToggle: () -> Unit,
+    onToggleEnabled: (Boolean) -> Unit,
+    onToggleDashboard: (Boolean) -> Unit,
     onSecurityClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        onClick = onSecurityClick
+            .padding(vertical = 4.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -272,49 +367,104 @@ fun PluginSettingsItem(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                
                 Switch(
                     checked = isEnabled,
-                    onCheckedChange = { onToggle() }
+                    onCheckedChange = onToggleEnabled
                 )
             }
             
-            // Plugin actions
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Dashboard toggle
-                FilterChip(
-                    selected = isOnDashboard,
-                    onClick = onDashboardToggle,
-                    label = { Text("Dashboard") },
-                    leadingIcon = if (isOnDashboard) {
-                        {
-                            Icon(
-                                imageVector = AppIcons.Action.check,
-                                contentDescription = null,
-                                modifier = Modifier.size(FilterChipDefaults.IconSize)
-                            )
-                        }
-                    } else null
-                )
-                
-                // Security info
-                AssistChip(
-                    onClick = onSecurityClick,
-                    label = { Text("Security") },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = AppIcons.Security.shield,
-                            contentDescription = null,
-                            modifier = Modifier.size(AssistChipDefaults.IconSize)
+            if (isEnabled) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = isOnDashboard,
+                            onCheckedChange = onToggleDashboard
+                        )
+                        Text(
+                            text = "Show on dashboard",
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
-                )
+                    
+                    TextButton(onClick = onSecurityClick) {
+                        Icon(
+                            Icons.Default.Security,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Permissions")
+                    }
+                }
             }
         }
     }
+}
+
+@Composable
+private fun ExportDataDialog(
+    onExportFormat: (ExportFormat) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val formats = listOf(
+        ExportFormat.CSV to "CSV (Comma-separated values)",
+        ExportFormat.JSON to "JSON (JavaScript Object Notation)",
+        ExportFormat.FHIR to "FHIR (Healthcare standard)"
+    )
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Export Data") },
+        text = {
+            Column {
+                Text(
+                    "Choose export format:",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                formats.forEach { (format, description) ->
+                    OutlinedCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clickable {
+                                onExportFormat(format)
+                                onDismiss()
+                            }
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Text(
+                                text = format.name,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+// Export format enum
+enum class ExportFormat {
+    CSV, JSON, FHIR
 }

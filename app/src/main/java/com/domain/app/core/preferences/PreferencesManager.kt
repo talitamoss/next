@@ -32,6 +32,7 @@ class PreferencesManager @Inject constructor(
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val BACKUP_FREQUENCY = stringPreferencesKey("backup_frequency")
         val LAST_BACKUP = longPreferencesKey("last_backup")
+        val DASHBOARD_PLUGINS = stringSetPreferencesKey("dashboard_plugins")
     }
     
     /**
@@ -39,6 +40,13 @@ class PreferencesManager @Inject constructor(
      */
     val enabledPlugins: Flow<Set<String>> = dataStore.data.map { preferences ->
         preferences[ENABLED_PLUGINS] ?: emptySet()
+    }
+    
+    /**
+     * Get dashboard plugins
+     */
+    val dashboardPlugins: Flow<Set<String>> = dataStore.data.map { preferences ->
+        preferences[DASHBOARD_PLUGINS] ?: emptySet()
     }
     
     /**
@@ -66,6 +74,33 @@ class PreferencesManager @Inject constructor(
      */
     suspend fun isPluginEnabled(pluginId: String): Boolean {
         return dataStore.data.first()[ENABLED_PLUGINS]?.contains(pluginId) ?: false
+    }
+    
+    /**
+     * Add plugin to dashboard
+     */
+    suspend fun addToDashboard(pluginId: String) {
+        dataStore.edit { preferences ->
+            val current = preferences[DASHBOARD_PLUGINS] ?: emptySet()
+            preferences[DASHBOARD_PLUGINS] = current + pluginId
+        }
+    }
+    
+    /**
+     * Remove plugin from dashboard
+     */
+    suspend fun removeFromDashboard(pluginId: String) {
+        dataStore.edit { preferences ->
+            val current = preferences[DASHBOARD_PLUGINS] ?: emptySet()
+            preferences[DASHBOARD_PLUGINS] = current - pluginId
+        }
+    }
+    
+    /**
+     * Get dashboard plugin count
+     */
+    suspend fun getDashboardPluginCount(): Int {
+        return dataStore.data.first()[DASHBOARD_PLUGINS]?.size ?: 0
     }
     
     /**

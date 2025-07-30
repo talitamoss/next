@@ -1,162 +1,205 @@
-package com.domain.app
+package com.domain.app.core.plugin.security
 
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
-import com.domain.app.ui.contacts.ContactsScreen
-import com.domain.app.ui.dashboard.DashboardScreen
-import com.domain.app.ui.data.DataScreen
-import com.domain.app.ui.settings.SettingsScreen
-import com.domain.app.ui.social.SocialFeedScreen
-import com.domain.app.ui.theme.AppTheme
-import dagger.hilt.android.AndroidEntryPoint
+import com.domain.app.core.data.DataPoint
+import com.domain.app.core.data.DataRepository
+import com.domain.app.core.plugin.PluginCapability
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 
 /**
- * Main Activity - Single Activity Architecture with Compose Navigation
- * 
- * File location: app/src/main/java/com/domain/app/MainActivity.kt
+ * Secure wrapper around DataRepository that enforces plugin permissions.
+ * This class provides a security layer between plugins and the actual data repository,
+ * ensuring that plugins can only access data they have permission to access.
  */
-@AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class SecureDataRepository(
+    private val actualRepository: DataRepository,
+    private val pluginId: String,
+    private val grantedCapabilities: Set<PluginCapability>,
+    private val dataAccessScopes: Set<DataAccessScope>,
+    private val securityMonitor: SecurityMonitor
+) {
+    private val permissionManager = object {
+        fun hasCapability(pluginId: String, capability: PluginCapability): Boolean {
+            return grantedCapabilities.contains(capability)
+        }
+    }
     
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+    /**
+     * Save data point with security checks
+     */
+    suspend fun saveDataPoint(dataPoint: DataPoint): Result<Unit> {
+        // Verify plugin has permission to collect data
+        if (!permissionManager.hasCapability(pluginId, PluginCapability.COLLECT_DATA)) {
+            securityMonitor.recordSecurityEvent(
+                SecurityEvent.SecurityViolation(
+                    pluginId = pluginId,
+                    violationType = "UNAUTHORIZED_DATA_SAVE",
+                    details = "Attempted to save data without COLLECT_DATA permission",
+                    severity = ViolationSeverity.MEDIUM
+                )
+            )
+            return Result.failure(SecurityException("Plugin $pluginId lacks COLLECT_DATA permission"))
+        }
         
-        setContent {
-            AppTheme {
-                MainScreen()
+        // Verify plugin is only saving its own data
+        if (dataPoint.pluginId != pluginId) {
+            securityMonitor.recordSecurityEvent(
+                SecurityEvent.SecurityViolation(
+                    pluginId = pluginId,
+                    violationType = "CROSS_PLUGIN_DATA_SAVE",
+                    details = "Attempted to save data for another plugin: ${dataPoint.pluginId}",
+                    severity = ViolationSeverity.HIGH
+                )
+            )
+            return Result.failure(SecurityException("Plugin can only save its own data"))
+        }
+        
+        return try {
+            actualRepository.saveDataPoint(dataPoint)
+            securityMonitor.recordSecurityEvent(
+                SecurityEvent.DataAccess(
+                    pluginId = pluginId,
+                    dataType = dataPoint.type,
+                    accessType = AccessType.WRITE,
+                    recordCount = 1
+                )
+            )
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Get plugin's own data with security checks
+     */
+    fun getPluginData(targetPluginId: String): Flow<List<DataPoint>> = flow {
+        // Check if plugin can read the requested data
+        val canRead = when {
+            // Plugin reading its own data
+            pluginId == targetPluginId -> 
+                permissionManager.hasCapability(pluginId, PluginCapability.READ_OWN_DATA)
+            
+            // Plugin reading another plugin's data
+            else -> 
+                permissionManager.hasCapability(pluginId, PluginCapability.READ_ALL_DATA)
+        }
+        
+        if (!canRead) {
+            val capability = if (pluginId == targetPluginId) {
+                PluginCapability.READ_OWN_DATA
+            } else {
+                PluginCapability.READ_ALL_DATA
             }
+            
+            securityMonitor.recordSecurityEvent(
+                SecurityEvent.SecurityViolation(
+                    pluginId = pluginId,
+                    violationType = "UNAUTHORIZED_DATA_READ",
+                    details = "Attempted to read data from plugin: $targetPluginId without $capability",
+                    severity = ViolationSeverity.MEDIUM
+                )
+            )
+            
+            throw SecurityException("Plugin $pluginId lacks permission to read data")
+        }
+        
+        // Log access and return data
+        emitAll(actualRepository.getPluginData(targetPluginId).map { dataPoints ->
+            securityMonitor.recordSecurityEvent(
+                SecurityEvent.DataAccess(
+                    pluginId = pluginId,
+                    dataType = "plugin_data",
+                    accessType = AccessType.READ,
+                    recordCount = dataPoints.size
+                )
+            )
+            dataPoints
+        })
+    }
+    
+    /**
+     * Get data count with security checks
+     */
+    suspend fun getPluginDataCount(targetPluginId: String): Int {
+        // Check permissions (same logic as getPluginData)
+        val canRead = when {
+            pluginId == targetPluginId -> 
+                permissionManager.hasCapability(pluginId, PluginCapability.READ_OWN_DATA)
+            else -> 
+                permissionManager.hasCapability(pluginId, PluginCapability.READ_ALL_DATA)
+        }
+        
+        if (!canRead) {
+            return 0
+        }
+        
+        return actualRepository.getPluginDataCount(targetPluginId)
+    }
+    
+    /**
+     * Delete data with security checks
+     */
+    suspend fun deletePluginData(dataPointIds: List<String>): Result<Unit> {
+        if (!permissionManager.hasCapability(pluginId, PluginCapability.DELETE_DATA)) {
+            securityMonitor.recordSecurityEvent(
+                SecurityEvent.SecurityViolation(
+                    pluginId = pluginId,
+                    violationType = "UNAUTHORIZED_DATA_DELETE",
+                    details = "Attempted to delete ${dataPointIds.size} data points",
+                    severity = ViolationSeverity.HIGH
+                )
+            )
+            return Result.failure(SecurityException("Plugin $pluginId lacks DELETE_DATA permission"))
+        }
+        
+        // TODO: Verify plugin owns all the data points it's trying to delete
+        // This would require fetching the data points first to check their pluginId
+        
+        return try {
+            // DataRepository doesn't have a delete method yet, so this is a placeholder
+            // When implemented, it should delete the specified data points
+            securityMonitor.recordSecurityEvent(
+                SecurityEvent.DataAccess(
+                    pluginId = pluginId,
+                    dataType = "data_points",
+                    accessType = AccessType.DELETE,
+                    recordCount = dataPointIds.size
+                )
+            )
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Get latest data points with security checks
+     */
+    fun getLatestDataPoints(limit: Int): Flow<List<DataPoint>> = flow {
+        // Check if plugin has permission to read all data
+        if (!permissionManager.hasCapability(pluginId, PluginCapability.READ_ALL_DATA)) {
+            // If not, only return the plugin's own data
+            if (permissionManager.hasCapability(pluginId, PluginCapability.READ_OWN_DATA)) {
+                emitAll(actualRepository.getPluginData(pluginId))
+            } else {
+                throw SecurityException("Plugin $pluginId lacks permission to read data")
+            }
+        } else {
+            // Plugin can read all data
+            emitAll(actualRepository.getLatestDataPoints(limit).map { dataPoints ->
+                securityMonitor.recordSecurityEvent(
+                    SecurityEvent.DataAccess(
+                        pluginId = pluginId,
+                        dataType = "all_data",
+                        accessType = AccessType.READ,
+                        recordCount = dataPoints.size
+                    )
+                )
+                dataPoints
+            })
         }
     }
 }
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MainScreen() {
-    val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentDestination = navBackStackEntry?.destination
-    
-    // Define bottom navigation items
-    val bottomNavItems = listOf(
-        BottomNavItem(
-            route = Screen.Dashboard.route,
-            icon = Icons.Default.Home,
-            label = "Dashboard"
-        ),
-        BottomNavItem(
-            route = Screen.Data.route,
-            icon = Icons.Default.BarChart,
-            label = "Data"
-        ),
-        BottomNavItem(
-            route = Screen.Social.route,
-            icon = Icons.Default.People,
-            label = "Social"
-        ),
-        BottomNavItem(
-            route = Screen.Settings.route,
-            icon = Icons.Default.Settings,
-            label = "Settings"
-        )
-    )
-    
-    // Determine if we should show bottom bar
-    val showBottomBar = currentDestination?.hierarchy?.any { destination ->
-        bottomNavItems.any { it.route == destination.route }
-    } == true
-    
-    Scaffold(
-        bottomBar = {
-            if (showBottomBar) {
-                NavigationBar {
-                    bottomNavItems.forEach { item ->
-                        NavigationBarItem(
-                            icon = { 
-                                Icon(
-                                    imageVector = item.icon,
-                                    contentDescription = item.label
-                                )
-                            },
-                            label = { 
-                                Text(
-                                    text = item.label,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            selected = currentDestination?.hierarchy?.any { 
-                                it.route == item.route 
-                            } == true,
-                            onClick = {
-                                navController.navigate(item.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        }
-    ) { paddingValues ->
-        NavHost(
-            navController = navController,
-            startDestination = Screen.Dashboard.route,
-            modifier = Modifier.padding(paddingValues)
-        ) {
-            // Main screens (with bottom nav)
-            composable(Screen.Dashboard.route) {
-                DashboardScreen(
-                    navController = navController
-                )
-            }
-            
-            composable(Screen.Data.route) {
-                DataScreen(
-                    navController = navController
-                )
-            }
-            
-            composable(Screen.Social.route) {
-                SocialFeedScreen(
-                    navController = navController
-                )
-            }
-            
-            composable(Screen.Settings.route) {
-                SettingsScreen(
-                    navController = navController
-                )
-            }
-        }
-    }
-}
-
-/**
- * Bottom navigation item data
- */
-data class BottomNavItem(
-    val route: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val label: String
-)
