@@ -1,3 +1,4 @@
+// app/src/main/java/com/domain/app/Screen.kt
 package com.domain.app
 
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -18,6 +19,12 @@ sealed class Screen(
         route = "data",
         title = "Data",
         icon = AppIcons.Navigation.data
+    )
+    
+    object Social : Screen(
+        route = "social",
+        title = "Social",
+        icon = AppIcons.Plugin.health // TODO: Add dedicated social icon to AppIcons
     )
     
     object Settings : Screen(

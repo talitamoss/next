@@ -4,6 +4,8 @@ package com.domain.app.ui.data
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import com.domain.app.ui.theme.AppIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -155,38 +157,53 @@ fun DataPointCard(
                             val unit = dataPoint.value["unit"] as? String ?: "ml"
                             "$amount $unit"
                         }
-                        "mood" -> {
-                            val moodValue = dataPoint.value["mood"] as? Number
-                            val emoji = dataPoint.value["emoji"] as? String ?: ""
-                            val note = dataPoint.value["note"] as? String
-                            if (note.isNullOrBlank()) {
-                                "$emoji Mood level $moodValue"
-                            } else {
-                                "$emoji Mood level $moodValue - $note"
-                            }
-                        }
                         "counter" -> {
                             val count = dataPoint.value["count"] as? Number
-                            val label = dataPoint.value["label"] as? String ?: "Item"
+                            val label = dataPoint.value["label"] as? String ?: ""
                             "$count $label"
+                        }
+                        "mood" -> {
+                            val mood = dataPoint.value["mood"] as? Number ?: 3
+                            val note = dataPoint.value["note"] as? String
+                            buildString {
+                                append("Mood: $mood/5")
+                                if (!note.isNullOrBlank()) {
+                                    append("\n$note")
+                                }
+                            }
                         }
                         else -> dataPoint.value.toString()
                     }
                     
                     Text(
                         text = displayText,
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.bodyMedium
                     )
                 }
                 
                 Text(
                     text = dataPoint.timestamp
                         .atZone(java.time.ZoneId.systemDefault())
-                        .toLocalTime()
                         .format(DateTimeFormatter.ofPattern("HH:mm")),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            
+            // Show metadata if present
+            dataPoint.metadata?.let { metadata ->
+                if (metadata.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    metadata.forEach { (key, value) ->
+                        if (key != "note") { // Already displayed note above
+                            Text(
+                                text = "$key: $value",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -207,24 +224,18 @@ fun FilterDropdownMenu(
         DropdownMenuItem(
             text = { Text("All Plugins") },
             onClick = { onPluginSelected(null) },
-            leadingIcon = {
-                if (selectedPlugin == null) {
-                    Icon(AppIcons.Action.check, contentDescription = null)
-                }
-            }
+            leadingIcon = if (selectedPlugin == null) {
+                { Icon(Icons.Default.Check, contentDescription = "Selected") }
+            } else null
         )
-        
-        Divider()
         
         availablePlugins.forEach { (pluginId, pluginName) ->
             DropdownMenuItem(
                 text = { Text(pluginName) },
                 onClick = { onPluginSelected(pluginId) },
-                leadingIcon = {
-                    if (selectedPlugin == pluginId) {
-                        Icon(AppIcons.Action.check, contentDescription = null)
-                    }
-                }
+                leadingIcon = if (selectedPlugin == pluginId) {
+                    { Icon(Icons.Default.Check, contentDescription = "Selected") }
+                } else null
             )
         }
     }
