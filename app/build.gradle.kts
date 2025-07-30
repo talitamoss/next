@@ -49,7 +49,11 @@ android {
 dependencies {
     // Core library desugaring
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
-    
+
+    // Accompanist for swipe-to-refresh support
+    implementation("com.google.accompanist:accompanist-swiperefresh:0.33.2-alpha")
+
+
     // Compose
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

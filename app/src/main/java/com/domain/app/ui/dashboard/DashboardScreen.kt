@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
-import com.domain.app.ui.theme.AppIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,15 +17,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
+import androidx.navigation.NavHostController
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.security.PluginTrustLevel
+import com.domain.app.ui.theme.AppIcons
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
-    navController: NavController,
+    navController: NavHostController,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -41,11 +41,9 @@ fun DashboardScreen(
                 ),
                 actions = {
                     TextButton(
-                        onClick = { 
+                        onClick = {
                             navController.navigate("settings") {
-                                popUpTo(navController.graph.id) {
-                                    inclusive = false
-                                }
+                                popUpTo(navController.graph.id) { inclusive = false }
                             }
                         }
                     ) {
@@ -60,31 +58,17 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Summary Cards
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                SummaryCard(
-                    title = "Today",
-                    value = "${uiState.todayEntryCount}",
-                    modifier = Modifier.weight(1f)
-                )
-                SummaryCard(
-                    title = "This Week",
-                    value = "${uiState.weekEntryCount}",
-                    modifier = Modifier.weight(1f)
-                )
-                SummaryCard(
-                    title = "Active",
-                    value = "${uiState.activePluginCount}",
-                    modifier = Modifier.weight(1f)
-                )
+                SummaryCard("Today", "${uiState.todayEntryCount}", Modifier.weight(1f))
+                SummaryCard("This Week", "${uiState.weekEntryCount}", Modifier.weight(1f))
+                SummaryCard("Active", "${uiState.activePluginCount}", Modifier.weight(1f))
             }
 
-            // Dashboard Grid - Fixed 2x3 grid
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 contentPadding = PaddingValues(16.dp),
@@ -92,42 +76,31 @@ fun DashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                // Show dashboard plugins
                 items(uiState.dashboardPlugins) { plugin ->
                     DashboardPluginTile(
                         plugin = plugin,
                         isCollecting = uiState.pluginStates[plugin.id]?.isCollecting ?: false,
                         hasPermissions = uiState.pluginPermissions[plugin.id] ?: false,
-                        onClick = {
-                            viewModel.onPluginTileClick(plugin)
-                        },
+                        onClick = { viewModel.onPluginTileClick(plugin) },
                         onLongClick = {
                             navController.navigate("plugin_security/${plugin.id}")
                         }
                     )
                 }
-                
-                // Add empty slots if less than 6 plugins
+
                 val emptySlots = 6 - uiState.dashboardPlugins.size
                 if (emptySlots > 0 && uiState.canAddMorePlugins) {
                     item {
-                        AddPluginTile(
-                            onClick = { viewModel.onAddPluginClick() }
-                        )
+                        AddPluginTile { viewModel.onAddPluginClick() }
                     }
-                    
-                    // Fill remaining slots with empty tiles
                     repeat(emptySlots - 1) {
-                        item {
-                            EmptyPluginTile()
-                        }
+                        item { EmptyPluginTile() }
                     }
                 }
             }
         }
     }
 
-    // Quick Add Bottom Sheet with permission check
     val currentPlugin = selectedPlugin
     if (uiState.showQuickAdd && currentPlugin != null) {
         if (uiState.needsPermission) {
@@ -146,18 +119,16 @@ fun DashboardScreen(
             )
         }
     }
-    
-    // Plugin Selector Bottom Sheet
+
     if (uiState.showPluginSelector) {
         PluginSelectorBottomSheet(
-            availablePlugins = uiState.allPlugins.filter { plugin ->
-                !uiState.dashboardPlugins.any { it.id == plugin.id }
+            availablePlugins = uiState.allPlugins.filterNot { plugin ->
+                uiState.dashboardPlugins.any { it.id == plugin.id }
             },
             onDismiss = { viewModel.dismissPluginSelector() }
         )
     }
-    
-    // Success feedback
+
     if (uiState.showSuccessFeedback) {
         LaunchedEffect(Unit) {
             delay(2000)
@@ -203,9 +174,9 @@ fun DashboardPluginTile(
                         .size(48.dp)
                         .clip(CircleShape)
                         .background(
-                            if (hasPermissions) 
-                                MaterialTheme.colorScheme.primary 
-                            else 
+                            if (hasPermissions)
+                                MaterialTheme.colorScheme.primary
+                            else
                                 MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
                         ),
                     contentAlignment = Alignment.Center
@@ -247,8 +218,7 @@ fun DashboardPluginTile(
                     )
                 }
             }
-            
-            // Trust indicator
+
             if (plugin.trustLevel == PluginTrustLevel.OFFICIAL) {
                 Icon(
                     imageVector = AppIcons.Security.shield,
@@ -287,11 +257,8 @@ fun PluginPermissionQuickDialog(
             }
         },
         text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("This plugin needs permissions to collect data.")
-                
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.secondaryContainer
@@ -303,7 +270,6 @@ fun PluginPermissionQuickDialog(
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
-                
                 Text(
                     text = "You can review detailed permissions in Settings.",
                     style = MaterialTheme.typography.bodySmall,

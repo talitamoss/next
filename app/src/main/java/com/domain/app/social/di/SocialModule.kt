@@ -17,14 +17,14 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object SocialModule {
-    
+
     /**
      * Feature flag to control which implementation to use
      * Set to true for UI development with mocks
      * Set to false for real Briar implementation
      */
     private const val USE_MOCK_SOCIAL = true
-    
+
     @Provides
     @Singleton
     fun provideSocialRepository(
@@ -39,8 +39,13 @@ object SocialModule {
             mockRepository
         } else {
             // TODO: Return real implementation when backend is ready
-            // RealSocialRepository(realBriarManager, dataRepository, encryptionManager)
             throw NotImplementedError("Real social repository not yet implemented. Set USE_MOCK_SOCIAL = true")
         }
+    }
+
+    @Provides
+    @Singleton
+    fun provideMockSocialRepository(): MockSocialRepository {
+        return MockSocialRepository()
     }
 }
