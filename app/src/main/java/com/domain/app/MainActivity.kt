@@ -1,3 +1,4 @@
+// app/src/main/java/com/domain/app/MainActivity.kt
 package com.domain.app
 
 import android.os.Bundle
@@ -57,6 +58,7 @@ fun MainScreen() {
                     val items = listOf(
                         Screen.Dashboard,
                         Screen.Data,
+                        Screen.Social,
                         Screen.Settings
                     )
                     items.forEach { screen ->
@@ -86,6 +88,10 @@ fun MainScreen() {
         ) {
             composable(Screen.Dashboard.route) { DashboardScreen(navController) }
             composable(Screen.Data.route) { DataScreen(navController) }
+            composable(Screen.Social.route) { 
+                // TODO: Cashka will create SocialFeedScreen here
+                SocialPlaceholderScreen(navController)
+            }
             composable(Screen.Settings.route) { SettingsScreen(navController) }
             
             // Plugin security detail screen
@@ -103,6 +109,63 @@ fun MainScreen() {
             // Security audit screen
             composable("security_audit") {
                 SecurityAuditScreen(navController)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SocialPlaceholderScreen(navController: androidx.navigation.NavController) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Social Feed") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            )
+        }
+    ) { paddingValues ->
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            androidx.compose.foundation.layout.Column(
+                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "🚧 Social Feed Coming Soon! 🚧",
+                    style = MaterialTheme.typography.headlineMedium
+                )
+                Text(
+                    text = "This is a placeholder screen.\nCashka will build the real SocialFeedScreen here.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Card(
+                    modifier = Modifier.padding(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                ) {
+                    androidx.compose.foundation.layout.Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = "Ready for Development:",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                        )
+                        Text("✅ Mock data available")
+                        Text("✅ Repository interface defined")
+                        Text("✅ Navigation integrated")
+                        Text("✅ Dependency injection ready")
+                    }
+                }
             }
         }
     }

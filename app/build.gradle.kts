@@ -1,3 +1,4 @@
+// app/build.gradle.kts
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -93,6 +94,10 @@ dependencies {
     implementation("com.google.dagger:hilt-android:2.48")
     kapt("com.google.dagger:hilt-compiler:2.48")
     implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
+    
+    // TODO: Briar dependencies (will be added when implementing real backend)
+    // implementation("org.briarproject:briar-api:1.4.0")
+    // implementation("org.briarproject:briar-core:1.4.0")
     
     // Testing
     testImplementation(libs.junit)
