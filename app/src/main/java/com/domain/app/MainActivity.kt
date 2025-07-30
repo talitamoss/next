@@ -4,11 +4,21 @@ package com.domain.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -31,7 +41,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             AppTheme {
-                MainScreen()
+                MainNavigation()
             }
         }
     }
@@ -39,65 +49,93 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen() {
+fun MainNavigation() {
     val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentDestination = navBackStackEntry?.destination
     
-    // Hide bottom bar on detail screens
-    val showBottomBar = when (currentDestination?.route) {
-        "plugin_security/{pluginId}" -> false
-        "security_audit" -> false
-        else -> true
-    }
-
     Scaffold(
         bottomBar = {
-            if (showBottomBar) {
-                NavigationBar {
-                    val items = listOf(
-                        Screen.Dashboard,
-                        Screen.Data,
-                        Screen.Social,
-                        Screen.Settings
-                    )
-                    items.forEach { screen ->
-                        NavigationBarItem(
-                            icon = { Icon(screen.icon, contentDescription = null) },
-                            label = { Text(screen.title) },
-                            selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
-                            onClick = {
-                                navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
+            NavigationBar {
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentDestination = navBackStackEntry?.destination
+                
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Home, contentDescription = "Dashboard") },
+                    label = { Text("Dashboard") },
+                    selected = currentDestination?.hierarchy?.any { it.route == "dashboard" } == true,
+                    onClick = {
+                        navController.navigate("dashboard") {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
                             }
-                        )
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     }
-                }
+                )
+                
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Share, contentDescription = "Social") },
+                    label = { Text("Social") },
+                    selected = currentDestination?.hierarchy?.any { it.route == "social" } == true,
+                    onClick = {
+                        navController.navigate("social") {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+                
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.BarChart, contentDescription = "Data") },
+                    label = { Text("Data") },
+                    selected = currentDestination?.hierarchy?.any { it.route == "data" } == true,
+                    onClick = {
+                        navController.navigate("data") {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+                
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                    label = { Text("Settings") },
+                    selected = currentDestination?.hierarchy?.any { it.route == "settings" } == true,
+                    onClick = {
+                        navController.navigate("settings") {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
             }
         }
-    ) { innerPadding ->
+    ) { paddingValues ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Dashboard.route,
-            modifier = Modifier.padding(innerPadding)
+            startDestination = "dashboard",
+            modifier = Modifier.padding(paddingValues)
         ) {
-            composable(Screen.Dashboard.route) { DashboardScreen(navController) }
-            composable(Screen.Data.route) { DataScreen(navController) }
-            composable(Screen.Social.route) { 
-                // TODO: Cashka will create SocialFeedScreen here
-                SocialPlaceholderScreen(navController)
-            }
-            composable(Screen.Settings.route) { SettingsScreen(navController) }
+            composable("dashboard") { DashboardScreen(navController) }
+            composable("social") { SocialPlaceholderScreen(navController) }
+            composable("data") { DataScreen(navController) }
+            composable("settings") { SettingsScreen(navController) }
             
-            // Plugin security detail screen
+            // Plugin security details screen
             composable(
                 route = "plugin_security/{pluginId}",
-                arguments = listOf(navArgument("pluginId") { type = NavType.StringType })
+                arguments = listOf(
+                    navArgument("pluginId") { type = NavType.StringType }
+                )
             ) { backStackEntry ->
                 val pluginId = backStackEntry.arguments?.getString("pluginId") ?: ""
                 PluginSecurityScreen(
@@ -127,24 +165,24 @@ fun SocialPlaceholderScreen(navController: androidx.navigation.NavController) {
             )
         }
     ) { paddingValues ->
-        androidx.compose.foundation.layout.Box(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentAlignment = androidx.compose.ui.Alignment.Center
+            contentAlignment = Alignment.Center
         ) {
-            androidx.compose.foundation.layout.Column(
-                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "🚧 Social Feed Coming Soon! 🚧",
+                    text = "Social Feed Coming Soon",
                     style = MaterialTheme.typography.headlineMedium
                 )
                 Text(
-                    text = "This is a placeholder screen.\nCashka will build the real SocialFeedScreen here.",
+                    text = "This is a placeholder screen.\nThe real SocialFeedScreen will be built here.",
                     style = MaterialTheme.typography.bodyLarge,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    textAlign = TextAlign.Center
                 )
                 Card(
                     modifier = Modifier.padding(16.dp),
@@ -152,18 +190,18 @@ fun SocialPlaceholderScreen(navController: androidx.navigation.NavController) {
                         containerColor = MaterialTheme.colorScheme.secondaryContainer
                     )
                 ) {
-                    androidx.compose.foundation.layout.Column(
+                    Column(
                         modifier = Modifier.padding(16.dp)
                     ) {
                         Text(
                             text = "Ready for Development:",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            fontWeight = FontWeight.Bold
                         )
-                        Text("✅ Mock data available")
-                        Text("✅ Repository interface defined")
-                        Text("✅ Navigation integrated")
-                        Text("✅ Dependency injection ready")
+                        Text("Mock data available")
+                        Text("Repository interface defined")
+                        Text("Navigation integrated")
+                        Text("Dependency injection ready")
                     }
                 }
             }
