@@ -44,6 +44,7 @@ interface Plugin {
     
     // Cleanup
     suspend fun cleanup() {}
+    val supportsAutomaticCollection: Boolean
 }
 
 /**
@@ -187,3 +188,7 @@ data class RiskWarning(
     val message: String,
     val capability: PluginCapability
 )
+
+val supportsAutomaticCollection: Boolean get() = false
+
+

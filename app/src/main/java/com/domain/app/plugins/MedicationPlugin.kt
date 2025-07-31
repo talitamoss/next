@@ -157,7 +157,7 @@ class MedicationPlugin : Plugin {
     }
     
     override fun exportHeaders() = listOf(
-        "Date", "Time", "Medication", "Dosage", "When Taken", "Taken", "Notes"
+        "Date", "Time", "Medication", "Dosage", "Timing", "Taken", "Notes"
     )
     
     override fun formatForExport(dataPoint: DataPoint): Map<String, String> {
@@ -169,27 +169,27 @@ class MedicationPlugin : Plugin {
             "Time" to time,
             "Medication" to (dataPoint.value["medication"]?.toString() ?: ""),
             "Dosage" to (dataPoint.value["dosage"]?.toString() ?: ""),
-            "When Taken" to (dataPoint.value["timing_label"]?.toString() ?: ""),
-            "Taken" to (dataPoint.value["taken"]?.toString() ?: "true"),
+            "Timing" to (dataPoint.value["timing_label"]?.toString() ?: ""),
+            "Taken" to (if (dataPoint.value["taken"] == true) "Yes" else "No"),
             "Notes" to (dataPoint.value["notes"]?.toString() ?: "")
         )
     }
     
-    private fun getTimingLabel(timing: String) = when(timing) {
+    private fun getTimingLabel(timing: String): String = when (timing) {
         "morning" -> "Morning"
         "afternoon" -> "Afternoon"
         "evening" -> "Evening"
         "night" -> "Night"
         "as_needed" -> "As Needed"
-        else -> "Other"
+        else -> "Custom"
     }
     
-    private fun getEmojiForTiming(timing: String) = when(timing) {
+    private fun getEmojiForTiming(timing: String): String = when (timing) {
         "morning" -> "☀️"
         "afternoon" -> "🌤️"
         "evening" -> "🌙"
         "night" -> "🌃"
         "as_needed" -> "💊"
-        else -> "📝"
+        else -> "⏰"
     }
 }

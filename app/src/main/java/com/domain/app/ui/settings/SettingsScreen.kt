@@ -465,6 +465,3 @@ private fun ExportDataDialog(
 }
 
 // Export format enum
-enum class ExportFormat {
-    CSV, JSON, FHIR
-}

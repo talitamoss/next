@@ -112,50 +112,6 @@ fun PluginCapability.getRiskLevel(): RiskLevel {
 /**
  * Extension function to get human-readable description for a capability
  */
-fun PluginCapability.getDescription(): String {
-    return when (this) {
-        PluginCapability.COLLECT_DATA -> "Create and save new data entries"
-        PluginCapability.READ_OWN_DATA -> "View data this plugin has created"
-        PluginCapability.READ_ALL_DATA -> "View all data from any plugin"
-        PluginCapability.MODIFY_DATA -> "Edit existing data entries"
-        PluginCapability.DELETE_DATA -> "Remove data permanently"
-        
-        PluginCapability.CUSTOM_UI -> "Display custom interface elements"
-        PluginCapability.MODIFY_THEME -> "Change app colors and appearance"
-        PluginCapability.ADD_MENU_ITEMS -> "Add options to app menus"
-        PluginCapability.SHOW_NOTIFICATIONS -> "Display system notifications"
-        PluginCapability.FULLSCREEN_UI -> "Take control of entire screen"
-        
-        PluginCapability.BACKGROUND_SYNC -> "Sync data when app is closed"
-        PluginCapability.BACKGROUND_PROCESS -> "Run tasks in background"
-        PluginCapability.NETWORK_ACCESS -> "Connect to the internet"
-        PluginCapability.FILE_ACCESS -> "Read and write files on device"
-        PluginCapability.CAMERA_ACCESS -> "Use device camera"
-        PluginCapability.MICROPHONE_ACCESS -> "Use device microphone"
-        
-        PluginCapability.SHARE_DATA -> "Share data with other apps"
-        PluginCapability.IMPORT_DATA -> "Import data from external sources"
-        PluginCapability.EXPORT_DATA -> "Export data to files"
-        PluginCapability.INTEGRATE_SERVICES -> "Connect to external services"
-        
-        PluginCapability.ACCESS_SENSORS -> "Use device sensors (accelerometer, etc.)"
-        PluginCapability.ACCESS_LOCATION -> "Access device location"
-        PluginCapability.ACCESS_BIOMETRIC -> "Access health and biometric data"
-        PluginCapability.MODIFY_SETTINGS -> "Change app settings"
-        PluginCapability.INSTALL_PLUGINS -> "Install additional plugins"
-        
-        PluginCapability.ANALYTICS_BASIC -> "Track basic usage patterns"
-        PluginCapability.ANALYTICS_DETAILED -> "Track detailed user behavior"
-        
-        PluginCapability.SEND_EMAILS -> "Send emails on your behalf"
-        PluginCapability.SEND_SMS -> "Send text messages"
-        PluginCapability.PUSH_NOTIFICATIONS -> "Send push notifications"
-        
-        PluginCapability.LOCAL_STORAGE -> "Store data on device"
-        PluginCapability.CLOUD_STORAGE -> "Store data in cloud"
-        PluginCapability.CACHE_DATA -> "Cache temporary data"
-    }
-}
 
 /**
  * Extension function to get required Android permissions for capabilities
@@ -177,4 +133,22 @@ fun PluginCapability.getRequiredAndroidPermissions(): List<String> {
         PluginCapability.SHOW_NOTIFICATIONS -> listOf("android.permission.POST_NOTIFICATIONS")
         else -> emptyList()
     }
+}
+
+// Extension function for getting description
+
+
+
+fun PluginCapability.getDescription(): String = when(this) {
+    PluginCapability.COLLECT_DATA -> "Collect and record data"
+    PluginCapability.READ_OWN_DATA -> "Read own data"
+    PluginCapability.READ_ALL_DATA -> "Read all data"
+    PluginCapability.MODIFY_DATA -> "Modify existing data"
+    PluginCapability.DELETE_DATA -> "Delete data"
+    PluginCapability.NETWORK_ACCESS -> "Access network"
+    PluginCapability.CUSTOM_UI -> "Provide custom UI"
+    PluginCapability.MODIFY_THEME -> "Modify app theme"
+    PluginCapability.EXPORT_DATA -> "Export data"
+    PluginCapability.IMPORT_DATA -> "Import data"
+    else -> "Permission: ${this.name}"
 }

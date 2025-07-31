@@ -1,19 +1,34 @@
 package com.domain.app.core.plugin
+import com.domain.app.core.plugin.PluginEvent.*
 
 import android.content.Context
+
 import com.domain.app.core.data.DataPoint
+
 import com.domain.app.core.data.DataRepository
+
 import com.domain.app.core.event.Event
+
 import com.domain.app.core.event.EventBus
+
 import com.domain.app.core.plugin.security.*
+
 import com.domain.app.core.storage.AppDatabase
+
 import com.domain.app.core.storage.entity.PluginStateEntity
+
 import kotlinx.coroutines.*
+
 import kotlinx.coroutines.flow.*
+
 import timber.log.Timber
+
 import java.time.Instant
+
 import javax.inject.Inject
+
 import javax.inject.Singleton
+
 
 /**
  * Central manager for plugin lifecycle and operations.
@@ -325,7 +340,7 @@ class PluginManager @Inject constructor(
         val state = getPluginState(pluginId)
         if (state != null && state.errorCount > 10) {
             disablePlugin(pluginId)
-            EventBus.post(Event.PluginError(pluginId, "Plugin disabled due to repeated errors"))
+            EventBus.post(Event.PluginError(pluginId, Exception("Plugin disabled due to repeated errors")))
         }
     }
     
@@ -349,3 +364,22 @@ data class PluginState(
     val lastCollection: Instant? = null,
     val errorCount: Int = 0
 )
+
+// Plugin events
+sealed class PluginEvent {
+    data class PluginStartedCollecting(val pluginId: String) : PluginEvent()
+    data class PluginStoppedCollecting(val pluginId: String) : PluginEvent()
+}
+
+    private suspend fun updateLastCollectionTime(pluginId: String, timestamp: Long) {
+        pluginStateDao.getById(pluginId)?.let { state ->
+            pluginStateDao.update(state.copy(lastCollectionTime = timestamp))
+        }
+    }
+    
+    private suspend fun incrementErrorCount(pluginId: String) {
+        pluginStateDao.getById(pluginId)?.let { state ->
+            pluginStateDao.update(state.copy(errorCount = state.errorCount + 1))
+        }
+    }
+

@@ -182,3 +182,11 @@ enum class ExportFormat {
     FHIR,
     OPEN_MHEALTH
 }
+
+    fun setTheme(theme: String) {
+        // TODO: Implement theme setting
+    }
+    
+    fun toggleDashboard() {
+        // TODO: Implement dashboard toggle
+    }

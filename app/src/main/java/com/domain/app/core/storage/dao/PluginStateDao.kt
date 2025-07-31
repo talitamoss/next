@@ -41,3 +41,12 @@ interface PluginStateDao {
     @Query("DELETE FROM plugin_states")
     suspend fun deleteAll()
 }
+
+    suspend fun updateLastCollectionTime(pluginId: String, timestamp: Long) {
+        // TODO: Implement
+    }
+    
+    suspend fun incrementErrorCount(pluginId: String) {
+        // TODO: Implement  
+    }
+

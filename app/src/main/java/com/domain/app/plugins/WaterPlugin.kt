@@ -12,6 +12,7 @@ class WaterPlugin : Plugin {
     override val id = "water"
     
     override val metadata = PluginMetadata(
+override val supportsAutomaticCollection = false
         name = "Water Intake",
         description = "Track your daily water consumption",
         version = "1.0.0",

@@ -5,6 +5,7 @@ import com.domain.app.core.data.DataPoint
 import com.domain.app.core.plugin.*
 import com.domain.app.core.plugin.security.*
 import java.time.LocalTime
+import java.time.Duration
 
 /**
  * Sleep tracking plugin with security manifest
@@ -71,25 +72,24 @@ class SleepPlugin : Plugin {
             id = "duration",
             title = "How long did you sleep?",
             inputType = InputType.DURATION,
-            required = true,
-            hint = "Enter hours and minutes"
+            required = true
         ),
         QuickAddStage(
             id = "quality",
-            title = "Rate your sleep quality",
-            inputType = InputType.SCALE,
+            title = "How was your sleep quality?",
+            inputType = InputType.CHOICE,
             required = true,
-            options = (1..5).map { 
-                QuickOption(
-                    label = getQualityLabel(it),
-                    value = it,
-                    icon = getQualityEmoji(it)
-                )
-            }
+            options = listOf(
+                QuickOption("Excellent", 5, "😴"),
+                QuickOption("Good", 4, "😌"),
+                QuickOption("Fair", 3, "😐"),
+                QuickOption("Poor", 2, "😞"),
+                QuickOption("Terrible", 1, "😫")
+            )
         ),
         QuickAddStage(
-            id = "dream",
-            title = "Remember any dreams?",
+            id = "dreams",
+            title = "Any dreams to note?",
             inputType = InputType.TEXT,
             required = false,
             hint = "Optional dream journal"
@@ -97,118 +97,103 @@ class SleepPlugin : Plugin {
     )
     
     override fun getQuickAddConfig() = QuickAddConfig(
-        title = "Log Sleep",
+        title = "Quick Sleep Log",
         inputType = InputType.CHOICE,
         options = listOf(
-            QuickOption("Quick Nap", 30, "😴"),
-            QuickOption("Power Nap", 90, "💤"),
-            QuickOption("Full Night", 480, "🛏️"),
-            QuickOption("Custom", -1, "⏰")
-        ),
-        unit = "minutes"
+            QuickOption("Last Night", "last_night", "🌙"),
+            QuickOption("Nap", "nap", "💤"),
+            QuickOption("Custom", "custom", "📝")
+        )
     )
     
     override suspend fun createManualEntry(data: Map<String, Any>): DataPoint? {
-        val minutes = when (val value = data["duration"] ?: data["amount"]) {
-            is Number -> value.toInt()
-            else -> return null
-        }
+        val duration = when (val value = data["duration"]) {
+            is Number -> value.toLong()
+            is String -> parseDuration(value)
+            else -> null
+        } ?: return null
         
         val quality = (data["quality"] as? Number)?.toInt() ?: 3
-        val dream = data["dream"] as? String
-        
-        val hours = minutes / 60
-        val mins = minutes % 60
+        val dreams = data["dreams"] as? String
+        val type = data["type"] as? String ?: "night"
         
         return DataPoint(
             pluginId = id,
-            type = "sleep_session",
+            type = "sleep_log",
             value = mapOf(
-                "duration_minutes" to minutes,
-                "hours" to hours,
-                "minutes" to mins,
+                "duration_minutes" to duration,
+                "duration_hours" to (duration / 60.0),
                 "quality" to quality,
                 "quality_label" to getQualityLabel(quality),
-                "dream_journal" to (dream ?: ""),
-                "sleep_type" to categorizeSleep(minutes)
+                "type" to type,
+                "dreams" to (dreams ?: ""),
+                "has_dreams" to (dreams != null && dreams.isNotEmpty())
             ),
             metadata = mapOf(
                 "quick_add" to "true",
-                "has_dream" to (dream != null).toString(),
-                "time_of_day" to getTimeOfDay()
+                "sleep_type" to type
             ),
             source = "manual"
         )
     }
     
     override fun validateDataPoint(data: Map<String, Any>): ValidationResult {
-        val duration = (data["duration"] as? Number)?.toInt()
+        val duration = (data["duration"] as? Number)?.toLong()
         val quality = (data["quality"] as? Number)?.toInt()
         
         return when {
             duration == null -> ValidationResult.Error("Duration is required")
             duration <= 0 -> ValidationResult.Error("Duration must be positive")
-            duration > 1440 -> ValidationResult.Warning("That's over 24 hours! Are you sure?")
+            duration > 1440 -> ValidationResult.Error("Sleep duration cannot exceed 24 hours")
             quality != null && quality !in 1..5 -> ValidationResult.Error("Quality must be between 1 and 5")
             else -> ValidationResult.Success
         }
     }
     
     override fun exportHeaders() = listOf(
-        "Date", "Time", "Duration (hours)", "Quality (1-5)", "Quality Label", "Dream Notes", "Sleep Type"
+        "Date", "Time", "Duration (hours)", "Quality", "Type", "Dreams"
     )
     
     override fun formatForExport(dataPoint: DataPoint): Map<String, String> {
         val date = dataPoint.timestamp.toString().split("T")[0]
         val time = dataPoint.timestamp.toString().split("T")[1].split(".")[0]
-        val hours = dataPoint.value["hours"]?.toString() ?: "0"
-        val minutes = dataPoint.value["minutes"]?.toString() ?: "0"
-        val duration = "$hours:${minutes.padStart(2, '0')}"
         
         return mapOf(
             "Date" to date,
             "Time" to time,
-            "Duration (hours)" to duration,
-            "Quality (1-5)" to (dataPoint.value["quality"]?.toString() ?: ""),
-            "Quality Label" to (dataPoint.value["quality_label"]?.toString() ?: ""),
-            "Dream Notes" to (dataPoint.value["dream_journal"]?.toString() ?: ""),
-            "Sleep Type" to (dataPoint.value["sleep_type"]?.toString() ?: "")
+            "Duration (hours)" to String.format("%.1f", dataPoint.value["duration_hours"] as? Double ?: 0.0),
+            "Quality" to (dataPoint.value["quality_label"]?.toString() ?: ""),
+            "Type" to (dataPoint.value["type"]?.toString() ?: ""),
+            "Dreams" to (dataPoint.value["dreams"]?.toString() ?: "")
         )
     }
     
-    private fun getQualityLabel(quality: Int) = when(quality) {
+    private fun parseDuration(value: String): Long? {
+        // Parse formats like "7h30m", "7.5h", "450m"
+        return when {
+            value.contains("h") && value.contains("m") -> {
+                val parts = value.split("h")
+                val hours = parts[0].toIntOrNull() ?: 0
+                val minutes = parts[1].replace("m", "").toIntOrNull() ?: 0
+                (hours * 60 + minutes).toLong()
+            }
+            value.endsWith("h") -> {
+                val hours = value.replace("h", "").toDoubleOrNull() ?: return null
+                (hours * 60).toLong()
+            }
+            value.endsWith("m") -> {
+                value.replace("m", "").toLongOrNull()
+            }
+            else -> value.toLongOrNull()
+        }
+    }
+    
+    private fun getQualityLabel(quality: Int): String = when (quality) {
         5 -> "Excellent"
         4 -> "Good"
         3 -> "Fair"
         2 -> "Poor"
         1 -> "Terrible"
         else -> "Unknown"
-    }
-    
-    private fun getQualityEmoji(quality: Int) = when(quality) {
-        5 -> "😊"
-        4 -> "🙂"
-        3 -> "😐"
-        2 -> "😕"
-        1 -> "😫"
-        else -> "😐"
-    }
-    
-    private fun categorizeSleep(minutes: Int) = when {
-        minutes < 30 -> "Power Nap"
-        minutes < 120 -> "Nap"
-        minutes < 360 -> "Short Sleep"
-        minutes < 540 -> "Normal Sleep"
-        else -> "Long Sleep"
-    }
-    
-    private fun getTimeOfDay(): String {
-        val hour = LocalTime.now().hour
-        return when (hour) {
-            in 5..11 -> "morning"
-            in 12..16 -> "afternoon"
-            in 17..21 -> "evening"
-            else -> "night"
-        }
     }
 }

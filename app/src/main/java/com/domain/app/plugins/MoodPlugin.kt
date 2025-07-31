@@ -68,84 +68,95 @@ class MoodPlugin : Plugin {
         title = "How are you feeling?",
         inputType = InputType.CHOICE,
         options = listOf(
-            QuickOption("Great", 5, "😊"),
-            QuickOption("Good", 4, "🙂"),
+            QuickOption("Excellent", 5, "😄"),
+            QuickOption("Good", 4, "😊"),
             QuickOption("Okay", 3, "😐"),
-            QuickOption("Not Great", 2, "😕"),
+            QuickOption("Not Great", 2, "😔"),
             QuickOption("Bad", 1, "😢")
         )
     )
     
     override suspend fun createManualEntry(data: Map<String, Any>): DataPoint? {
-        val moodValue = when (val value = data["value"] ?: data["mood"]) {
+        val rating = when (val value = data["value"]) {
             is Number -> value.toInt()
-            else -> 3
+            is String -> value.toIntOrNull()
+            else -> null
+        } ?: return null
+        
+        val validationResult = validateDataPoint(mapOf("rating" to rating))
+        if (validationResult is ValidationResult.Error) {
+            return null
         }
         
-        val note = data["note"] as? String
+        val emoji = when (rating) {
+            5 -> "😄"
+            4 -> "😊"
+            3 -> "😐"
+            2 -> "😔"
+            1 -> "😢"
+            else -> "😐"
+        }
+        
+        val moodLabel = when (rating) {
+            5 -> "Excellent"
+            4 -> "Good"
+            3 -> "Okay"
+            2 -> "Not Great"
+            1 -> "Bad"
+            else -> "Unknown"
+        }
         
         return DataPoint(
             pluginId = id,
-            type = "mood_entry",
+            type = "mood_rating",
             value = mapOf(
-                "mood" to moodValue,
-                "note" to (note ?: ""),
-                "emoji" to getEmojiForMood(moodValue),
-                "label" to getLabelForMood(moodValue)
+                "rating" to rating,
+                "label" to moodLabel,
+                "emoji" to emoji
             ),
             metadata = mapOf(
                 "quick_add" to "true",
-                "has_note" to (note != null).toString()
+                "time_of_day" to getTimeOfDay()
             ),
             source = "manual"
         )
     }
     
     override fun validateDataPoint(data: Map<String, Any>): ValidationResult {
-        val mood = (data["value"] as? Number)?.toInt() ?: (data["mood"] as? Number)?.toInt()
+        val rating = (data["rating"] as? Number)?.toInt() 
+            ?: return ValidationResult.Error("Rating is required")
         
         return when {
-            mood == null -> ValidationResult.Error("Mood value is required")
-            mood !in 1..5 -> ValidationResult.Error("Mood must be between 1 and 5")
+            rating !in 1..5 -> ValidationResult.Error("Rating must be between 1 and 5")
             else -> ValidationResult.Success
         }
     }
     
     override fun exportHeaders() = listOf(
-        "Date", "Time", "Mood (1-5)", "Label", "Note"
+        "Date", "Time", "Mood Rating", "Mood Label", "Time of Day"
     )
     
     override fun formatForExport(dataPoint: DataPoint): Map<String, String> {
         val date = dataPoint.timestamp.toString().split("T")[0]
         val time = dataPoint.timestamp.toString().split("T")[1].split(".")[0]
-        val mood = dataPoint.value["mood"]?.toString() ?: ""
-        val label = dataPoint.value["label"]?.toString() ?: ""
-        val note = dataPoint.value["note"]?.toString() ?: ""
         
         return mapOf(
             "Date" to date,
             "Time" to time,
-            "Mood (1-5)" to mood,
-            "Label" to label,
-            "Note" to note
+            "Mood Rating" to (dataPoint.value["rating"]?.toString() ?: ""),
+            "Mood Label" to (dataPoint.value["label"]?.toString() ?: ""),
+            "Time of Day" to (dataPoint.metadata?.get("time_of_day") ?: "")
         )
     }
     
-    private fun getEmojiForMood(value: Int) = when(value) {
-        5 -> "😊"
-        4 -> "🙂"
-        3 -> "😐"
-        2 -> "😕"
-        1 -> "😢"
-        else -> "😐"
-    }
-    
-    private fun getLabelForMood(value: Int) = when(value) {
-        5 -> "Great"
-        4 -> "Good"
-        3 -> "Okay"
-        2 -> "Not Great"
-        1 -> "Bad"
-        else -> "Unknown"
+    private fun getTimeOfDay(): String {
+        val hour = java.time.LocalTime.now().hour
+        return when (hour) {
+            in 5..11 -> "morning"
+            in 12..16 -> "afternoon"
+            in 17..21 -> "evening"
+            else -> "night"
+        }
     }
 }
+
