@@ -2,7 +2,6 @@ package com.domain.app.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.domain.app.core.data.DataRepository
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginManager
 import com.domain.app.core.preferences.PreferencesManager
@@ -12,15 +11,14 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * ViewModel for the Settings screen
+ * ViewModel for Settings screen
  * 
  * File location: app/src/main/java/com/domain/app/ui/settings/SettingsViewModel.kt
  */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val pluginManager: PluginManager,
-    private val preferencesManager: PreferencesManager,
-    private val dataRepository: DataRepository
+    private val preferencesManager: PreferencesManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -28,26 +26,26 @@ class SettingsViewModel @Inject constructor(
     
     init {
         loadSettings()
-        observePlugins()
+        loadPlugins()
     }
     
     private fun loadSettings() {
         viewModelScope.launch {
-            // Load theme preference
-            preferencesManager.themeMode.collect { theme ->
-                _uiState.update { it.copy(currentTheme = theme.capitalize()) }
+            preferencesManager.currentTheme.collect { theme ->
+                _uiState.update { it.copy(currentTheme = theme) }
             }
         }
     }
     
-    private fun observePlugins() {
+    private fun loadPlugins() {
         viewModelScope.launch {
-            // Get all plugins
+            // Load all plugins
             val allPlugins = pluginManager.getAllPlugins()
             _uiState.update { it.copy(allPlugins = allPlugins) }
             
-            // Observe enabled plugins
-            preferencesManager.enabledPlugins.collect { enabledIds ->
+            // Monitor enabled plugins
+            pluginManager.pluginStates.collect { states ->
+                val enabledIds = states.filter { it.value.isEnabled }.keys
                 _uiState.update { 
                     it.copy(
                         enabledPluginIds = enabledIds,
@@ -57,8 +55,8 @@ class SettingsViewModel @Inject constructor(
             }
         }
         
+        // Monitor dashboard plugins
         viewModelScope.launch {
-            // Observe dashboard plugins
             preferencesManager.dashboardPlugins.collect { dashboardIds ->
                 _uiState.update { it.copy(dashboardPluginIds = dashboardIds) }
             }
@@ -73,9 +71,15 @@ class SettingsViewModel @Inject constructor(
         _uiState.update { it.copy(showThemeDialog = false) }
     }
     
-    fun setTheme(theme: String) {
+    fun updateTheme(theme: String) {
         viewModelScope.launch {
-            preferencesManager.setThemeMode(theme.lowercase())
+            preferencesManager.updateTheme(theme)
+            _uiState.update { 
+                it.copy(
+                    currentTheme = theme,
+                    showThemeDialog = false
+                )
+            }
         }
     }
     
@@ -89,29 +93,16 @@ class SettingsViewModel @Inject constructor(
     
     fun togglePlugin(pluginId: String, enabled: Boolean) {
         viewModelScope.launch {
+            val plugin = pluginManager.getPlugin(pluginId) ?: return@launch
             if (enabled) {
-                // Initialize and enable plugin
-                pluginManager.initializePlugin(pluginId).fold(
-                    onSuccess = {
-                        _uiState.update { 
-                            it.copy(message = "Plugin enabled successfully")
-                        }
-                    },
-                    onFailure = { error ->
-                        _uiState.update { 
-                            it.copy(message = "Failed to enable plugin: ${error.message}")
-                        }
-                    }
-                )
+                pluginManager.enablePlugin(plugin)
             } else {
-                // Disable plugin
-                pluginManager.disablePlugin(pluginId)
-                preferencesManager.removeFromDashboard(pluginId)
+                pluginManager.disablePlugin(plugin)
             }
         }
     }
     
-    fun toggleDashboard(pluginId: String, onDashboard: Boolean) {
+    fun toggleDashboardPlugin(pluginId: String, onDashboard: Boolean) {
         viewModelScope.launch {
             if (onDashboard) {
                 preferencesManager.addToDashboard(pluginId)
@@ -181,3 +172,13 @@ data class SettingsUiState(
     val showClearDataDialog: Boolean = false,
     val message: String? = null
 )
+
+/**
+ * Export format options
+ */
+enum class ExportFormat {
+    CSV,
+    JSON,
+    FHIR,
+    OPEN_MHEALTH
+}

@@ -8,7 +8,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
-import com.domain.app.ui.theme.AppIcons
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,7 +21,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.domain.app.core.plugin.Plugin
-import com.domain.app.core.plugin.security.PluginTrustLevel
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -97,7 +97,7 @@ fun DashboardScreen(
                     DashboardPluginTile(
                         plugin = plugin,
                         isCollecting = uiState.pluginStates[plugin.id]?.isCollecting ?: false,
-                        hasPermissions = uiState.pluginPermissions[plugin.id] ?: false,
+                        hasPermissions = uiState.pluginPermissions[plugin.id]?.isNotEmpty() ?: false,
                         onClick = {
                             viewModel.onPluginTileClick(plugin)
                         },
@@ -198,73 +198,189 @@ fun DashboardPluginTile(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (hasPermissions) 
-                                MaterialTheme.colorScheme.primary 
-                            else 
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = AppIcons.getPluginIcon(plugin.id),
-                        contentDescription = null,
-                        tint = if (hasPermissions)
-                            MaterialTheme.colorScheme.onPrimary
-                        else
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = plugin.metadata.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    color = if (hasPermissions)
-                        MaterialTheme.colorScheme.onSurface
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                Icon(
+                    imageVector = when(plugin.icon) {
+                        "mood" -> Icons.Default.Mood
+                        "fitness" -> Icons.Default.FitnessCenter
+                        "sleep" -> Icons.Default.Bedtime
+                        "water" -> Icons.Default.WaterDrop
+                        "work" -> Icons.Default.Work
+                        else -> Icons.Default.Extension
+                    },
+                    contentDescription = plugin.name,
+                    modifier = Modifier.size(32.dp),
+                    tint = if (hasPermissions) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    }
                 )
-                if (!hasPermissions) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Needs permission",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                } else if (isCollecting) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Active",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = plugin.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
+                )
             }
             
-            // Trust indicator
-            if (plugin.trustLevel == PluginTrustLevel.OFFICIAL) {
-                Icon(
-                    imageVector = AppIcons.Security.shield,
-                    contentDescription = "Official plugin",
+            // Collection indicator
+            if (isCollecting) {
+                Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp)
-                        .size(16.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
                 )
             }
         }
     }
 }
 
+@Composable
+fun SummaryCard(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineMedium
+            )
+        }
+    }
+}
+
+@Composable
+fun AddPluginTile(onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .combinedClickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = CardDefaults.outlinedCardBorder()
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Add Plugin",
+                modifier = Modifier.size(32.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@Composable
+fun EmptyPluginTile() {
+    Card(
+        modifier = Modifier.aspectRatio(1f),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)
+        )
+    ) {
+        Box(modifier = Modifier.fillMaxSize())
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun QuickAddBottomSheet(
+    plugin: Plugin,
+    onDismiss: () -> Unit,
+    onDataSubmit: (Plugin, Map<String, Any>) -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "Quick Add: ${plugin.name}",
+                style = MaterialTheme.typography.headlineSmall
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Plugin-specific quick add UI would go here
+            // For now, just a simple button
+            Button(
+                onClick = { 
+                    onDataSubmit(plugin, mapOf("value" to 1))
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Add Entry")
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PluginSelectorBottomSheet(
+    availablePlugins: List<Plugin>,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "Add to Dashboard",
+                style = MaterialTheme.typography.headlineSmall
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // List available plugins
+            availablePlugins.forEach { plugin ->
+                ListItem(
+                    headlineContent = { Text(plugin.name) },
+                    supportingContent = { Text(plugin.description) },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.Extension,
+                            contentDescription = null
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        // Add plugin to dashboard
+                        onDismiss()
+                    }
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+}
+
 @Composable
 fun PluginPermissionQuickDialog(
     plugin: Plugin,
@@ -273,52 +389,18 @@ fun PluginPermissionQuickDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDeny,
-        title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = AppIcons.getPluginIcon(plugin.id),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Text("Enable ${plugin.metadata.name}?")
-            }
-        },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("This plugin needs permissions to collect data.")
-                
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    )
-                ) {
-                    Text(
-                        text = "Required: ${plugin.securityManifest.requestedCapabilities.size} permissions",
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                
-                Text(
-                    text = "You can review detailed permissions in Settings.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+        title = { Text("Permission Required") },
+        text = { 
+            Text("${plugin.name} needs permission to collect data. Grant access?")
         },
         confirmButton = {
-            FilledTonalButton(onClick = onGrant) {
-                Text("Grant & Continue")
+            TextButton(onClick = onGrant) {
+                Text("Grant")
             }
         },
         dismissButton = {
             TextButton(onClick = onDeny) {
-                Text("Cancel")
+                Text("Deny")
             }
         }
     )

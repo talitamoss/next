@@ -2,6 +2,7 @@ package com.domain.app.di
 
 import android.content.Context
 import com.domain.app.core.plugin.security.*
+import com.domain.app.core.storage.AppDatabase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -10,9 +11,7 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 /**
- * Dagger module for security-related dependencies
- * 
- * File location: app/src/main/java/com/domain/app/di/SecurityModule.kt
+ * Security-related dependency injection module
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -21,16 +20,23 @@ object SecurityModule {
     @Provides
     @Singleton
     fun provideSecurityAuditLogger(
-        @ApplicationContext context: Context
+        database: AppDatabase
     ): SecurityAuditLogger {
-        return SecurityAuditLogger(context)
+        return SecurityAuditLogger(database)
     }
     
     @Provides
     @Singleton
     fun providePluginPermissionManager(
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        auditLogger: SecurityAuditLogger
     ): PluginPermissionManager {
-        return PluginPermissionManager(context)
+        return PluginPermissionManager(context, auditLogger)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideDataEncryption(): DataEncryption {
+        return DataEncryption()
     }
 }

@@ -1,99 +1,71 @@
 package com.domain.app.ui.contacts
 
-import androidx.compose.material3.SnackbarHostState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.domain.app.network.P2PManager
+import com.domain.app.network.P2PNetworkManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * ViewModel for the Add Contact screen
- * 
- * File location: app/src/main/java/com/domain/app/ui/contacts/AddContactViewModel.kt
+ * ViewModel for adding contacts
  */
 @HiltViewModel
 class AddContactViewModel @Inject constructor(
-    private val p2pManager: P2PManager
+    private val networkManager: P2PNetworkManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(AddContactUiState())
     val uiState: StateFlow<AddContactUiState> = _uiState.asStateFlow()
     
-    val snackbarHostState = SnackbarHostState()
-    
-    fun setContactLink(link: String) {
-        _uiState.update { it.copy(contactLink = link, error = null) }
-    }
-    
-    fun setNickname(nickname: String) {
-        _uiState.update { it.copy(nickname = nickname) }
-    }
-    
-    fun addContact() {
+    fun generateContactLink() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            
+            _uiState.value = _uiState.value.copy(isGenerating = true)
             try {
-                val result = p2pManager.addContact(
-                    contactLink = _uiState.value.contactLink,
-                    nickname = _uiState.value.nickname.ifBlank { null }
-                )
-                
-                result.fold(
-                    onSuccess = {
-                        showMessage("Contact added successfully")
-                        // Clear form
-                        _uiState.update { 
-                            it.copy(
-                                contactLink = "",
-                                nickname = "",
-                                isLoading = false
-                            )
-                        }
-                    },
-                    onFailure = { error ->
-                        _uiState.update { 
-                            it.copy(
-                                isLoading = false,
-                                error = error.message ?: "Failed to add contact"
-                            )
-                        }
-                    }
+                val link = networkManager.generateContactLink()
+                _uiState.value = _uiState.value.copy(
+                    contactLink = link,
+                    isGenerating = false
                 )
             } catch (e: Exception) {
-                _uiState.update { 
-                    it.copy(
-                        isLoading = false,
-                        error = e.message ?: "An unexpected error occurred"
-                    )
-                }
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to generate link: ${e.message}",
+                    isGenerating = false
+                )
             }
         }
     }
     
-    fun showMessage(message: String) {
+    fun addContactFromLink(link: String) {
         viewModelScope.launch {
-            snackbarHostState.showSnackbar(message)
+            _uiState.value = _uiState.value.copy(isAdding = true)
+            try {
+                val contact = networkManager.addContactFromLink(link)
+                _uiState.value = _uiState.value.copy(
+                    isAdding = false,
+                    success = true
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to add contact: ${e.message}",
+                    isAdding = false
+                )
+            }
         }
     }
     
-    fun dismissError() {
-        _uiState.update { it.copy(error = null) }
+    fun clearError() {
+        _uiState.value = _uiState.value.copy(error = null)
     }
 }
 
-/**
- * UI state for the Add Contact screen
- */
 data class AddContactUiState(
-    val contactLink: String = "",
-    val nickname: String = "",
-    val isLoading: Boolean = false,
-    val error: String? = null
+    val contactLink: String? = null,
+    val isGenerating: Boolean = false,
+    val isAdding: Boolean = false,
+    val error: String? = null,
+    val success: Boolean = false
 )

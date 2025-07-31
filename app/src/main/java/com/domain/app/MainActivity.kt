@@ -16,7 +16,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-// Remove any SecureDataRepository import here
 import com.domain.app.ui.dashboard.DashboardScreen
 import com.domain.app.ui.data.DataScreen
 import com.domain.app.ui.settings.SettingsScreen
@@ -145,16 +144,6 @@ fun MainScreen() {
             }
         }
     }
-}
-
-/**
- * Screen definitions for navigation
- */
-sealed class Screen(val route: String) {
-    object Dashboard : Screen("dashboard")
-    object Data : Screen("data") 
-    object Social : Screen("social")
-    object Settings : Screen("settings")
 }
 
 /**
