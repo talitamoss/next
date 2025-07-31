@@ -1,5 +1,6 @@
-package com.domain.app.core.event
+package com.domain.app.core.events
 
+import com.domain.app.core.events.Event
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow

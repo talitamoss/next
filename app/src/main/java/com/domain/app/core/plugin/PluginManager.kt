@@ -6,9 +6,9 @@ import com.domain.app.core.data.DataPoint
 
 import com.domain.app.core.data.DataRepository
 
-import com.domain.app.core.event.Event
+import com.domain.app.core.events.Event
 
-import com.domain.app.core.event.EventBus
+import com.domain.app.core.events.EventBus
 
 import com.domain.app.core.plugin.security.*
 
