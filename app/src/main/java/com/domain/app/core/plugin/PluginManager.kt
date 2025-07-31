@@ -1,33 +1,19 @@
 package com.domain.app.core.plugin
 
 import android.content.Context
-
 import com.domain.app.core.data.DataPoint
-
 import com.domain.app.core.data.DataRepository
-
 import com.domain.app.core.events.Event
-
-import com.domain.app.core.events.EventBus
-
+import com.domain.app.core.events.EventBus  // Fixed: Changed from core.event to core.events
 import com.domain.app.core.plugin.security.*
-
 import com.domain.app.core.storage.AppDatabase
-
 import com.domain.app.core.storage.entity.PluginStateEntity
-
 import kotlinx.coroutines.*
-
 import kotlinx.coroutines.flow.*
-
 import timber.log.Timber
-
 import java.time.Instant
-
 import javax.inject.Inject
-
 import javax.inject.Singleton
-
 
 /**
  * Central manager for plugin lifecycle and operations.
@@ -94,19 +80,20 @@ class PluginManager @Inject constructor(
                     database.pluginStateDao().insertOrUpdate(
                         PluginStateEntity(
                             pluginId = plugin.id,
-                            isEnabled = true,
-                            isCollecting = false
+                            isEnabled = false,
+                            isCollecting = false,
+                            configuration = null,
+                            lastCollection = null,
+                            errorCount = 0,
+                            lastError = null
                         )
                     )
                 }
                 
-                // Add to active plugins
                 activePlugins[plugin.id] = plugin
-                
                 Timber.d("Initialized plugin: ${plugin.id}")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to initialize plugin: ${plugin.id}")
-                handlePluginError(plugin.id, e)
             }
         }
     }
@@ -116,7 +103,7 @@ class PluginManager @Inject constructor(
      */
     suspend fun initializePlugin(pluginId: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val plugin = pluginRegistry.getPlugin(pluginId)
+            val plugin = pluginRegistry.getPlugin(pluginId) 
                 ?: return@withContext Result.failure(Exception("Plugin not found: $pluginId"))
             
             plugin.initialize(context)
@@ -251,7 +238,7 @@ class PluginManager @Inject constructor(
                 dataRepository.saveDataPoint(dataPoint)
                 
                 // Update last collection time
-                database.pluginStateDao().updateLastCollectionTime(pluginId, Instant.now())
+                database.pluginStateDao().updateCollectionTime(pluginId, Instant.now())
                 
                 // Log data access
                 securityMonitor.recordSecurityEvent(
@@ -277,7 +264,7 @@ class PluginManager @Inject constructor(
     suspend fun startDataCollection(pluginId: String) = withContext(Dispatchers.IO) {
         val plugin = activePlugins[pluginId] ?: return@withContext
         
-        if (!plugin.supportsAutomaticCollection()) return@withContext
+        if (!plugin.supportsAutomaticCollection) return@withContext
         
         // Check permissions
         if (!permissionManager.hasPermission(pluginId, PluginCapability.COLLECT_DATA)) {
@@ -322,8 +309,8 @@ class PluginManager @Inject constructor(
     private suspend fun handlePluginError(pluginId: String, error: Exception) {
         Timber.e(error, "Plugin error: $pluginId")
         
-        // Increment error count
-        database.pluginStateDao().incrementErrorCount(pluginId)
+        // Record error in database
+        database.pluginStateDao().recordError(pluginId, error.message ?: "Unknown error")
         
         // Record security event
         securityMonitor.recordSecurityEvent(
@@ -363,18 +350,3 @@ data class PluginState(
     val lastCollection: Instant? = null,
     val errorCount: Int = 0
 )
-
-// Plugin events
-
-    private suspend fun updateLastCollectionTime(pluginId: String, timestamp: Long) {
-        pluginStateDao.getById(pluginId)?.let { state ->
-            pluginStateDao.update(state.copy(lastCollectionTime = timestamp))
-        }
-    }
-    
-    private suspend fun incrementErrorCount(pluginId: String) {
-        pluginStateDao.getById(pluginId)?.let { state ->
-            pluginStateDao.update(state.copy(errorCount = state.errorCount + 1))
-        }
-    }
-

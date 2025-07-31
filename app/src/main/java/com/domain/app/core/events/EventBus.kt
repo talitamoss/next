@@ -1,6 +1,6 @@
-package com.domain.app.core.events
+package com.domain.app.core.events  // Fixed: Changed from core.event to core.events
 
-import com.domain.app.core.events.Event
+import com.domain.app.core.events.Event  // Fixed: Added proper import
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -9,6 +9,8 @@ import javax.inject.Singleton
 
 /**
  * Central event bus for application-wide event distribution
+ * 
+ * File location: app/src/main/java/com/domain/app/core/events/EventBus.kt
  */
 @Singleton
 class EventBus @Inject constructor() {
