@@ -69,6 +69,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.lifecycle:lifecycle-process:2.7.0")
     implementation(libs.androidx.activity.compose)
+
+    // Datastore
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
     
     // Compose
     implementation(platform(libs.androidx.compose.bom))

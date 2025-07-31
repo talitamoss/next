@@ -5,7 +5,7 @@ import com.domain.app.core.data.DataPoint
 import com.domain.app.core.data.DataRepository
 import com.domain.app.core.event.Event
 import com.domain.app.core.event.EventBus
-import com.domain.app.core.plugin.PluginCapability
+import com.domain.app.core.plugin.security.*
 import com.domain.app.core.storage.AppDatabase
 import com.domain.app.core.storage.entity.PluginStateEntity
 import kotlinx.coroutines.*

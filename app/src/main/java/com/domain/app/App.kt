@@ -16,6 +16,11 @@ class App : Application() {
     companion object {
         lateinit var instance: App
             private set
+            
+        fun getStoredContactLink(context: Context): String? {
+            // Non-suspend version for Compose
+            return "contact-link-placeholder"
+        }
     }
     
     override fun onCreate() {
@@ -24,11 +29,11 @@ class App : Application() {
     }
     
     /**
-     * Get the stored contact link from preferences
+     * Get the stored contact link from preferences (suspend version)
      */
     suspend fun getStoredContactLink(): String? {
         // This would be implemented using the DataStore
         // For now, return a placeholder
-        return null
+        return "contact-link-placeholder"
     }
 }

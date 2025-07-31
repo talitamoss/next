@@ -16,8 +16,6 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 
 /**
  * Manages application preferences
- * 
- * File location: app/src/main/java/com/domain/app/core/preferences/PreferencesManager.kt
  */
 @Singleton
 class PreferencesManager @Inject constructor(

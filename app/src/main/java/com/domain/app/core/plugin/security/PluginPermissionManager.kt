@@ -34,13 +34,13 @@ class PluginPermissionManager @Inject constructor(
      */
     suspend fun grantPermissions(
         pluginId: String,
-        capabilities: Set<PluginCapability>,
+        permissions: Set<PluginCapability>,
         grantedBy: String = "user"
     ) {
         dataStore.edit { preferences ->
             val key = pluginPermissionsKey(pluginId)
             val currentPermissions = preferences[key] ?: emptySet()
-            preferences[key] = currentPermissions + capabilities.map { it.name }
+            preferences[key] = currentPermissions + permissions.map { it.name }
             
             // Record who granted the permissions
             preferences[pluginGrantedByKey(pluginId)] = grantedBy
@@ -53,12 +53,12 @@ class PluginPermissionManager @Inject constructor(
      */
     suspend fun revokePermissions(
         pluginId: String,
-        capabilities: Set<PluginCapability>
+        permissions: Set<PluginCapability>
     ) {
         dataStore.edit { preferences ->
             val key = pluginPermissionsKey(pluginId)
             val currentPermissions = preferences[key] ?: emptySet()
-            preferences[key] = currentPermissions - capabilities.map { it.name }
+            preferences[key] = currentPermissions - permissions.map { it.name }
             
             // If all permissions revoked, mark as denied
             if (preferences[key]?.isEmpty() == true) {
@@ -80,7 +80,7 @@ class PluginPermissionManager @Inject constructor(
     }
     
     /**
-     * Revoke all permissions (overload for backwards compatibility)
+     * Overload for backwards compatibility
      */
     suspend fun revokePermissions(pluginId: String) {
         revokeAllPermissions(pluginId)
@@ -97,7 +97,7 @@ class PluginPermissionManager @Inject constructor(
     }
     
     /**
-     * Check if a plugin has a permission (backwards compatibility)
+     * Check if a plugin has a permission string (backwards compatibility)
      */
     suspend fun hasPermission(pluginId: String, permission: String): Boolean {
         return try {

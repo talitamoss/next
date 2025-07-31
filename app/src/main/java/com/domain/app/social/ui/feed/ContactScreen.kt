@@ -1,14 +1,13 @@
-package com.domain.app.social.ui.contacts
+package com.domain.app.social.ui.feed
 
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavController
 
 /**
- * Contact management screen
- * TODO: Cashka will implement this
+ * Social contacts screen - renamed to avoid conflicts
  */
 @Composable
-fun ContactsScreen(navController: NavController) {
-    Text("TODO: Implement ContactsScreen")
+fun SocialContactsScreen(navController: NavController) {
+    Text("Social Contacts Screen - Implementation pending")
 }

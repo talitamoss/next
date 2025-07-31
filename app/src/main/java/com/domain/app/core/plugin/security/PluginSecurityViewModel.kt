@@ -1,6 +1,5 @@
 package com.domain.app.core.plugin.security
 
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.plugin.Plugin
@@ -11,104 +10,78 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * ViewModel for managing plugin security settings
- * 
- * File location: app/src/main/java/com/domain/app/core/plugin/security/PluginSecurityViewModel.kt
- */
 @HiltViewModel
 class PluginSecurityViewModel @Inject constructor(
     private val pluginManager: PluginManager,
     private val permissionManager: PluginPermissionManager,
-    private val auditLogger: SecurityAuditLogger,
-    savedStateHandle: SavedStateHandle
+    private val securityMonitor: SecurityMonitor,
+    private val auditLogger: SecurityAuditLogger
 ) : ViewModel() {
-    
-    private val pluginId: String = checkNotNull(savedStateHandle["pluginId"])
     
     private val _uiState = MutableStateFlow(PluginSecurityUiState())
     val uiState: StateFlow<PluginSecurityUiState> = _uiState.asStateFlow()
     
-    init {
-        loadPlugin()
-        observePermissions()
-        loadAuditLog()
-    }
-    
-    private fun loadPlugin() {
-        pluginManager.getPlugin(pluginId)?.let { plugin ->
-            _uiState.update { it.copy(plugin = plugin) }
-        }
-    }
-    
-    private fun observePermissions() {
+    fun loadPlugin(pluginId: String) {
         viewModelScope.launch {
-            permissionManager.getGrantedPermissionsFlow(pluginId).collect { permissions ->
-                _uiState.update { it.copy(grantedPermissions = permissions) }
-            }
-        }
-    }
-    
-    private fun loadAuditLog() {
-        viewModelScope.launch {
-            auditLogger.getRecentEvents(pluginId, limit = 50).collect { events ->
-                // Count data access by type
+            val plugin = pluginManager.getPlugin(pluginId)
+            if (plugin != null) {
+                _uiState.update { it.copy(plugin = plugin) }
+                
+                // Load granted permissions
+                val grantedPermissions = permissionManager.getGrantedPermissions(pluginId)
+                _uiState.update { it.copy(grantedPermissions = grantedPermissions) }
+                
+                // Load security summary
+                val summary = securityMonitor.getPluginSecuritySummary(pluginId)
+                _uiState.update { 
+                    it.copy(
+                        securitySummary = summary,
+                        riskScore = summary.riskScore
+                    )
+                }
+                
+                // Load security events
+                val events = securityMonitor.getPluginSecurityEvents(pluginId)
+                _uiState.update { it.copy(securityEvents = events) }
+                
+                // Calculate data access counts
                 val dataAccessCounts = events
                     .filterIsInstance<SecurityEvent.DataAccess>()
                     .groupBy { it.dataType }
                     .mapValues { it.value.size }
+                
                 _uiState.update { it.copy(dataAccessCount = dataAccessCounts) }
             }
         }
     }
     
-    fun requestPermission(capability: PluginCapability) {
-        _uiState.update { 
-            it.copy(
-                pendingPermission = capability,
-                showPermissionDialog = true
-            )
-        }
-    }
-    
-    fun grantPendingPermission() {
-        viewModelScope.launch {
-            val plugin = _uiState.value.plugin
-            val capability = _uiState.value.pendingPermission
-            
-            if (plugin != null && capability != null) {
-                permissionManager.grantPermissions(
-                    pluginId = plugin.id,
-                    capabilities = setOf(capability),
-                    grantedBy = "user_manual"
-                )
-            }
-            
-            _uiState.update { 
-                it.copy(
-                    pendingPermission = null,
-                    showPermissionDialog = false
-                )
-            }
-        }
-    }
-    
-    fun dismissPermissionDialog() {
-        _uiState.update { 
-            it.copy(
-                pendingPermission = null,
-                showPermissionDialog = false
-            )
-        }
-    }
-    
-    fun revokePermission(capability: PluginCapability) {
+    fun grantPermission(capability: PluginCapability) {
         viewModelScope.launch {
             _uiState.value.plugin?.let { plugin ->
-                permissionManager.revokeSpecificPermissions(
+                permissionManager.grantPermissions(
                     pluginId = plugin.id,
-                    capabilities = setOf(capability)
+                    permissions = setOf(capability),
+                    grantedBy = "user"
                 )
+                
+                // Reload permissions
+                val updatedPermissions = permissionManager.getGrantedPermissions(plugin.id)
+                _uiState.update { it.copy(grantedPermissions = updatedPermissions) }
+            }
+        }
+    }
+    
+    fun denyPermission(capability: PluginCapability) {
+        viewModelScope.launch {
+            _uiState.value.plugin?.let { plugin ->
+                permissionManager.revokePermissions(
+                    pluginId = plugin.id,
+                    permissions = setOf(capability)
+                )
+                
+                // Reload permissions
+                val updatedPermissions = permissionManager.getGrantedPermissions(plugin.id)
+                _uiState.update { it.copy(grantedPermissions = updatedPermissions) }
             }
         }
     }
@@ -116,41 +89,72 @@ class PluginSecurityViewModel @Inject constructor(
     fun revokeAllPermissions() {
         viewModelScope.launch {
             _uiState.value.plugin?.let { plugin ->
-                permissionManager.revokeAllPermissions(plugin.id)
+                permissionManager.revokePermissions(plugin.id)
+                _uiState.update { it.copy(grantedPermissions = emptySet()) }
             }
         }
     }
     
-    fun toggleCapability(capability: PluginCapability) {
+    fun deletePluginData() {
         viewModelScope.launch {
-            val plugin = _uiState.value.plugin ?: return@launch
-            val isGranted = _uiState.value.grantedPermissions.contains(capability)
-            
-            if (isGranted) {
-                permissionManager.revokePermissions(
-                    pluginId = plugin.id,
-                    capabilities = setOf(capability)
-                )
-            } else {
-                permissionManager.grantPermissions(
-                    pluginId = plugin.id,
-                    capabilities = setOf(capability),
-                    grantedBy = "user_toggle"
-                )
+            _uiState.value.plugin?.let { plugin ->
+                // TODO: Implement data deletion
+                _uiState.update { 
+                    it.copy(message = "Plugin data deleted")
+                }
             }
         }
     }
+    
+    fun blockPlugin() {
+        viewModelScope.launch {
+            _uiState.value.plugin?.let { plugin ->
+                // Revoke all permissions
+                permissionManager.revokePermissions(plugin.id)
+                
+                // Disable plugin
+                pluginManager.disablePlugin(plugin.id)
+                
+                // Record security event
+                securityMonitor.recordSecurityEvent(
+                    SecurityEvent.SecurityViolation(
+                        pluginId = plugin.id,
+                        violationType = "USER_BLOCKED",
+                        details = "Plugin blocked by user",
+                        severity = ViolationSeverity.HIGH
+                    )
+                )
+                
+                _uiState.update { 
+                    it.copy(message = "Plugin blocked")
+                }
+            }
+        }
+    }
+    
+    fun showSecurityHistory() {
+        _uiState.update { it.copy(showSecurityHistory = true) }
+    }
+    
+    fun dismissSecurityHistory() {
+        _uiState.update { it.copy(showSecurityHistory = false) }
+    }
+    
+    fun showSecurityInfo() {
+        _uiState.update { it.copy(showSecurityInfo = true) }
+    }
 }
 
-/**
- * UI State for plugin security screen
- */
 data class PluginSecurityUiState(
     val plugin: Plugin? = null,
     val grantedPermissions: Set<PluginCapability> = emptySet(),
+    val securitySummary: SecuritySummary? = null,
+    val securityEvents: List<SecurityEvent> = emptyList(),
+    val dataAccessCount: Map<String, Int> = emptyMap(),
+    val riskScore: Int = 0,
     val pendingPermission: PluginCapability? = null,
     val showPermissionDialog: Boolean = false,
-    val dataAccessCount: Map<String, Int> = emptyMap(),
-    val securityEvents: List<SecurityEvent> = emptyList(),
-    val isLoading: Boolean = false
+    val showSecurityHistory: Boolean = false,
+    val showSecurityInfo: Boolean = false,
+    val message: String? = null
 )

@@ -5,10 +5,9 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.NavController
 
 /**
- * Main social feed screen
- * TODO: Cashka will implement this
+ * P2P Social feed screen - renamed to avoid conflicts
  */
 @Composable
-fun SocialFeedScreen(navController: NavController) {
-    Text("TODO: Implement SocialFeedScreen")
+fun P2PSocialFeedScreen(navController: NavController) {
+    Text("P2P Social Feed - Implementation pending")
 }
