@@ -11,8 +11,9 @@ import com.domain.app.core.plugin.security.*
 class CounterPlugin : Plugin {
     override val id = "counter"
     
+    override val supportsAutomaticCollection = false
+    
     override val metadata = PluginMetadata(
-override val supportsAutomaticCollection = false
         name = "Counter",
         description = "Simple counting plugin",
         version = "1.0.0",

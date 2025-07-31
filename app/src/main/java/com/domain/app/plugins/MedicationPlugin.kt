@@ -11,6 +11,8 @@ import java.time.LocalTime
  */
 class MedicationPlugin : Plugin {
     override val id = "medication"
+    override val supportsAutomaticCollection = false
+
     
     override val metadata = PluginMetadata(
         name = "Medication",

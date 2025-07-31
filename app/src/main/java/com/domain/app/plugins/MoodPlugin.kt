@@ -11,6 +11,8 @@ import com.domain.app.core.plugin.security.*
 class MoodPlugin : Plugin {
     override val id = "mood"
     
+    override val supportsAutomaticCollection = false
+
     override val metadata = PluginMetadata(
         name = "Mood",
         description = "Track your emotional well-being",

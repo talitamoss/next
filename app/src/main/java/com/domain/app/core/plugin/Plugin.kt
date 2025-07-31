@@ -44,7 +44,12 @@ interface Plugin {
     
     // Cleanup
     suspend fun cleanup() {}
+    
+    // Automatic collection support
     val supportsAutomaticCollection: Boolean
+    
+    // Helper method for backward compatibility
+    fun supportsAutomaticCollection(): Boolean = supportsAutomaticCollection
 }
 
 /**
@@ -74,6 +79,7 @@ data class PluginMetadata(
  */
 enum class PluginCategory {
     HEALTH,
+    FITNESS,
     MENTAL_WELLNESS,
     PRODUCTIVITY,
     LIFESTYLE,
@@ -132,6 +138,7 @@ enum class DataSensitivity {
 enum class ContextTrigger {
     TIME_OF_DAY,
     LOCATION,
+    LOCATION_BASED,
     AFTER_EVENT,
     PATTERN_BASED,
     MANUAL_ONLY
@@ -188,7 +195,3 @@ data class RiskWarning(
     val message: String,
     val capability: PluginCapability
 )
-
-val supportsAutomaticCollection: Boolean get() = false
-
-

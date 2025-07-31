@@ -13,6 +13,8 @@ import java.time.Duration
 class SleepPlugin : Plugin {
     override val id = "sleep"
     
+    override val supportsAutomaticCollection = false
+
     override val metadata = PluginMetadata(
         name = "Sleep",
         description = "Track your sleep duration, quality, and dreams",

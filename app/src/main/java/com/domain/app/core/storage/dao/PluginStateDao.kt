@@ -17,8 +17,14 @@ interface PluginStateDao {
     @Query("SELECT * FROM plugin_states WHERE pluginId = :pluginId")
     suspend fun getState(pluginId: String): PluginStateEntity?
     
+    @Query("SELECT * FROM plugin_states WHERE pluginId = :pluginId")
+    suspend fun getById(pluginId: String): PluginStateEntity?
+    
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(state: PluginStateEntity)
+    
+    @Update
+    suspend fun update(state: PluginStateEntity)
     
     @Query("UPDATE plugin_states SET isEnabled = :enabled WHERE pluginId = :pluginId")
     suspend fun updateEnabledState(pluginId: String, enabled: Boolean)
@@ -29,11 +35,17 @@ interface PluginStateDao {
     @Query("UPDATE plugin_states SET lastCollection = :time WHERE pluginId = :pluginId")
     suspend fun updateCollectionTime(pluginId: String, time: Instant)
     
+    @Query("UPDATE plugin_states SET lastCollection = :timestamp WHERE pluginId = :pluginId")
+    suspend fun updateLastCollectionTime(pluginId: String, timestamp: Instant)
+    
     @Query("UPDATE plugin_states SET configuration = :config WHERE pluginId = :pluginId")
     suspend fun updateConfiguration(pluginId: String, config: String?)
     
     @Query("UPDATE plugin_states SET errorCount = errorCount + 1, lastError = :error WHERE pluginId = :pluginId")
     suspend fun recordError(pluginId: String, error: String)
+    
+    @Query("UPDATE plugin_states SET errorCount = errorCount + 1 WHERE pluginId = :pluginId")
+    suspend fun incrementErrorCount(pluginId: String)
     
     @Query("DELETE FROM plugin_states WHERE pluginId = :pluginId")
     suspend fun delete(pluginId: String)
@@ -41,12 +53,3 @@ interface PluginStateDao {
     @Query("DELETE FROM plugin_states")
     suspend fun deleteAll()
 }
-
-    suspend fun updateLastCollectionTime(pluginId: String, timestamp: Long) {
-        // TODO: Implement
-    }
-    
-    suspend fun incrementErrorCount(pluginId: String) {
-        // TODO: Implement  
-    }
-

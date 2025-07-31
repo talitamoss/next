@@ -1,4 +1,4 @@
-package com.domain.app.core.event
+package com.domain.app.core.events
 
 import com.domain.app.core.data.DataPoint
 import java.time.Instant
@@ -19,6 +19,16 @@ sealed interface Event {
     ) : Event
     
     data class PluginDisabled(
+        val pluginId: String,
+        override val timestamp: Instant = Instant.now()
+    ) : Event
+    
+    data class PluginStartedCollecting(
+        val pluginId: String,
+        override val timestamp: Instant = Instant.now()
+    ) : Event
+    
+    data class PluginStoppedCollecting(
         val pluginId: String,
         override val timestamp: Instant = Instant.now()
     ) : Event

@@ -11,6 +11,8 @@ import com.domain.app.core.plugin.security.*
 class ExercisePlugin : Plugin {
     override val id = "exercise"
     
+    override val supportsAutomaticCollection = false
+
     override val metadata = PluginMetadata(
         name = "Exercise",
         description = "Track your physical activities and workouts",
