@@ -1,5 +1,4 @@
 package com.domain.app.core.plugin
-import com.domain.app.core.plugin.PluginEvent.*
 
 import android.content.Context
 
@@ -366,10 +365,6 @@ data class PluginState(
 )
 
 // Plugin events
-sealed class PluginEvent {
-    data class PluginStartedCollecting(val pluginId: String) : PluginEvent()
-    data class PluginStoppedCollecting(val pluginId: String) : PluginEvent()
-}
 
     private suspend fun updateLastCollectionTime(pluginId: String, timestamp: Long) {
         pluginStateDao.getById(pluginId)?.let { state ->
