@@ -16,6 +16,8 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 
 /**
  * Manages application preferences
+ * 
+ * File location: app/src/main/java/com/domain/app/core/preferences/PreferencesManager.kt
  */
 @Singleton
 class PreferencesManager @Inject constructor(
@@ -31,6 +33,10 @@ class PreferencesManager @Inject constructor(
         val BACKUP_FREQUENCY = stringPreferencesKey("backup_frequency")
         val LAST_BACKUP = longPreferencesKey("last_backup")
         val DASHBOARD_PLUGINS = stringSetPreferencesKey("dashboard_plugins")
+        val FIRST_LAUNCH = booleanPreferencesKey("first_launch")
+        val USER_NICKNAME = stringPreferencesKey("user_nickname")
+        val ANALYTICS_ENABLED = booleanPreferencesKey("analytics_enabled")
+        val CRASH_REPORTING_ENABLED = booleanPreferencesKey("crash_reporting_enabled")
     }
     
     /**
@@ -46,6 +52,18 @@ class PreferencesManager @Inject constructor(
     val dashboardPlugins: Flow<Set<String>> = dataStore.data.map { preferences ->
         preferences[DASHBOARD_PLUGINS] ?: emptySet()
     }
+    
+    /**
+     * Get theme mode
+     */
+    val themeMode: Flow<String> = dataStore.data.map { preferences ->
+        preferences[THEME_MODE] ?: "system"
+    }
+    
+    /**
+     * Get current theme (for compatibility)
+     */
+    val currentTheme: Flow<String> = themeMode
     
     /**
      * Add plugin to enabled list
@@ -102,13 +120,6 @@ class PreferencesManager @Inject constructor(
     }
     
     /**
-     * Get theme mode
-     */
-    val themeMode: Flow<String> = dataStore.data.map { preferences ->
-        preferences[THEME_MODE] ?: "system"
-    }
-    
-    /**
      * Set theme mode
      */
     suspend fun setThemeMode(mode: String) {
@@ -116,6 +127,11 @@ class PreferencesManager @Inject constructor(
             preferences[THEME_MODE] = mode
         }
     }
+    
+    /**
+     * Update theme (alias for setThemeMode)
+     */
+    suspend fun updateTheme(theme: String) = setThemeMode(theme)
     
     /**
      * Get backup frequency
@@ -150,11 +166,140 @@ class PreferencesManager @Inject constructor(
     }
     
     /**
+     * Check if first launch
+     */
+    val isFirstLaunch: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[FIRST_LAUNCH] ?: true
+    }
+    
+    /**
+     * Mark first launch complete
+     */
+    suspend fun setFirstLaunchComplete() {
+        dataStore.edit { preferences ->
+            preferences[FIRST_LAUNCH] = false
+        }
+    }
+    
+    /**
+     * Get user nickname
+     */
+    val userNickname: Flow<String> = dataStore.data.map { preferences ->
+        preferences[USER_NICKNAME] ?: "User"
+    }
+    
+    /**
+     * Set user nickname
+     */
+    suspend fun setUserNickname(nickname: String) {
+        dataStore.edit { preferences ->
+            preferences[USER_NICKNAME] = nickname
+        }
+    }
+    
+    /**
+     * Get analytics enabled
+     */
+    val analyticsEnabled: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[ANALYTICS_ENABLED] ?: false
+    }
+    
+    /**
+     * Set analytics enabled
+     */
+    suspend fun setAnalyticsEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[ANALYTICS_ENABLED] = enabled
+        }
+    }
+    
+    /**
+     * Get crash reporting enabled
+     */
+    val crashReportingEnabled: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[CRASH_REPORTING_ENABLED] ?: false
+    }
+    
+    /**
+     * Set crash reporting enabled
+     */
+    suspend fun setCrashReportingEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[CRASH_REPORTING_ENABLED] = enabled
+        }
+    }
+    
+    /**
      * Clear all preferences (for testing/reset)
      */
     suspend fun clearAll() {
         dataStore.edit { preferences ->
             preferences.clear()
+        }
+    }
+    
+    /**
+     * Export all preferences as a map
+     */
+    suspend fun exportPreferences(): Map<String, Any?> {
+        val preferences = dataStore.data.first()
+        return mapOf(
+            "enabled_plugins" to preferences[ENABLED_PLUGINS],
+            "dashboard_plugins" to preferences[DASHBOARD_PLUGINS],
+            "theme_mode" to preferences[THEME_MODE],
+            "backup_frequency" to preferences[BACKUP_FREQUENCY],
+            "last_backup" to preferences[LAST_BACKUP],
+            "user_nickname" to preferences[USER_NICKNAME],
+            "analytics_enabled" to preferences[ANALYTICS_ENABLED],
+            "crash_reporting_enabled" to preferences[CRASH_REPORTING_ENABLED]
+        )
+    }
+    
+    /**
+     * Import preferences from a map
+     */
+    suspend fun importPreferences(prefsMap: Map<String, Any?>) {
+        dataStore.edit { preferences ->
+            prefsMap["enabled_plugins"]?.let { 
+                if (it is Set<*>) {
+                    preferences[ENABLED_PLUGINS] = it.filterIsInstance<String>().toSet()
+                }
+            }
+            prefsMap["dashboard_plugins"]?.let {
+                if (it is Set<*>) {
+                    preferences[DASHBOARD_PLUGINS] = it.filterIsInstance<String>().toSet()
+                }
+            }
+            prefsMap["theme_mode"]?.let {
+                if (it is String) {
+                    preferences[THEME_MODE] = it
+                }
+            }
+            prefsMap["backup_frequency"]?.let {
+                if (it is String) {
+                    preferences[BACKUP_FREQUENCY] = it
+                }
+            }
+            prefsMap["last_backup"]?.let {
+                if (it is Long) {
+                    preferences[LAST_BACKUP] = it
+                }
+            }
+            prefsMap["user_nickname"]?.let {
+                if (it is String) {
+                    preferences[USER_NICKNAME] = it
+                }
+            }
+            prefsMap["analytics_enabled"]?.let {
+                if (it is Boolean) {
+                    preferences[ANALYTICS_ENABLED] = it
+                }
+            }
+            prefsMap["crash_reporting_enabled"]?.let {
+                if (it is Boolean) {
+                    preferences[CRASH_REPORTING_ENABLED] = it
+                }
+            }
         }
     }
 }

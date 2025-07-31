@@ -2,6 +2,7 @@ package com.domain.app.ui.dashboard
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -199,7 +200,7 @@ fun DashboardPluginTile(
                 verticalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    imageVector = when(plugin.icon) {
+                    imageVector = when(plugin.metadata.icon) {
                         "mood" -> Icons.Default.Mood
                         "fitness" -> Icons.Default.FitnessCenter
                         "sleep" -> Icons.Default.Bedtime
@@ -207,7 +208,7 @@ fun DashboardPluginTile(
                         "work" -> Icons.Default.Work
                         else -> Icons.Default.Extension
                     },
-                    contentDescription = plugin.name,
+                    contentDescription = plugin.metadata.name,
                     modifier = Modifier.size(32.dp),
                     tint = if (hasPermissions) {
                         MaterialTheme.colorScheme.primary
@@ -217,7 +218,7 @@ fun DashboardPluginTile(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = plugin.name,
+                    text = plugin.metadata.name,
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center
                 )
@@ -238,73 +239,6 @@ fun DashboardPluginTile(
     }
 }
 
-@Composable
-fun SummaryCard(
-    title: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelMedium
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineMedium
-            )
-        }
-    }
-}
-
-@Composable
-fun AddPluginTile(onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .aspectRatio(1f)
-            .combinedClickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = CardDefaults.outlinedCardBorder()
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Add Plugin",
-                modifier = Modifier.size(32.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-}
-
-@Composable
-fun EmptyPluginTile() {
-    Card(
-        modifier = Modifier.aspectRatio(1f),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)
-        )
-    ) {
-        Box(modifier = Modifier.fillMaxSize())
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuickAddBottomSheet(
@@ -319,7 +253,7 @@ fun QuickAddBottomSheet(
                 .padding(16.dp)
         ) {
             Text(
-                text = "Quick Add: ${plugin.name}",
+                text = "Quick Add: ${plugin.metadata.name}",
                 style = MaterialTheme.typography.headlineSmall
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -361,8 +295,8 @@ fun PluginSelectorBottomSheet(
             // List available plugins
             availablePlugins.forEach { plugin ->
                 ListItem(
-                    headlineContent = { Text(plugin.name) },
-                    supportingContent = { Text(plugin.description) },
+                    headlineContent = { Text(plugin.metadata.name) },
+                    supportingContent = { Text(plugin.metadata.description) },
                     leadingContent = {
                         Icon(
                             imageVector = Icons.Default.Extension,
@@ -391,7 +325,7 @@ fun PluginPermissionQuickDialog(
         onDismissRequest = onDeny,
         title = { Text("Permission Required") },
         text = { 
-            Text("${plugin.name} needs permission to collect data. Grant access?")
+            Text("${plugin.metadata.name} needs permission to collect data. Grant access?")
         },
         confirmButton = {
             TextButton(onClick = onGrant) {

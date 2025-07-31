@@ -4,6 +4,7 @@ import android.content.Context
 import com.domain.app.core.data.DataRepository
 import com.domain.app.network.*
 import com.domain.app.network.protocol.P2PProtocolHandler
+import com.domain.app.network.protocol.P2PProtocolHandlerImpl
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -35,7 +36,7 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideP2PProtocolHandler(): P2PProtocolHandler {
-        return P2PProtocolHandler()
+        return P2PProtocolHandlerImpl()
     }
     
     @Provides

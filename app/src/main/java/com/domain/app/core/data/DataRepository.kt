@@ -4,6 +4,7 @@ import com.domain.app.core.storage.AppDatabase
 import com.domain.app.core.storage.entity.DataPointEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -12,6 +13,11 @@ import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Repository for managing data points
+ * 
+ * File location: app/src/main/java/com/domain/app/core/data/DataRepository.kt
+ */
 @Singleton
 class DataRepository @Inject constructor(
     private val database: AppDatabase
@@ -32,9 +38,43 @@ class DataRepository @Inject constructor(
     }
     
     /**
+     * Insert a single data point (convenience method)
+     */
+    suspend fun insertData(dataPoint: DataPoint) = saveDataPoint(dataPoint)
+    
+    /**
      * Insert data points (alias for saveDataPoints for compatibility)
      */
     suspend fun insertDataPoints(dataPoints: List<DataPoint>) = saveDataPoints(dataPoints)
+    
+    /**
+     * Get all data
+     */
+    fun getAllData(): Flow<List<DataPoint>> = flow {
+        val allData = withContext(Dispatchers.IO) {
+            database.dataPointDao().getLatestDataPoints(Int.MAX_VALUE)
+                .map { entities -> entities.map { it.toDataPoint() } }
+        }
+        allData.collect { emit(it) }
+    }
+    
+    /**
+     * Get data in time range
+     */
+    fun getDataInTimeRange(start: Long, end: Long): Flow<List<DataPoint>> = flow {
+        val startInstant = Instant.ofEpochMilli(start)
+        val endInstant = Instant.ofEpochMilli(end)
+        
+        val data = withContext(Dispatchers.IO) {
+            database.dataPointDao().getRecentData(startInstant)
+                .map { entities -> 
+                    entities
+                        .map { it.toDataPoint() }
+                        .filter { it.timestamp.toEpochMilli() in start..end }
+                }
+        }
+        data.collect { emit(it) }
+    }
     
     /**
      * Get data for a specific plugin

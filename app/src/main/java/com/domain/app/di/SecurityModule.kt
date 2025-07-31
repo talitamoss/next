@@ -19,19 +19,16 @@ object SecurityModule {
     
     @Provides
     @Singleton
-    fun provideSecurityAuditLogger(
-        database: AppDatabase
-    ): SecurityAuditLogger {
-        return SecurityAuditLogger(database)
+    fun provideSecurityAuditLogger(): SecurityAuditLogger {
+        return SecurityAuditLogger()
     }
     
     @Provides
     @Singleton
     fun providePluginPermissionManager(
-        @ApplicationContext context: Context,
-        auditLogger: SecurityAuditLogger
+        @ApplicationContext context: Context
     ): PluginPermissionManager {
-        return PluginPermissionManager(context, auditLogger)
+        return PluginPermissionManager(context)
     }
     
     @Provides

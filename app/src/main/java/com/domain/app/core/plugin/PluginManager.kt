@@ -10,6 +10,7 @@ import com.domain.app.core.storage.AppDatabase
 import com.domain.app.core.storage.entity.PluginStateEntity
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import timber.log.Timber
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -17,13 +18,15 @@ import javax.inject.Singleton
 /**
  * Central manager for plugin lifecycle and operations.
  * Handles plugin initialization, state management, and secure data operations.
+ * 
+ * File location: app/src/main/java/com/domain/app/core/plugin/PluginManager.kt
  */
 @Singleton
 class PluginManager @Inject constructor(
     private val context: Context,
     private val database: AppDatabase,
     private val dataRepository: DataRepository,
-    private val pluginRegistry: PluginRegistry,
+    val pluginRegistry: PluginRegistry,
     private val permissionManager: PluginPermissionManager,
     private val securityMonitor: SecurityMonitor
 ) {
@@ -41,6 +44,7 @@ class PluginManager @Inject constructor(
                     states.associate { entity ->
                         entity.pluginId to PluginState(
                             pluginId = entity.pluginId,
+                            plugin = activePlugins[entity.pluginId],
                             isEnabled = entity.isEnabled,
                             isCollecting = entity.isCollecting,
                             lastCollection = entity.lastCollection,
@@ -51,6 +55,11 @@ class PluginManager @Inject constructor(
                 .collect { states ->
                     _pluginStates.value = states
                 }
+        }
+        
+        // Initialize plugins on startup
+        scope.launch {
+            initializePlugins()
         }
     }
     
@@ -80,9 +89,31 @@ class PluginManager @Inject constructor(
                 // Add to active plugins
                 activePlugins[plugin.id] = plugin
                 
+                Timber.d("Initialized plugin: ${plugin.id}")
             } catch (e: Exception) {
+                Timber.e(e, "Failed to initialize plugin: ${plugin.id}")
                 handlePluginError(plugin.id, e)
             }
+        }
+    }
+    
+    /**
+     * Initialize a specific plugin
+     */
+    suspend fun initializePlugin(pluginId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val plugin = pluginRegistry.getPlugin(pluginId)
+                ?: return@withContext Result.failure(Exception("Plugin not found: $pluginId"))
+            
+            plugin.initialize(context)
+            activePlugins[pluginId] = plugin
+            
+            // Enable in database
+            database.pluginStateDao().updateEnabledState(pluginId, true)
+            
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
     
@@ -97,10 +128,17 @@ class PluginManager @Inject constructor(
             
             // Publish event  
             EventBus.post(Event.PluginEnabled(pluginId))
+            
+            Timber.d("Enabled plugin: $pluginId")
         } catch (e: Exception) {
             handlePluginError(pluginId, e)
         }
     }
+    
+    /**
+     * Enable a plugin by instance
+     */
+    suspend fun enablePlugin(plugin: Plugin) = enablePlugin(plugin.id)
     
     /**
      * Disable a plugin
@@ -114,16 +152,32 @@ class PluginManager @Inject constructor(
             
             // Publish event
             EventBus.post(Event.PluginDisabled(pluginId))
+            
+            Timber.d("Disabled plugin: $pluginId")
         } catch (e: Exception) {
             handlePluginError(pluginId, e)
         }
     }
     
     /**
+     * Disable a plugin by instance
+     */
+    suspend fun disablePlugin(plugin: Plugin) = disablePlugin(plugin.id)
+    
+    /**
+     * Get all plugins
+     */
+    suspend fun getAllPlugins(): List<Plugin> {
+        return pluginRegistry.getAllPlugins()
+    }
+    
+    /**
      * Get all active plugins
      */
     fun getAllActivePlugins(): List<Plugin> {
-        return activePlugins.values.toList()
+        return _pluginStates.value
+            .filter { it.value.isEnabled }
+            .mapNotNull { it.value.plugin }
     }
     
     /**
@@ -163,17 +217,13 @@ class PluginManager @Inject constructor(
     ): DataPoint? = withContext(Dispatchers.IO) {
         val plugin = activePlugins[pluginId] ?: return@withContext null
         
-        if (!plugin.supportsManualEntry()) {
-            return@withContext null
-        }
-        
         // Check permissions
-        if (!permissionManager.hasCapability(pluginId, PluginCapability.COLLECT_DATA)) {
+        if (!permissionManager.hasPermission(pluginId, PluginCapability.COLLECT_DATA)) {
             securityMonitor.recordSecurityEvent(
                 SecurityEvent.PermissionDenied(
                     pluginId = pluginId,
                     capability = PluginCapability.COLLECT_DATA,
-                    reason = "Plugin lacks COLLECT_DATA permission"
+                    reason = "Manual entry permission denied"
                 )
             )
             return@withContext null
@@ -183,75 +233,85 @@ class PluginManager @Inject constructor(
             val dataPoint = plugin.createManualEntry(data)
             
             if (dataPoint != null) {
-                // Save data point
+                // Save to repository
                 dataRepository.saveDataPoint(dataPoint)
                 
                 // Update last collection time
-                database.pluginStateDao().updateCollectionTime(pluginId, Instant.now())
+                database.pluginStateDao().updateLastCollectionTime(pluginId, Instant.now())
                 
-                return@withContext dataPoint
+                // Log data access
+                securityMonitor.recordSecurityEvent(
+                    SecurityEvent.DataAccess(
+                        pluginId = pluginId,
+                        dataType = dataPoint.type,
+                        accessType = AccessType.WRITE,
+                        recordCount = 1
+                    )
+                )
             }
             
-            return@withContext null
+            dataPoint
         } catch (e: Exception) {
             handlePluginError(pluginId, e)
-            return@withContext null
+            null
         }
     }
     
     /**
-     * Update plugin configuration
+     * Start automatic data collection for a plugin
      */
-    suspend fun updatePluginConfiguration(
-        pluginId: String,
-        configuration: Map<String, Any>
-    ) = withContext(Dispatchers.IO) {
+    suspend fun startDataCollection(pluginId: String) = withContext(Dispatchers.IO) {
+        val plugin = activePlugins[pluginId] ?: return@withContext
+        
+        if (!plugin.supportsAutomaticCollection()) return@withContext
+        
+        // Check permissions
+        if (!permissionManager.hasPermission(pluginId, PluginCapability.COLLECT_DATA)) {
+            securityMonitor.recordSecurityEvent(
+                SecurityEvent.PermissionDenied(
+                    pluginId = pluginId,
+                    capability = PluginCapability.COLLECT_DATA,
+                    reason = "Automatic collection permission denied"
+                )
+            )
+            return@withContext
+        }
+        
         try {
-            val configJson = configuration.toString() // In production, use proper JSON serialization
-            database.pluginStateDao().updateConfiguration(pluginId, configJson)
+            database.pluginStateDao().updateCollectingState(pluginId, true)
+            
+            // Plugin-specific collection logic would go here
+            // This is a placeholder for the actual implementation
+            
+            EventBus.post(Event.PluginStartedCollecting(pluginId))
         } catch (e: Exception) {
             handlePluginError(pluginId, e)
         }
     }
     
     /**
-     * Get secure data repository for a plugin
+     * Stop automatic data collection for a plugin
      */
-    fun getSecureDataRepository(pluginId: String): SecureDataRepository? {
-        val plugin = activePlugins[pluginId] ?: return null
-        val grantedCapabilities = runBlocking { 
-            permissionManager.getGrantedPermissions(pluginId) 
+    suspend fun stopDataCollection(pluginId: String) = withContext(Dispatchers.IO) {
+        try {
+            database.pluginStateDao().updateCollectingState(pluginId, false)
+            
+            EventBus.post(Event.PluginStoppedCollecting(pluginId))
+        } catch (e: Exception) {
+            handlePluginError(pluginId, e)
         }
-        
-        return SecureDataRepository(
-            actualRepository = dataRepository,
-            pluginId = pluginId,
-            grantedCapabilities = grantedCapabilities,
-            dataAccessScopes = plugin.securityManifest.dataAccess,
-            securityMonitor = securityMonitor
-        )
     }
     
     /**
-     * Clean up all plugins
+     * Handle plugin errors
      */
-    suspend fun cleanup() {
-        activePlugins.values.forEach { plugin ->
-            try {
-                plugin.cleanup()
-            } catch (e: Exception) {
-                // Log error but continue cleanup
-            }
-        }
-        scope.cancel()
-    }
-    
-    private suspend fun handlePluginError(pluginId: String, error: Throwable) {
-        database.pluginStateDao().recordError(
-            pluginId, 
-            error.message ?: "Unknown error"
-        )
+    private suspend fun handlePluginError(pluginId: String, error: Exception) {
+        Timber.e(error, "Plugin error: $pluginId")
         
+        // Increment error count
+        database.pluginStateDao().incrementErrorCount(pluginId)
+        
+        // Record security event
         securityMonitor.recordSecurityEvent(
             SecurityEvent.SecurityViolation(
                 pluginId = pluginId,
@@ -260,13 +320,32 @@ class PluginManager @Inject constructor(
                 severity = ViolationSeverity.MEDIUM
             )
         )
+        
+        // Disable plugin if too many errors
+        val state = getPluginState(pluginId)
+        if (state != null && state.errorCount > 10) {
+            disablePlugin(pluginId)
+            EventBus.post(Event.PluginError(pluginId, "Plugin disabled due to repeated errors"))
+        }
+    }
+    
+    /**
+     * Clean up resources
+     */
+    fun cleanup() {
+        scope.cancel()
+        activePlugins.clear()
     }
 }
 
+/**
+ * Plugin state data class
+ */
 data class PluginState(
     val pluginId: String,
-    val isEnabled: Boolean,
-    val isCollecting: Boolean,
-    val lastCollection: Instant?,
-    val errorCount: Int
+    val plugin: Plugin? = null,
+    val isEnabled: Boolean = false,
+    val isCollecting: Boolean = false,
+    val lastCollection: Instant? = null,
+    val errorCount: Int = 0
 )

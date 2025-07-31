@@ -82,11 +82,11 @@ fun PluginSecurityScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = uiState.plugin?.name ?: "",
+                                text = uiState.plugin?.metadata?.name ?: "",
                                 style = MaterialTheme.typography.headlineSmall
                             )
                             Text(
-                                text = "Trust Level: ${uiState.trustLevel}",
+                                text = "Trust Level: ${uiState.plugin?.trustLevel?.name ?: ""}",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
@@ -139,7 +139,7 @@ fun PluginSecurityScreen(
                 }
                 
                 // Security Log Section
-                if (uiState.securityLogs.isNotEmpty()) {
+                if (uiState.securityEvents.isNotEmpty()) {
                     item {
                         Text(
                             text = "Security Log",
@@ -147,7 +147,7 @@ fun PluginSecurityScreen(
                         )
                     }
                     
-                    items(uiState.securityLogs) { log ->
+                    items(uiState.securityEvents.take(10)) { event ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
@@ -155,15 +155,30 @@ fun PluginSecurityScreen(
                             )
                         ) {
                             ListItem(
-                                headlineContent = { Text(log.event) },
+                                headlineContent = { 
+                                    Text(when(event) {
+                                        is SecurityEvent.PermissionGranted -> "Permission Granted"
+                                        is SecurityEvent.PermissionDenied -> "Permission Denied"
+                                        is SecurityEvent.PermissionRequested -> "Permission Requested"
+                                        is SecurityEvent.SecurityViolation -> "Security Violation"
+                                        is SecurityEvent.DataAccess -> "Data Access"
+                                    })
+                                },
                                 supportingContent = { 
-                                    Text(log.timestamp.toString())
+                                    Text(when(event) {
+                                        is SecurityEvent.PermissionGranted -> event.capability.name
+                                        is SecurityEvent.PermissionDenied -> event.capability.name
+                                        is SecurityEvent.PermissionRequested -> event.capability.name
+                                        is SecurityEvent.SecurityViolation -> event.violationType
+                                        is SecurityEvent.DataAccess -> "${event.accessType} - ${event.recordCount} records"
+                                    })
                                 },
                                 leadingContent = {
                                     Icon(
-                                        imageVector = when(log.event) {
-                                            "Permission Granted" -> Icons.Default.CheckCircle
-                                            "Permission Revoked" -> Icons.Default.Cancel
+                                        imageVector = when(event) {
+                                            is SecurityEvent.PermissionGranted -> Icons.Default.CheckCircle
+                                            is SecurityEvent.PermissionDenied -> Icons.Default.Cancel
+                                            is SecurityEvent.SecurityViolation -> Icons.Default.Warning
                                             else -> Icons.Default.Info
                                         },
                                         contentDescription = null
@@ -187,10 +202,11 @@ private val PluginCapability.displayName: String
         PluginCapability.COLLECT_DATA -> "Collect Data"
         PluginCapability.SHARE_DATA -> "Share Data"
         PluginCapability.NETWORK_ACCESS -> "Network Access"
-        PluginCapability.BACKGROUND_PROCESSING -> "Background Processing"
-        PluginCapability.NOTIFICATION -> "Send Notifications"
-        PluginCapability.STORAGE_ACCESS -> "Storage Access"
-        PluginCapability.SENSOR_ACCESS -> "Sensor Access"
+        PluginCapability.BACKGROUND_PROCESS -> "Background Processing"
+        PluginCapability.SHOW_NOTIFICATIONS -> "Send Notifications"
+        PluginCapability.LOCAL_STORAGE -> "Storage Access"
+        PluginCapability.ACCESS_SENSORS -> "Sensor Access"
+        else -> this.getDescription()
     }
 
 private val PluginCapability.description: String
@@ -198,8 +214,9 @@ private val PluginCapability.description: String
         PluginCapability.COLLECT_DATA -> "Allow plugin to collect and store data"
         PluginCapability.SHARE_DATA -> "Allow plugin to share data with other plugins"
         PluginCapability.NETWORK_ACCESS -> "Allow plugin to access the internet"
-        PluginCapability.BACKGROUND_PROCESSING -> "Allow plugin to run in background"
-        PluginCapability.NOTIFICATION -> "Allow plugin to send notifications"
-        PluginCapability.STORAGE_ACCESS -> "Allow plugin to access device storage"
-        PluginCapability.SENSOR_ACCESS -> "Allow plugin to access device sensors"
+        PluginCapability.BACKGROUND_PROCESS -> "Allow plugin to run in background"
+        PluginCapability.SHOW_NOTIFICATIONS -> "Allow plugin to send notifications"
+        PluginCapability.LOCAL_STORAGE -> "Allow plugin to access device storage"
+        PluginCapability.ACCESS_SENSORS -> "Allow plugin to access device sensors"
+        else -> this.getDescription()
     }
