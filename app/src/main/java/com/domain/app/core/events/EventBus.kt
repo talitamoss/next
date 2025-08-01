@@ -1,6 +1,7 @@
-package com.domain.app.core.events  // Fixed: Changed from core.event to core.events
+package com.domain.app.core.events
 
-import com.domain.app.core.events.Event  // Fixed: Added proper import
+
+import com.domain.app.core.events.Event
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow

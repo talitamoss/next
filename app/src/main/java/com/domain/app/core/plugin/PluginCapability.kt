@@ -128,44 +128,44 @@ fun PluginCapability.getDescription(): String {
 fun PluginCapability.getRiskLevel(): RiskLevel {
     return when (this) {
         // Low risk capabilities
-        COLLECT_DATA,
-        READ_OWN_DATA,
-        LOCAL_STORAGE,
-        CACHE_DATA,
-        ANALYTICS_BASIC -> RiskLevel.LOW
+        PluginCapability.COLLECT_DATA,
+        PluginCapability.READ_OWN_DATA,
+        PluginCapability.LOCAL_STORAGE,
+        PluginCapability.CACHE_DATA,
+        PluginCapability.ANALYTICS_BASIC -> RiskLevel.LOW
         
         // Medium risk capabilities
-        SHOW_NOTIFICATIONS,
-        EXPORT_DATA,
-        IMPORT_DATA,
-        CUSTOM_UI,
-        MODIFY_THEME,
-        ADD_MENU_ITEMS,
-        FULLSCREEN_UI,
-        ANALYTICS_DETAILED -> RiskLevel.MEDIUM
+        PluginCapability.SHOW_NOTIFICATIONS,
+        PluginCapability.EXPORT_DATA,
+        PluginCapability.IMPORT_DATA,
+        PluginCapability.CUSTOM_UI,
+        PluginCapability.MODIFY_THEME,
+        PluginCapability.ADD_MENU_ITEMS,
+        PluginCapability.FULLSCREEN_UI,
+        PluginCapability.ANALYTICS_DETAILED -> RiskLevel.MEDIUM
         
         // High risk capabilities
-        READ_ALL_DATA,
-        MODIFY_DATA,
-        DELETE_DATA,
-        NETWORK_ACCESS,
-        FILE_ACCESS,
-        SHARE_DATA,
-        INTEGRATE_SERVICES,
-        ACCESS_SENSORS,
-        ACCESS_LOCATION,
-        ACCESS_BIOMETRIC,
-        BACKGROUND_SYNC,
-        BACKGROUND_PROCESS,
-        SEND_EMAILS,
-        SEND_SMS,
-        PUSH_NOTIFICATIONS,
-        CLOUD_STORAGE -> RiskLevel.HIGH
+        PluginCapability.READ_ALL_DATA,
+        PluginCapability.MODIFY_DATA,
+        PluginCapability.DELETE_DATA,
+        PluginCapability.NETWORK_ACCESS,
+        PluginCapability.FILE_ACCESS,
+        PluginCapability.SHARE_DATA,
+        PluginCapability.INTEGRATE_SERVICES,
+        PluginCapability.ACCESS_SENSORS,
+        PluginCapability.ACCESS_LOCATION,
+        PluginCapability.ACCESS_BIOMETRIC,
+        PluginCapability.BACKGROUND_SYNC,
+        PluginCapability.BACKGROUND_PROCESS,
+        PluginCapability.SEND_EMAILS,
+        PluginCapability.SEND_SMS,
+        PluginCapability.PUSH_NOTIFICATIONS,
+        PluginCapability.CLOUD_STORAGE -> RiskLevel.HIGH
         
         // Critical risk capabilities
-        CAMERA_ACCESS,
-        MICROPHONE_ACCESS,
-        MODIFY_SETTINGS,
-        INSTALL_PLUGINS -> RiskLevel.CRITICAL
+        PluginCapability.CAMERA_ACCESS,
+        PluginCapability.MICROPHONE_ACCESS,
+        PluginCapability.MODIFY_SETTINGS,
+        PluginCapability.INSTALL_PLUGINS -> RiskLevel.CRITICAL
     }
 }
