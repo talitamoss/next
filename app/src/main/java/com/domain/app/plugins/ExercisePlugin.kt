@@ -117,7 +117,7 @@ class ExercisePlugin : Plugin {
             QuickOption("30 min walk", mapOf("activity" to "walking", "duration" to 30), "🚶"),
             QuickOption("Gym session", mapOf("activity" to "gym", "duration" to 60), "🏋️"),
             QuickOption("Morning run", mapOf("activity" to "running", "duration" to 30), "🏃"),
-            QuickOption("Custom", null, "➕")
+            QuickOption("Custom", -1, "➕")
         )
     )
     

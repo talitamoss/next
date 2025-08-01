@@ -219,7 +219,7 @@ class PluginManager @Inject constructor(
         val plugin = activePlugins[pluginId] ?: return@withContext null
         
         // Check permissions
-        if (!permissionManager.hasPermission(pluginId, PluginCapability.COLLECT_DATA)) {
+        if (!permissionManager.hasCapability(pluginId, PluginCapability.COLLECT_DATA)) {
             securityMonitor.recordSecurityEvent(
                 SecurityEvent.PermissionDenied(
                     pluginId = pluginId,
@@ -267,7 +267,7 @@ class PluginManager @Inject constructor(
         if (!plugin.supportsAutomaticCollection) return@withContext
         
         // Check permissions
-        if (!permissionManager.hasPermission(pluginId, PluginCapability.COLLECT_DATA)) {
+        if (!permissionManager.hasCapability(pluginId, PluginCapability.COLLECT_DATA)) {
             securityMonitor.recordSecurityEvent(
                 SecurityEvent.PermissionDenied(
                     pluginId = pluginId,

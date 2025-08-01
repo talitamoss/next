@@ -33,6 +33,13 @@ object SecurityModule {
     
     @Provides
     @Singleton
+    @Provides
+    @Singleton
+    fun provideSecurityMonitor(): SecurityMonitor {
+        return SecurityMonitor()
+    }
+
+
     fun provideDataEncryption(): DataEncryption {
         return DataEncryption()
     }

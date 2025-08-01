@@ -122,7 +122,7 @@ class DashboardViewModel @Inject constructor(
     fun grantQuickAddPermission() {
         viewModelScope.launch {
             _selectedPlugin.value?.let { plugin ->
-                permissionManager.grantPermission(plugin.id, PluginCapability.COLLECT_DATA)
+                permissionManager.grantPermissions(plugin.id, setOf(PluginCapability.COLLECT_DATA))
                 _uiState.update { it.copy(needsPermission = false) }
             }
         }
