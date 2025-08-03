@@ -4,8 +4,8 @@ import androidx.annotation.DrawableRes
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Core plugin interface
- * All plugins must implement this interface to integrate with the app
+ * Core plugin interface - simplified without UI components
+ * Focuses on data collection and management
  * 
  * File location: app/src/main/java/com/domain/app/core/plugin/Plugin.kt
  */
@@ -46,14 +46,19 @@ interface Plugin {
     suspend fun collectData(): PluginData?
     
     /**
-     * Get plugin configuration UI (if supported)
+     * Get plugin configuration parameters
      */
-    fun getConfigurationUI(): PluginConfigUI?
+    fun getConfiguration(): PluginConfiguration
     
     /**
-     * Get data visualization UI (if supported)
+     * Update plugin configuration
      */
-    fun getVisualizationUI(): PluginVisualizationUI?
+    suspend fun updateConfiguration(config: Map<String, Any>)
+    
+    /**
+     * Get summary statistics for dashboard display
+     */
+    suspend fun getSummaryData(): PluginSummary
     
     /**
      * Export plugin data in various formats
@@ -111,17 +116,61 @@ interface PluginData {
 }
 
 /**
- * Plugin configuration UI
+ * Plugin configuration structure
  */
-interface PluginConfigUI {
-    fun getContent(): @Composable () -> Unit
+data class PluginConfiguration(
+    val parameters: List<ConfigParameter>
+)
+
+/**
+ * Configuration parameter definition
+ */
+sealed class ConfigParameter {
+    abstract val key: String
+    abstract val label: String
+    abstract val defaultValue: Any?
+    
+    data class BooleanParam(
+        override val key: String,
+        override val label: String,
+        override val defaultValue: Boolean = false
+    ) : ConfigParameter()
+    
+    data class IntParam(
+        override val key: String,
+        override val label: String,
+        override val defaultValue: Int = 0,
+        val min: Int? = null,
+        val max: Int? = null
+    ) : ConfigParameter()
+    
+    data class StringParam(
+        override val key: String,
+        override val label: String,
+        override val defaultValue: String = "",
+        val options: List<String>? = null
+    ) : ConfigParameter()
 }
 
 /**
- * Plugin visualization UI
+ * Plugin summary data for dashboard display
  */
-interface PluginVisualizationUI {
-    fun getContent(): @Composable () -> Unit
+data class PluginSummary(
+    val primaryValue: String,
+    val primaryLabel: String,
+    val secondaryValue: String? = null,
+    val secondaryLabel: String? = null,
+    val trend: Trend? = null,
+    val lastUpdated: Long
+)
+
+/**
+ * Trend indicator
+ */
+enum class Trend {
+    UP,
+    DOWN,
+    STABLE
 }
 
 /**
@@ -166,9 +215,19 @@ abstract class BasePlugin : Plugin {
     
     override suspend fun collectData(): PluginData? = null
     
-    override fun getConfigurationUI(): PluginConfigUI? = null
+    override fun getConfiguration(): PluginConfiguration = PluginConfiguration(emptyList())
     
-    override fun getVisualizationUI(): PluginVisualizationUI? = null
+    override suspend fun updateConfiguration(config: Map<String, Any>) {
+        // Default: no-op
+    }
+    
+    override suspend fun getSummaryData(): PluginSummary {
+        return PluginSummary(
+            primaryValue = "No data",
+            primaryLabel = metadata.name,
+            lastUpdated = System.currentTimeMillis()
+        )
+    }
     
     override suspend fun exportData(format: ExportFormat): ByteArray {
         return when (format) {
