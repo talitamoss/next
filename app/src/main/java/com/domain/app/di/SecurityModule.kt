@@ -12,6 +12,9 @@ import javax.inject.Singleton
 
 /**
  * Security-related dependency injection module
+ * Provides security components for plugin permission management and monitoring
+ * 
+ * File location: app/src/main/java/com/domain/app/di/SecurityModule.kt
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -33,13 +36,12 @@ object SecurityModule {
     
     @Provides
     @Singleton
-    @Provides
-    @Singleton
     fun provideSecurityMonitor(): SecurityMonitor {
         return SecurityMonitor()
     }
 
-
+    @Provides
+    @Singleton
     fun provideDataEncryption(): DataEncryption {
         return DataEncryption()
     }

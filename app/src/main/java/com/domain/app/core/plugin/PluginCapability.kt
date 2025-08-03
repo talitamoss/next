@@ -127,45 +127,71 @@ fun PluginCapability.getDescription(): String {
  */
 fun PluginCapability.getRiskLevel(): RiskLevel {
     return when (this) {
-        // Low risk capabilities
-        PluginCapability.COLLECT_DATA,
         PluginCapability.READ_OWN_DATA,
         PluginCapability.LOCAL_STORAGE,
         PluginCapability.CACHE_DATA,
+        PluginCapability.CUSTOM_UI,
         PluginCapability.ANALYTICS_BASIC -> RiskLevel.LOW
         
-        // Medium risk capabilities
+        PluginCapability.COLLECT_DATA,
+        PluginCapability.MODIFY_DATA,
         PluginCapability.SHOW_NOTIFICATIONS,
-        PluginCapability.EXPORT_DATA,
+        PluginCapability.BACKGROUND_SYNC,
         PluginCapability.IMPORT_DATA,
-        PluginCapability.CUSTOM_UI,
-        PluginCapability.MODIFY_THEME,
-        PluginCapability.ADD_MENU_ITEMS,
-        PluginCapability.FULLSCREEN_UI,
+        PluginCapability.EXPORT_DATA,
+        PluginCapability.ACCESS_SENSORS,
         PluginCapability.ANALYTICS_DETAILED -> RiskLevel.MEDIUM
         
-        // High risk capabilities
         PluginCapability.READ_ALL_DATA,
-        PluginCapability.MODIFY_DATA,
         PluginCapability.DELETE_DATA,
         PluginCapability.NETWORK_ACCESS,
         PluginCapability.FILE_ACCESS,
+        PluginCapability.CAMERA_ACCESS,
+        PluginCapability.MICROPHONE_ACCESS,
         PluginCapability.SHARE_DATA,
         PluginCapability.INTEGRATE_SERVICES,
-        PluginCapability.ACCESS_SENSORS,
         PluginCapability.ACCESS_LOCATION,
         PluginCapability.ACCESS_BIOMETRIC,
-        PluginCapability.BACKGROUND_SYNC,
-        PluginCapability.BACKGROUND_PROCESS,
+        PluginCapability.MODIFY_SETTINGS,
+        PluginCapability.INSTALL_PLUGINS,
         PluginCapability.SEND_EMAILS,
         PluginCapability.SEND_SMS,
         PluginCapability.PUSH_NOTIFICATIONS,
-        PluginCapability.CLOUD_STORAGE -> RiskLevel.HIGH
-        
-        // Critical risk capabilities
-        PluginCapability.CAMERA_ACCESS,
-        PluginCapability.MICROPHONE_ACCESS,
-        PluginCapability.MODIFY_SETTINGS,
-        PluginCapability.INSTALL_PLUGINS -> RiskLevel.CRITICAL
+        PluginCapability.CLOUD_STORAGE,
+        PluginCapability.BACKGROUND_PROCESS,
+        PluginCapability.MODIFY_THEME,
+        PluginCapability.ADD_MENU_ITEMS,
+        PluginCapability.FULLSCREEN_UI -> RiskLevel.HIGH
+    }
+}
+
+/**
+ * Risk levels for plugin capabilities
+ */
+enum class RiskLevel {
+    LOW,
+    MEDIUM,
+    HIGH
+}
+
+/**
+ * Check if a capability requires explicit user consent
+ */
+fun PluginCapability.requiresExplicitConsent(): Boolean {
+    return getRiskLevel() == RiskLevel.HIGH
+}
+
+/**
+ * Get a detailed explanation of what this capability allows
+ */
+fun PluginCapability.getDetailedExplanation(): String {
+    return when (this) {
+        PluginCapability.COLLECT_DATA -> "This plugin can collect and store new behavioral data entries. All data remains encrypted on your device."
+        PluginCapability.READ_OWN_DATA -> "This plugin can only read data that it has created. It cannot access data from other plugins."
+        PluginCapability.READ_ALL_DATA -> "This plugin can read all data stored in the app, including data from other plugins. Use caution when granting this permission."
+        PluginCapability.NETWORK_ACCESS -> "This plugin can connect to the internet. Your data remains on your device unless you explicitly choose to share it."
+        PluginCapability.ACCESS_LOCATION -> "This plugin can access your device's location. Location data is stored locally and encrypted."
+        PluginCapability.SHARE_DATA -> "This plugin can share data with other apps or services. You control what data is shared and when."
+        else -> getDescription()
     }
 }

@@ -1,77 +1,88 @@
 package com.domain.app.core.plugin
 
-import android.content.Context
-import com.domain.app.core.data.DataPoint
-import com.domain.app.core.plugin.security.PluginSecurityManifest
-import com.domain.app.core.plugin.security.PluginTrustLevel
+import androidx.annotation.DrawableRes
+import kotlinx.coroutines.flow.Flow
 
 /**
- * Core plugin interface defining the contract for all behavioral data collection plugins.
- * Designed for extensibility while maintaining security and privacy.
+ * Core plugin interface
+ * All plugins must implement this interface to integrate with the app
+ * 
+ * File location: app/src/main/java/com/domain/app/core/plugin/Plugin.kt
  */
 interface Plugin {
+    /**
+     * Unique identifier for the plugin
+     */
     val id: String
+    
+    /**
+     * Plugin metadata including name, description, version, and icon
+     */
     val metadata: PluginMetadata
     
-    // Security manifest - required for all plugins
-    val securityManifest: PluginSecurityManifest
+    /**
+     * Capabilities required by this plugin
+     */
+    val requiredCapabilities: Set<PluginCapability>
     
-    // Trust level - determined by system
-    val trustLevel: PluginTrustLevel
-        get() = PluginTrustLevel.COMMUNITY
-    
-    // Core functionality
-    suspend fun initialize(context: Context)
-    fun supportsManualEntry(): Boolean = false
-    suspend fun createManualEntry(data: Map<String, Any>): DataPoint? = null
-    fun getQuickAddConfig(): QuickAddConfig? = null
-    
-    // Multi-stage input support
-    fun getQuickAddStages(): List<QuickAddStage>? = null
-    
-    // Validation
-    fun validateDataPoint(data: Map<String, Any>): ValidationResult = ValidationResult.Success
-    
-    // Export/Import
-    fun exportHeaders(): List<String> = listOf("timestamp", "value")
-    fun formatForExport(dataPoint: DataPoint): Map<String, String> = mapOf(
-        "timestamp" to dataPoint.timestamp.toString(),
-        "value" to dataPoint.value.toString()
-    )
-    
-    // Permission rationale
-    fun getPermissionRationale(): Map<PluginCapability, String> = emptyMap()
-    
-    // Cleanup
-    suspend fun cleanup() {}
-    
-    // Automatic collection support
+    /**
+     * Whether this plugin supports automatic data collection
+     */
     val supportsAutomaticCollection: Boolean
     
-    // Helper method for backward compatibility
-    fun supportsAutomaticCollection(): Boolean = supportsAutomaticCollection
+    /**
+     * Initialize the plugin
+     */
+    suspend fun initialize()
+    
+    /**
+     * Clean up plugin resources
+     */
+    suspend fun cleanup()
+    
+    /**
+     * Collect data (if supported)
+     */
+    suspend fun collectData(): PluginData?
+    
+    /**
+     * Get plugin configuration UI (if supported)
+     */
+    fun getConfigurationUI(): PluginConfigUI?
+    
+    /**
+     * Get data visualization UI (if supported)
+     */
+    fun getVisualizationUI(): PluginVisualizationUI?
+    
+    /**
+     * Export plugin data in various formats
+     */
+    suspend fun exportData(format: ExportFormat): ByteArray
+    
+    /**
+     * Import data from external source
+     */
+    suspend fun importData(data: ByteArray, format: ExportFormat): Boolean
+    
+    /**
+     * Observe plugin events
+     */
+    fun observeEvents(): Flow<PluginEvent>
 }
 
 /**
- * Plugin metadata containing descriptive and behavioral information
+ * Plugin metadata
  */
 data class PluginMetadata(
     val name: String,
     val description: String,
     val version: String,
     val author: String,
+    val website: String? = null,
+    @DrawableRes val iconResource: Int? = null,
     val category: PluginCategory = PluginCategory.OTHER,
-    val tags: List<String> = emptyList(),
-    val dataPattern: DataPattern = DataPattern.SINGLE_VALUE,
-    val inputType: InputType = InputType.NUMBER,
-    val supportsMultiStage: Boolean = false,
-    val relatedPlugins: List<String> = emptyList(),
-    val exportFormat: ExportFormat = ExportFormat.CSV,
-    val dataSensitivity: DataSensitivity = DataSensitivity.NORMAL,
-    val naturalLanguageAliases: List<String> = emptyList(),
-    val iconResource: Int? = null,
-    val permissions: List<String> = emptyList(),
-    val contextualTriggers: List<ContextTrigger> = emptyList()
+    val tags: List<String> = emptyList()
 )
 
 /**
@@ -80,118 +91,98 @@ data class PluginMetadata(
 enum class PluginCategory {
     HEALTH,
     FITNESS,
-    MENTAL_WELLNESS,
+    MOOD,
     PRODUCTIVITY,
-    LIFESTYLE,
-    JOURNAL,
+    FINANCE,
+    SOCIAL,
+    ENTERTAINMENT,
+    EDUCATION,
     OTHER
 }
 
 /**
- * Data collection patterns
+ * Base plugin data structure
  */
-enum class DataPattern {
-    SINGLE_VALUE,
-    CUMULATIVE,
-    DURATION,
-    OCCURRENCE,
-    RATING,
-    TEXT,
-    COMPOSITE
+interface PluginData {
+    val timestamp: Long
+    val pluginId: String
+    val dataType: String
+    val data: Map<String, Any>
 }
 
 /**
- * Input types for data collection
+ * Plugin configuration UI
  */
-enum class InputType {
-    NUMBER,
-    TEXT,
-    CHOICE,
-    SLIDER,
-    DURATION,
-    SCALE,
-    TIME_PICKER,
-    DATE_PICKER
+interface PluginConfigUI {
+    fun getContent(): @Composable () -> Unit
 }
 
 /**
- * Export format options
+ * Plugin visualization UI
+ */
+interface PluginVisualizationUI {
+    fun getContent(): @Composable () -> Unit
+}
+
+/**
+ * Supported export formats
  */
 enum class ExportFormat {
-    CSV, JSON, XML, CUSTOM
+    JSON,
+    CSV,
+    FHIR,
+    OPEN_MHEALTH,
+    CUSTOM
 }
 
 /**
- * Data sensitivity levels for privacy classification
+ * Plugin events
  */
-enum class DataSensitivity {
-    PUBLIC,
-    NORMAL,
-    SENSITIVE,
-    PRIVATE,
-    REGULATED
+sealed class PluginEvent {
+    data class DataCollected(val data: PluginData) : PluginEvent()
+    data class ConfigurationChanged(val key: String, val value: Any?) : PluginEvent()
+    data class Error(val message: String, val throwable: Throwable? = null) : PluginEvent()
+    data class StatusChanged(val status: PluginStatus) : PluginEvent()
 }
 
 /**
- * Context triggers for intelligent suggestions
+ * Plugin status
  */
-enum class ContextTrigger {
-    TIME_OF_DAY,
-    LOCATION,
-    LOCATION_BASED,
-    AFTER_EVENT,
-    PATTERN_BASED,
-    MANUAL_ONLY
+enum class PluginStatus {
+    INACTIVE,
+    INITIALIZING,
+    ACTIVE,
+    COLLECTING,
+    ERROR,
+    DISABLED
 }
 
 /**
- * Configuration for quick add functionality
+ * Abstract base class for plugins
+ * Provides default implementations for common functionality
  */
-data class QuickAddConfig(
-    val title: String,
-    val defaultValue: Any? = null,
-    val inputType: InputType = InputType.NUMBER,
-    val options: List<QuickOption>? = null,
-    val unit: String? = null
-)
-
-/**
- * Quick add option
- */
-data class QuickOption(
-    val label: String,
-    val value: Any,
-    val icon: String? = null
-)
-
-/**
- * Multi-stage quick add support
- */
-data class QuickAddStage(
-    val id: String,
-    val title: String,
-    val inputType: InputType,
-    val required: Boolean = true,
-    val options: List<QuickOption>? = null,
-    val validation: ((Any?) -> ValidationResult)? = null,
-    val hint: String? = null,
-    val defaultValue: Any? = null
-)
-
-/**
- * Validation results
- */
-sealed class ValidationResult {
-    object Success : ValidationResult()
-    data class Error(val message: String) : ValidationResult()
-    data class Warning(val message: String) : ValidationResult()
+abstract class BasePlugin : Plugin {
+    override val supportsAutomaticCollection: Boolean = false
+    
+    override suspend fun collectData(): PluginData? = null
+    
+    override fun getConfigurationUI(): PluginConfigUI? = null
+    
+    override fun getVisualizationUI(): PluginVisualizationUI? = null
+    
+    override suspend fun exportData(format: ExportFormat): ByteArray {
+        return when (format) {
+            ExportFormat.JSON -> exportAsJson()
+            ExportFormat.CSV -> exportAsCsv()
+            else -> throw UnsupportedOperationException("Export format $format not supported")
+        }
+    }
+    
+    override suspend fun importData(data: ByteArray, format: ExportFormat): Boolean {
+        return false // Default: no import support
+    }
+    
+    protected abstract suspend fun exportAsJson(): ByteArray
+    
+    protected abstract suspend fun exportAsCsv(): ByteArray
 }
-
-/**
- * Risk warning for permissions
- */
-data class RiskWarning(
-    val severity: RiskLevel,
-    val message: String,
-    val capability: PluginCapability
-)

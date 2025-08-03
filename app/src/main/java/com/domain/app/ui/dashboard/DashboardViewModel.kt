@@ -2,9 +2,8 @@ package com.domain.app.ui.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.domain.app.core.data.DataRepository
-import com.domain.app.core.plugin.*
-import com.domain.app.core.plugin.security.PluginPermissionManager
+import com.domain.app.core.plugin.Plugin
+import com.domain.app.core.plugin.PluginManager
 import com.domain.app.core.preferences.PreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -12,154 +11,164 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * ViewModel for the Dashboard screen
+ * ViewModel for Dashboard screen
+ * Manages plugin display and data collection states
  * 
  * File location: app/src/main/java/com/domain/app/ui/dashboard/DashboardViewModel.kt
  */
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val pluginManager: PluginManager,
-    private val dataRepository: DataRepository,
-    private val preferencesManager: PreferencesManager,
-    private val permissionManager: PluginPermissionManager
+    private val preferencesManager: PreferencesManager
 ) : ViewModel() {
     
-    // UI State
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
     
-    // Selected plugin for quick add
-    private val _selectedPlugin = MutableStateFlow<Plugin?>(null)
-    val selectedPlugin: StateFlow<Plugin?> = _selectedPlugin.asStateFlow()
-    
     init {
-        loadDashboardData()
-        loadDashboardPlugins()
-        loadPluginStates()
+        loadDashboard()
+        observePluginStates()
     }
     
-    private fun loadDashboardPlugins() {
+    /**
+     * Load dashboard configuration and plugins
+     */
+    private fun loadDashboard() {
         viewModelScope.launch {
-            combine(
-                preferencesManager.dashboardPlugins,
-                pluginManager.pluginStates
-            ) { dashboardIds, pluginStates ->
-                dashboardIds.mapNotNull { pluginId ->
-                    pluginStates[pluginId]?.plugin
-                }
-            }.collect { plugins ->
-                _uiState.update { it.copy(dashboardPlugins = plugins) }
+            // Load enabled plugins
+            val enabledPlugins = pluginManager.getEnabledPlugins()
+            
+            // Load dashboard plugin IDs from preferences
+            val dashboardPluginIds = preferencesManager.getDashboardPluginIds()
+            
+            // Filter enabled plugins that are on the dashboard
+            val dashboardPlugins = enabledPlugins.filter { plugin ->
+                dashboardPluginIds.contains(plugin.id)
+            }
+            
+            _uiState.update { state ->
+                state.copy(
+                    plugins = enabledPlugins,
+                    dashboardPlugins = dashboardPlugins,
+                    isLoading = false
+                )
             }
         }
     }
     
-    private fun loadPluginStates() {
+    /**
+     * Observe plugin state changes
+     */
+    private fun observePluginStates() {
         viewModelScope.launch {
             pluginManager.pluginStates.collect { states ->
-                val permissions = states.mapValues { (pluginId, _) ->
-                    permissionManager.getGrantedPermissions(pluginId)
-                }
-                
-                _uiState.update { 
-                    it.copy(
-                        pluginStates = states,
-                        pluginPermissions = permissions,
-                        activePluginCount = states.count { it.value.isEnabled }
+                _uiState.update { uiState ->
+                    uiState.copy(
+                        pluginStates = states.associateBy { it.pluginId }
                     )
                 }
             }
         }
     }
     
-    private fun loadDashboardData() {
+    /**
+     * Toggle plugin data collection
+     */
+    fun toggleCollection(pluginId: String) {
         viewModelScope.launch {
-            // Load entry counts
-            val now = System.currentTimeMillis()
-            val startOfDay = now - (now % (24 * 60 * 60 * 1000))
-            val startOfWeek = now - (7 * 24 * 60 * 60 * 1000)
-            
-            dataRepository.getDataInTimeRange(startOfDay, now).collect { todayData ->
-                _uiState.update { it.copy(todayEntryCount = todayData.size) }
-            }
-            
-            dataRepository.getDataInTimeRange(startOfWeek, now).collect { weekData ->
-                _uiState.update { it.copy(weekEntryCount = weekData.size) }
-            }
-        }
-        
-        // Load all plugins for selector
-        viewModelScope.launch {
-            val allPlugins = pluginManager.getAllPlugins()
-            _uiState.update { it.copy(allPlugins = allPlugins) }
-        }
-    }
-    
-    fun onPluginTileClick(plugin: Plugin) {
-        viewModelScope.launch {
-            val hasPermission = permissionManager.hasPermission(
-                plugin.id,
-                PluginCapability.COLLECT_DATA
-            )
-            
-            if (hasPermission) {
-                _selectedPlugin.value = plugin
-                _uiState.update { it.copy(showQuickAdd = true, needsPermission = false) }
+            val state = _uiState.value.pluginStates[pluginId]
+            if (state?.isCollecting == true) {
+                pluginManager.stopDataCollection(pluginId)
             } else {
-                _selectedPlugin.value = plugin
-                _uiState.update { it.copy(showQuickAdd = true, needsPermission = true) }
+                pluginManager.startDataCollection(pluginId)
             }
         }
     }
     
-    fun onAddPluginClick() {
-        _uiState.update { it.copy(showPluginSelector = true) }
-    }
-    
-    fun dismissPluginSelector() {
-        _uiState.update { it.copy(showPluginSelector = false) }
-    }
-    
-    fun grantQuickAddPermission() {
-        viewModelScope.launch {
-            _selectedPlugin.value?.let { plugin ->
-                permissionManager.grantPermissions(plugin.id, setOf(PluginCapability.COLLECT_DATA))
-                _uiState.update { it.copy(needsPermission = false) }
-            }
-        }
-    }
-    
-    fun dismissQuickAdd() {
-        _selectedPlugin.value = null
-        _uiState.update { it.copy(showQuickAdd = false, needsPermission = false) }
-    }
-    
-    fun onQuickAdd(plugin: Plugin, data: Map<String, Any>) {
+    /**
+     * Add plugin to dashboard
+     */
+    fun addToDashboard(plugin: Plugin) {
         viewModelScope.launch {
             try {
-                val dataPoint = plugin.createManualEntry(data)
-                if (dataPoint != null) {
-                    dataRepository.insertData(dataPoint)
-                    _uiState.update { 
-                        it.copy(
-                            showQuickAdd = false,
-                            showSuccessFeedback = true
-                        )
-                    }
-                    _selectedPlugin.value = null
-                }
+                // Get current dashboard plugin IDs
+                val currentIds = preferencesManager.getDashboardPluginIds().toMutableSet()
+                
+                // Add new plugin ID
+                currentIds.add(plugin.id)
+                
+                // Save updated list
+                preferencesManager.setDashboardPluginIds(currentIds)
+                
+                // Update UI state
+                val updatedDashboardPlugins = _uiState.value.dashboardPlugins + plugin
+                _uiState.update { it.copy(dashboardPlugins = updatedDashboardPlugins) }
             } catch (e: Exception) {
-                _uiState.update { 
-                    it.copy(error = "Failed to add data: ${e.message}")
-                }
+                _uiState.update { it.copy(error = "Failed to add plugin to dashboard") }
             }
         }
     }
     
-    fun clearSuccessFeedback() {
-        _uiState.update { it.copy(showSuccessFeedback = false) }
+    /**
+     * Remove plugin from dashboard
+     */
+    fun removeFromDashboard(pluginId: String) {
+        viewModelScope.launch {
+            try {
+                // Get current dashboard plugin IDs
+                val currentIds = preferencesManager.getDashboardPluginIds().toMutableSet()
+                
+                // Remove plugin ID
+                currentIds.remove(pluginId)
+                
+                // Save updated list
+                preferencesManager.setDashboardPluginIds(currentIds)
+                
+                // Update UI state
+                val updatedDashboardPlugins = _uiState.value.dashboardPlugins.filter { it.id != pluginId }
+                _uiState.update { it.copy(dashboardPlugins = updatedDashboardPlugins) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Failed to remove plugin from dashboard") }
+            }
+        }
     }
     
+    /**
+     * Refresh dashboard data
+     */
+    fun refresh() {
+        _uiState.update { it.copy(isRefreshing = true) }
+        loadDashboard()
+        _uiState.update { it.copy(isRefreshing = false) }
+    }
+    
+    /**
+     * Clear error message
+     */
     fun clearError() {
         _uiState.update { it.copy(error = null) }
     }
 }
+
+/**
+ * Dashboard UI state
+ */
+data class DashboardUiState(
+    val plugins: List<Plugin> = emptyList(),
+    val dashboardPlugins: List<Plugin> = emptyList(),
+    val pluginStates: Map<String, PluginState> = emptyMap(),
+    val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
+    val error: String? = null
+)
+
+/**
+ * Plugin state information
+ */
+data class PluginState(
+    val pluginId: String,
+    val isEnabled: Boolean = false,
+    val isCollecting: Boolean = false,
+    val lastCollectionTime: Long? = null,
+    val dataCount: Int = 0
+)

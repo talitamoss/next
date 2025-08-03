@@ -2,22 +2,23 @@ package com.domain.app.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.domain.app.core.plugin.Plugin
-import com.domain.app.core.plugin.PluginManager
 import com.domain.app.core.preferences.PreferencesManager
+import com.domain.app.core.theme.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
  * ViewModel for Settings screen
+ * Manages app preferences including theme, dashboard visibility, and other settings
  * 
  * File location: app/src/main/java/com/domain/app/ui/settings/SettingsViewModel.kt
  */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val pluginManager: PluginManager,
     private val preferencesManager: PreferencesManager
 ) : ViewModel() {
     
@@ -26,167 +27,174 @@ class SettingsViewModel @Inject constructor(
     
     init {
         loadSettings()
-        loadPlugins()
     }
     
+    /**
+     * Load current settings from preferences
+     */
     private fun loadSettings() {
         viewModelScope.launch {
-            preferencesManager.currentTheme.collect { theme ->
-                _uiState.update { it.copy(currentTheme = theme) }
-            }
-        }
-    }
-    
-    private fun loadPlugins() {
-        viewModelScope.launch {
-            // Load all plugins
-            val allPlugins = pluginManager.getAllPlugins()
-            _uiState.update { it.copy(allPlugins = allPlugins) }
-            
-            // Monitor enabled plugins
-            pluginManager.pluginStates.collect { states ->
-                val enabledIds = states.filter { it.value.isEnabled }.keys
-                _uiState.update { 
-                    it.copy(
-                        enabledPluginIds = enabledIds,
-                        enabledPluginsCount = enabledIds.size
-                    )
-                }
-            }
-        }
-        
-        // Monitor dashboard plugins
-        viewModelScope.launch {
-            preferencesManager.dashboardPlugins.collect { dashboardIds ->
-                _uiState.update { it.copy(dashboardPluginIds = dashboardIds) }
-            }
-        }
-    }
-    
-    fun showThemeDialog() {
-        _uiState.update { it.copy(showThemeDialog = true) }
-    }
-    
-    fun hideThemeDialog() {
-        _uiState.update { it.copy(showThemeDialog = false) }
-    }
-    
-    fun updateTheme(theme: String) {
-        viewModelScope.launch {
-            preferencesManager.updateTheme(theme)
-            _uiState.update { 
-                it.copy(
-                    currentTheme = theme,
-                    showThemeDialog = false
+            preferencesManager.preferences.collect { prefs ->
+                _uiState.value = _uiState.value.copy(
+                    currentTheme = prefs.theme,
+                    isDashboardEnabled = prefs.isDashboardEnabled,
+                    isAnalyticsEnabled = prefs.isAnalyticsEnabled,
+                    isAutoBackupEnabled = prefs.isAutoBackupEnabled,
+                    backupFrequency = prefs.backupFrequency,
+                    isEncryptionEnabled = prefs.isEncryptionEnabled,
+                    isBiometricEnabled = prefs.isBiometricEnabled
                 )
             }
         }
     }
     
-    fun showPluginManagement() {
-        _uiState.update { it.copy(showPluginManagement = true) }
-    }
-    
-    fun hidePluginManagement() {
-        _uiState.update { it.copy(showPluginManagement = false) }
-    }
-    
-    fun togglePlugin(pluginId: String, enabled: Boolean) {
+    /**
+     * Set the app theme
+     * Persists the theme preference and applies it immediately
+     */
+    fun setTheme(theme: ThemeMode) {
         viewModelScope.launch {
-            val plugin = pluginManager.getPlugin(pluginId) ?: return@launch
-            if (enabled) {
-                pluginManager.enablePlugin(plugin)
-            } else {
-                pluginManager.disablePlugin(plugin)
-            }
-        }
-    }
-    
-    fun toggleDashboardPlugin(pluginId: String, onDashboard: Boolean) {
-        viewModelScope.launch {
-            if (onDashboard) {
-                preferencesManager.addToDashboard(pluginId)
-            } else {
-                preferencesManager.removeFromDashboard(pluginId)
-            }
-        }
-    }
-    
-    fun showExportDialog() {
-        _uiState.update { it.copy(showExportDialog = true) }
-    }
-    
-    fun hideExportDialog() {
-        _uiState.update { it.copy(showExportDialog = false) }
-    }
-    
-    fun exportData(format: ExportFormat) {
-        viewModelScope.launch {
-            // TODO: Implement data export
-            _uiState.update { 
-                it.copy(message = "Export feature coming soon")
-            }
-        }
-    }
-    
-    fun showClearDataDialog() {
-        _uiState.update { it.copy(showClearDataDialog = true) }
-    }
-    
-    fun hideClearDataDialog() {
-        _uiState.update { it.copy(showClearDataDialog = false) }
-    }
-    
-    fun clearAllData() {
-        viewModelScope.launch {
-            // Clear all data
-            preferencesManager.clearAll()
-            // TODO: Clear database
-            
-            _uiState.update { 
-                it.copy(
-                    message = "All data cleared successfully",
-                    showClearDataDialog = false
+            try {
+                preferencesManager.setTheme(theme)
+                _uiState.value = _uiState.value.copy(currentTheme = theme)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to change theme: ${e.message}"
                 )
             }
         }
     }
     
-    fun dismissMessage() {
-        _uiState.update { it.copy(message = null) }
+    /**
+     * Toggle dashboard visibility
+     * Controls whether the dashboard is shown as the home screen
+     */
+    fun toggleDashboard() {
+        viewModelScope.launch {
+            try {
+                val newState = !_uiState.value.isDashboardEnabled
+                preferencesManager.setDashboardEnabled(newState)
+                _uiState.value = _uiState.value.copy(isDashboardEnabled = newState)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to toggle dashboard: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    /**
+     * Toggle analytics collection
+     */
+    fun toggleAnalytics() {
+        viewModelScope.launch {
+            try {
+                val newState = !_uiState.value.isAnalyticsEnabled
+                preferencesManager.setAnalyticsEnabled(newState)
+                _uiState.value = _uiState.value.copy(isAnalyticsEnabled = newState)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to toggle analytics: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    /**
+     * Toggle automatic backup
+     */
+    fun toggleAutoBackup() {
+        viewModelScope.launch {
+            try {
+                val newState = !_uiState.value.isAutoBackupEnabled
+                preferencesManager.setAutoBackupEnabled(newState)
+                _uiState.value = _uiState.value.copy(isAutoBackupEnabled = newState)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to toggle auto backup: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    /**
+     * Set backup frequency
+     */
+    fun setBackupFrequency(frequency: BackupFrequency) {
+        viewModelScope.launch {
+            try {
+                preferencesManager.setBackupFrequency(frequency)
+                _uiState.value = _uiState.value.copy(backupFrequency = frequency)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to set backup frequency: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    /**
+     * Toggle encryption
+     */
+    fun toggleEncryption() {
+        viewModelScope.launch {
+            try {
+                val newState = !_uiState.value.isEncryptionEnabled
+                preferencesManager.setEncryptionEnabled(newState)
+                _uiState.value = _uiState.value.copy(isEncryptionEnabled = newState)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to toggle encryption: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    /**
+     * Toggle biometric authentication
+     */
+    fun toggleBiometric() {
+        viewModelScope.launch {
+            try {
+                val newState = !_uiState.value.isBiometricEnabled
+                preferencesManager.setBiometricEnabled(newState)
+                _uiState.value = _uiState.value.copy(isBiometricEnabled = newState)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to toggle biometric: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    /**
+     * Clear error message
+     */
+    fun clearError() {
+        _uiState.value = _uiState.value.copy(error = null)
     }
 }
 
 /**
- * UI State for Settings screen
+ * UI state for Settings screen
  */
 data class SettingsUiState(
-    val currentTheme: String = "System",
-    val enabledPluginsCount: Int = 0,
-    val allPlugins: List<Plugin> = emptyList(),
-    val enabledPluginIds: Set<String> = emptySet(),
-    val dashboardPluginIds: Set<String> = emptySet(),
-    val showThemeDialog: Boolean = false,
-    val showPluginManagement: Boolean = false,
-    val showExportDialog: Boolean = false,
-    val showClearDataDialog: Boolean = false,
-    val message: String? = null
+    val currentTheme: ThemeMode = ThemeMode.SYSTEM,
+    val isDashboardEnabled: Boolean = true,
+    val isAnalyticsEnabled: Boolean = false,
+    val isAutoBackupEnabled: Boolean = false,
+    val backupFrequency: BackupFrequency = BackupFrequency.WEEKLY,
+    val isEncryptionEnabled: Boolean = true,
+    val isBiometricEnabled: Boolean = false,
+    val error: String? = null
 )
 
 /**
- * Export format options
+ * Backup frequency options
  */
-enum class ExportFormat {
-    CSV,
-    JSON,
-    FHIR,
-    OPEN_MHEALTH
+enum class BackupFrequency {
+    DAILY,
+    WEEKLY,
+    MONTHLY,
+    NEVER
 }
-
-    fun setTheme(theme: String) {
-        // TODO: Implement theme setting
-    }
-    
-    fun toggleDashboard() {
-        // TODO: Implement dashboard toggle
-    }

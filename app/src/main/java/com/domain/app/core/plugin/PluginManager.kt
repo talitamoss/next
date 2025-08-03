@@ -1,13 +1,11 @@
 package com.domain.app.core.plugin
 
-import android.content.Context
-import com.domain.app.core.data.DataPoint
-import com.domain.app.core.data.DataRepository
-import com.domain.app.core.events.Event
-import com.domain.app.core.events.EventBus  
-import com.domain.app.core.plugin.security.*
+import com.domain.app.core.EventBus
+import com.domain.app.core.plugin.security.PluginPermissionManager
+import com.domain.app.core.plugin.security.SecurityEvent
+import com.domain.app.core.plugin.security.SecurityMonitor
+import com.domain.app.core.plugin.security.ViolationSeverity
 import com.domain.app.core.storage.AppDatabase
-import com.domain.app.core.storage.entity.PluginStateEntity
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import timber.log.Timber
@@ -16,105 +14,104 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Central manager for plugin lifecycle and operations.
- * Handles plugin initialization, state management, and secure data operations.
+ * Manages plugin lifecycle and operations
+ * Central coordinator for all plugin-related functionality
  * 
  * File location: app/src/main/java/com/domain/app/core/plugin/PluginManager.kt
  */
 @Singleton
 class PluginManager @Inject constructor(
-    private val context: Context,
     private val database: AppDatabase,
-    private val dataRepository: DataRepository,
-    val pluginRegistry: PluginRegistry,
     private val permissionManager: PluginPermissionManager,
     private val securityMonitor: SecurityMonitor
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val activePlugins = mutableMapOf<String, Plugin>()
     
-    private val _pluginStates = MutableStateFlow<Map<String, PluginState>>(emptyMap())
-    val pluginStates: StateFlow<Map<String, PluginState>> = _pluginStates.asStateFlow()
+    private val _pluginStates = MutableStateFlow<List<PluginState>>(emptyList())
+    val pluginStates: StateFlow<List<PluginState>> = _pluginStates.asStateFlow()
     
-    init {
-        // Monitor plugin state changes from database
-        scope.launch {
-            database.pluginStateDao().getAllStates()
-                .map { states ->
-                    states.associate { entity ->
-                        entity.pluginId to PluginState(
-                            pluginId = entity.pluginId,
-                            plugin = activePlugins[entity.pluginId],
-                            isEnabled = entity.isEnabled,
-                            isCollecting = entity.isCollecting,
-                            lastCollection = entity.lastCollection,
-                            errorCount = entity.errorCount
-                        )
-                    }
-                }
-                .collect { states ->
-                    _pluginStates.value = states
-                }
-        }
+    /**
+     * Initialize plugin manager
+     */
+    suspend fun initialize() {
+        loadPlugins()
+    }
+    
+    /**
+     * Load all available plugins
+     */
+    private suspend fun loadPlugins() = withContext(Dispatchers.IO) {
+        // In a real implementation, this would discover and load plugins
+        // For now, we'll load built-in plugins
         
-        // Initialize plugins on startup
-        scope.launch {
-            initializePlugins()
+        val plugins = listOf(
+            // Built-in plugins would be instantiated here
+        )
+        
+        plugins.forEach { plugin ->
+            registerPlugin(plugin)
         }
     }
     
     /**
-     * Initialize all registered plugins
+     * Register a plugin
      */
-    suspend fun initializePlugins() = withContext(Dispatchers.IO) {
-        val registeredPlugins = pluginRegistry.getAllPlugins()
-        
-        registeredPlugins.forEach { plugin ->
-            try {
-                // Initialize plugin
-                plugin.initialize(context)
-                
-                // Create or update plugin state in database
-                val existingState = database.pluginStateDao().getState(plugin.id)
-                if (existingState == null) {
-                    database.pluginStateDao().insertOrUpdate(
-                        PluginStateEntity(
-                            pluginId = plugin.id,
-                            isEnabled = false,
-                            isCollecting = false,
-                            configuration = null,
-                            lastCollection = null,
-                            errorCount = 0,
-                            lastError = null
-                        )
-                    )
-                }
-                
-                activePlugins[plugin.id] = plugin
-                Timber.d("Initialized plugin: ${plugin.id}")
-            } catch (e: Exception) {
-                Timber.e(e, "Failed to initialize plugin: ${plugin.id}")
-            }
-        }
-    }
-    
-    /**
-     * Initialize a specific plugin
-     */
-    suspend fun initializePlugin(pluginId: String): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun registerPlugin(plugin: Plugin) = withContext(Dispatchers.IO) {
         try {
-            val plugin = pluginRegistry.getPlugin(pluginId) 
-                ?: return@withContext Result.failure(Exception("Plugin not found: $pluginId"))
+            // Validate plugin
+            validatePlugin(plugin)
             
-            plugin.initialize(context)
-            activePlugins[pluginId] = plugin
+            // Check required permissions
+            val hasRequiredPermissions = plugin.requiredCapabilities.all { capability ->
+                permissionManager.requestPermission(plugin.id, capability)
+            }
             
-            // Enable in database
-            database.pluginStateDao().updateEnabledState(pluginId, true)
+            if (!hasRequiredPermissions) {
+                throw SecurityException("Plugin ${plugin.id} missing required permissions")
+            }
             
-            Result.success(Unit)
+            // Initialize plugin
+            plugin.initialize()
+            
+            // Store plugin
+            activePlugins[plugin.id] = plugin
+            
+            // Update database
+            database.pluginStateDao().insert(
+                com.domain.app.core.storage.entities.PluginStateEntity(
+                    pluginId = plugin.id,
+                    isEnabled = false,
+                    isCollecting = false,
+                    lastCollection = null,
+                    errorCount = 0,
+                    lastError = null
+                )
+            )
+            
+            updatePluginStates()
+            
+            EventBus.post(Event.PluginRegistered(plugin.id))
         } catch (e: Exception) {
-            Result.failure(e)
+            Timber.e(e, "Failed to register plugin: ${plugin.id}")
+            throw e
+        }
+    }
+    
+    /**
+     * Get a plugin by ID with null safety
+     */
+    fun getPlugin(pluginId: String): Plugin? {
+        return activePlugins[pluginId]
+    }
+    
+    /**
+     * Get all enabled plugins
+     */
+    suspend fun getEnabledPlugins(): List<Plugin> = withContext(Dispatchers.IO) {
+        val enabledStates = database.pluginStateDao().getEnabledPlugins()
+        return@withContext enabledStates.mapNotNull { state ->
+            activePlugins[state.pluginId]
         }
     }
     
@@ -122,147 +119,100 @@ class PluginManager @Inject constructor(
      * Enable a plugin
      */
     suspend fun enablePlugin(pluginId: String) = withContext(Dispatchers.IO) {
-        val plugin = activePlugins[pluginId] ?: return@withContext
+        val plugin = activePlugins[pluginId]
+        if (plugin == null) {
+            Timber.w("Cannot enable plugin: $pluginId not found")
+            return@withContext
+        }
         
         try {
+            // Check permissions again
+            val hasPermissions = permissionManager.hasAllCapabilities(pluginId, plugin.requiredCapabilities)
+            if (!hasPermissions) {
+                throw SecurityException("Plugin missing required permissions")
+            }
+            
+            // Enable in database
             database.pluginStateDao().updateEnabledState(pluginId, true)
             
-            // Publish event  
-            EventBus.post(Event.PluginEnabled(pluginId))
+            updatePluginStates()
             
-            Timber.d("Enabled plugin: $pluginId")
+            EventBus.post(Event.PluginEnabled(pluginId))
         } catch (e: Exception) {
             handlePluginError(pluginId, e)
         }
     }
-    
-    /**
-     * Enable a plugin by instance
-     */
-    suspend fun enablePlugin(plugin: Plugin) = enablePlugin(plugin.id)
     
     /**
      * Disable a plugin
      */
     suspend fun disablePlugin(pluginId: String) = withContext(Dispatchers.IO) {
         try {
+            // Stop data collection if active
+            stopDataCollection(pluginId)
+            
+            // Disable in database
             database.pluginStateDao().updateEnabledState(pluginId, false)
             
-            // Stop any active collection
-            database.pluginStateDao().updateCollectingState(pluginId, false)
+            updatePluginStates()
             
-            // Publish event
             EventBus.post(Event.PluginDisabled(pluginId))
-            
-            Timber.d("Disabled plugin: $pluginId")
         } catch (e: Exception) {
             handlePluginError(pluginId, e)
         }
     }
     
     /**
-     * Disable a plugin by instance
+     * Validate plugin
      */
-    suspend fun disablePlugin(plugin: Plugin) = disablePlugin(plugin.id)
-    
-    /**
-     * Get all plugins
-     */
-    suspend fun getAllPlugins(): List<Plugin> {
-        return pluginRegistry.getAllPlugins()
+    private fun validatePlugin(plugin: Plugin) {
+        require(plugin.id.isNotBlank()) { "Plugin ID cannot be blank" }
+        require(plugin.metadata.name.isNotBlank()) { "Plugin name cannot be blank" }
+        require(plugin.metadata.version.isNotBlank()) { "Plugin version cannot be blank" }
     }
     
     /**
-     * Get all active plugins
+     * Update plugin states from database
      */
-    fun getAllActivePlugins(): List<Plugin> {
-        return _pluginStates.value
-            .filter { it.value.isEnabled }
-            .mapNotNull { it.value.plugin }
-    }
-    
-    /**
-     * Get plugin by ID
-     */
-    fun getPlugin(pluginId: String): Plugin? {
-        return activePlugins[pluginId]
+    private suspend fun updatePluginStates() = withContext(Dispatchers.IO) {
+        val states = database.pluginStateDao().getAllStates().map { entity ->
+            PluginState(
+                pluginId = entity.pluginId,
+                plugin = activePlugins[entity.pluginId],
+                isEnabled = entity.isEnabled,
+                isCollecting = entity.isCollecting,
+                lastCollection = entity.lastCollection?.let { Instant.ofEpochMilli(it) },
+                errorCount = entity.errorCount
+            )
+        }
+        _pluginStates.value = states
     }
     
     /**
      * Get plugin state
      */
-    fun getPluginState(pluginId: String): PluginState? {
-        return _pluginStates.value[pluginId]
-    }
-    
-    /**
-     * Check if plugin is enabled
-     */
-    fun isPluginEnabled(pluginId: String): Boolean {
-        return _pluginStates.value[pluginId]?.isEnabled ?: false
-    }
-    
-    /**
-     * Get plugins with manual entry support
-     */
-    fun getManualEntryPlugins(): List<Plugin> {
-        return activePlugins.values.filter { it.supportsManualEntry() }
-    }
-    
-    /**
-     * Create manual data entry
-     */
-    suspend fun createManualEntry(
-        pluginId: String,
-        data: Map<String, Any>
-    ): DataPoint? = withContext(Dispatchers.IO) {
-        val plugin = activePlugins[pluginId] ?: return@withContext null
+    suspend fun getPluginState(pluginId: String): PluginState? = withContext(Dispatchers.IO) {
+        val entity = database.pluginStateDao().getState(pluginId) ?: return@withContext null
         
-        // Check permissions
-        if (!permissionManager.hasCapability(pluginId, PluginCapability.COLLECT_DATA)) {
-            securityMonitor.recordSecurityEvent(
-                SecurityEvent.PermissionDenied(
-                    pluginId = pluginId,
-                    capability = PluginCapability.COLLECT_DATA,
-                    reason = "Manual entry permission denied"
-                )
-            )
-            return@withContext null
-        }
-        
-        try {
-            val dataPoint = plugin.createManualEntry(data)
-            
-            if (dataPoint != null) {
-                // Save to repository
-                dataRepository.saveDataPoint(dataPoint)
-                
-                // Update last collection time
-                database.pluginStateDao().updateCollectionTime(pluginId, Instant.now())
-                
-                // Log data access
-                securityMonitor.recordSecurityEvent(
-                    SecurityEvent.DataAccess(
-                        pluginId = pluginId,
-                        dataType = dataPoint.type,
-                        accessType = AccessType.WRITE,
-                        recordCount = 1
-                    )
-                )
-            }
-            
-            dataPoint
-        } catch (e: Exception) {
-            handlePluginError(pluginId, e)
-            null
-        }
+        return@withContext PluginState(
+            pluginId = entity.pluginId,
+            plugin = activePlugins[entity.pluginId],
+            isEnabled = entity.isEnabled,
+            isCollecting = entity.isCollecting,
+            lastCollection = entity.lastCollection?.let { Instant.ofEpochMilli(it) },
+            errorCount = entity.errorCount
+        )
     }
     
     /**
-     * Start automatic data collection for a plugin
+     * Start data collection for a plugin
      */
     suspend fun startDataCollection(pluginId: String) = withContext(Dispatchers.IO) {
-        val plugin = activePlugins[pluginId] ?: return@withContext
+        val plugin = activePlugins[pluginId]
+        if (plugin == null) {
+            Timber.w("Cannot start collection: plugin $pluginId not found")
+            return@withContext
+        }
         
         if (!plugin.supportsAutomaticCollection) return@withContext
         
@@ -309,15 +259,16 @@ class PluginManager @Inject constructor(
     private suspend fun handlePluginError(pluginId: String, error: Exception) {
         Timber.e(error, "Plugin error: $pluginId")
         
-        // Record error in database
-        database.pluginStateDao().recordError(pluginId, error.message ?: "Unknown error")
+        // Record error in database with null-safe message handling
+        val errorMessage = error.message ?: "Unknown error"
+        database.pluginStateDao().recordError(pluginId, errorMessage)
         
         // Record security event
         securityMonitor.recordSecurityEvent(
             SecurityEvent.SecurityViolation(
                 pluginId = pluginId,
                 violationType = "PLUGIN_ERROR",
-                details = error.message ?: "Unknown error",
+                details = errorMessage,
                 severity = ViolationSeverity.MEDIUM
             )
         )
@@ -350,3 +301,15 @@ data class PluginState(
     val lastCollection: Instant? = null,
     val errorCount: Int = 0
 )
+
+/**
+ * Plugin-related events
+ */
+sealed class Event {
+    data class PluginRegistered(val pluginId: String) : Event()
+    data class PluginEnabled(val pluginId: String) : Event()
+    data class PluginDisabled(val pluginId: String) : Event()
+    data class PluginStartedCollecting(val pluginId: String) : Event()
+    data class PluginStoppedCollecting(val pluginId: String) : Event()
+    data class PluginError(val pluginId: String, val error: Exception) : Event()
+}
