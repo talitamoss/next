@@ -1,5 +1,6 @@
 package com.domain.app.core.export
 
+import android.annotation.TargetApi
 import android.content.ContentValues
 import android.content.Context
 import android.os.Build
@@ -37,128 +38,45 @@ class ExportManager @Inject constructor(
     }
     
     /**
-     * Export all user data to CSV format
+     * Export all user data to CSV format in user-accessible Downloads folder
      */
     suspend fun exportAllDataToCsv(context: Context): ExportResult = withContext(Dispatchers.IO) {
-        Log.d(TAG, "=== EXPORT DEBUG START ===")
+        Log.d(TAG, "=== EXPORT TO USER DOWNLOADS START ===")
         
         try {
-            // Step 1: Check plugins
-            Log.d(TAG, "Step 1: Getting active plugins...")
+            // Step 1: Get data
             val plugins = pluginManager.getAllActivePlugins()
-            Log.d(TAG, "Found ${plugins.size} active plugins: ${plugins.map { "${it.id}(${it.metadata.name})" }}")
+            Log.d(TAG, "Found ${plugins.size} active plugins")
             
-            if (plugins.isEmpty()) {
-                Log.w(TAG, "ERROR: No active plugins found!")
-                return@withContext ExportResult.Error("No active plugins found")
-            }
-            
-            // Step 2: Get data from repository
-            Log.d(TAG, "Step 2: Retrieving data from repository...")
-            Log.d(TAG, "Calling dataRepository.getRecentData(${24 * 365}) - getting last 365 days")
-            
-            val allDataFlow = dataRepository.getRecentData(24 * 365)
-            Log.d(TAG, "Got Flow, calling .first()...")
-            
-            val allData = allDataFlow.first()
+            val allData = dataRepository.getRecentData(24 * 365).first()
             Log.d(TAG, "Retrieved ${allData.size} total data points")
             
-            // Debug: Show breakdown by plugin
-            val dataByPlugin = allData.groupBy { it.pluginId }
-            dataByPlugin.forEach { (pluginId, pluginData) ->
-                Log.d(TAG, "  Plugin $pluginId: ${pluginData.size} records")
-                if (pluginData.isNotEmpty()) {
-                    val latest = pluginData.maxByOrNull { it.timestamp }
-                    val oldest = pluginData.minByOrNull { it.timestamp }
-                    Log.d(TAG, "    Latest: ${latest?.timestamp}")
-                    Log.d(TAG, "    Oldest: ${oldest?.timestamp}")
-                    Log.d(TAG, "    Sample value: ${latest?.value}")
-                }
-            }
-            
             if (allData.isEmpty()) {
-                Log.w(TAG, "ERROR: No data found in database!")
-                
-                // Additional debugging - check each plugin individually
-                Log.d(TAG, "Checking each plugin individually...")
-                for (plugin in plugins) {
-                    try {
-                        val pluginDataFlow = dataRepository.getPluginData(plugin.id)
-                        val pluginData = pluginDataFlow.first()
-                        val dataCount = dataRepository.getDataCount(plugin.id)
-                        Log.d(TAG, "  Plugin ${plugin.id}:")
-                        Log.d(TAG, "    Flow result: ${pluginData.size} items")
-                        Log.d(TAG, "    Count query: $dataCount items")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "  Plugin ${plugin.id} data check failed", e)
-                    }
-                }
-                
-                return@withContext ExportResult.Error("No data to export - database appears empty")
+                return@withContext ExportResult.Error("No data to export")
             }
             
-            // Step 3: Create export file
-            Log.d(TAG, "Step 3: Creating export file...")
-            val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
-            val fileName = "behavioral_data_export_$timestamp.csv"
-            Log.d(TAG, "Export filename: $fileName")
-            
-            val exportFile = createExportFile(context, fileName)
-            Log.d(TAG, "Export file path: ${exportFile.absolutePath}")
-            Log.d(TAG, "Parent directory exists: ${exportFile.parentFile?.exists()}")
-            Log.d(TAG, "Parent directory writable: ${exportFile.parentFile?.canWrite()}")
-            
-            // Step 4: Generate CSV content
-            Log.d(TAG, "Step 4: Generating CSV content...")
+            // Step 2: Generate content
             val pluginMap = plugins.associateBy { it.id }
             val csvContent = generateCsvContent(allData, pluginMap)
+            Log.d(TAG, "Generated CSV content: ${csvContent.length} characters")
             
-            Log.d(TAG, "Generated CSV content:")
-            Log.d(TAG, "  Length: ${csvContent.length} characters")
-            Log.d(TAG, "  Line count: ${csvContent.lines().size}")
-            Log.d(TAG, "  Preview (first 300 chars): ${csvContent.take(300)}")
+            // Step 3: Save to user Downloads
+            val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
+            val fileName = "behavioral_data_export_$timestamp.csv"
             
-            // Step 5: Write file using standard FileWriter
-            Log.d(TAG, "Step 5: Writing file...")
-            
-            FileWriter(exportFile).use { writer ->
-                writer.write(csvContent)
-                writer.flush() // Ensure content is written
+            val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                Log.d(TAG, "Using MediaStore for Downloads folder")
+                saveToDownloadsMediaStore(context, fileName, csvContent, allData.size)
+            } else {
+                Log.d(TAG, "Using legacy Downloads approach")
+                saveToDownloadsLegacy(context, fileName, csvContent, allData.size)
             }
             
-            Log.d(TAG, "File write completed")
-            
-            // Step 6: Verify file creation
-            val fileExists = exportFile.exists()
-            val fileSize = exportFile.length()
-            Log.d(TAG, "File created: $fileExists")
-            Log.d(TAG, "File size: $fileSize bytes")
-            
-            if (!fileExists) {
-                Log.e(TAG, "ERROR: File was not created!")
-                return@withContext ExportResult.Error("Failed to create export file")
-            }
-            
-            if (fileSize == 0L) {
-                Log.e(TAG, "ERROR: File is empty!")
-                return@withContext ExportResult.Error("Export file is empty")
-            }
-            
-            Log.d(TAG, "=== EXPORT COMPLETED SUCCESSFULLY ===")
-            
-            ExportResult.Success(
-                filePath = exportFile.absolutePath,
-                fileName = fileName,
-                recordCount = allData.size,
-                fileSize = fileSize
-            )
+            Log.d(TAG, "=== EXPORT TO USER DOWNLOADS COMPLETED ===")
+            return@withContext result
             
         } catch (e: Exception) {
-            Log.e(TAG, "EXPORT FAILED WITH EXCEPTION", e)
-            Log.e(TAG, "Exception type: ${e.javaClass.simpleName}")
-            Log.e(TAG, "Exception message: ${e.message}")
-            Log.e(TAG, "Stack trace: ${Log.getStackTraceString(e)}")
-            
+            Log.e(TAG, "Export to Downloads failed", e)
             ExportResult.Error("Export failed: ${e.message}")
         }
     }
@@ -172,56 +90,122 @@ class ExportManager @Inject constructor(
         startDate: Instant? = null,
         endDate: Instant? = null
     ): ExportResult = withContext(Dispatchers.IO) {
-        Log.d(TAG, "=== PLUGIN EXPORT DEBUG: $pluginId ===")
+        Log.d(TAG, "=== PLUGIN EXPORT: $pluginId ===")
         
         try {
             val plugin = pluginManager.getPlugin(pluginId)
             if (plugin == null) {
-                Log.e(TAG, "Plugin not found: $pluginId")
                 return@withContext ExportResult.Error("Plugin not found: $pluginId")
             }
             
-            Log.d(TAG, "Plugin found: ${plugin.metadata.name}")
-            
             val data = if (startDate != null && endDate != null) {
-                Log.d(TAG, "Getting data in range: $startDate to $endDate")
                 dataRepository.getPluginDataInRange(pluginId, startDate, endDate)
             } else {
-                Log.d(TAG, "Getting all plugin data...")
                 dataRepository.getPluginData(pluginId).first()
             }
             
-            Log.d(TAG, "Retrieved ${data.size} data points for plugin")
-            
             if (data.isEmpty()) {
-                Log.w(TAG, "No data found for plugin ${plugin.metadata.name}")
                 return@withContext ExportResult.Error("No data found for ${plugin.metadata.name}")
             }
             
             val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
             val fileName = "${plugin.metadata.name.lowercase().replace(" ", "_")}_export_$timestamp.csv"
-            
-            val exportFile = createExportFile(context, fileName)
             val csvContent = generatePluginCsvContent(data, plugin)
             
-            Log.d(TAG, "Writing ${csvContent.length} characters to file")
-            
-            FileWriter(exportFile).use { writer ->
-                writer.write(csvContent)
+            val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                saveToDownloadsMediaStore(context, fileName, csvContent, data.size)
+            } else {
+                saveToDownloadsLegacy(context, fileName, csvContent, data.size)
             }
             
-            Log.d(TAG, "Plugin export completed successfully")
-            
-            ExportResult.Success(
-                filePath = exportFile.absolutePath,
-                fileName = fileName,
-                recordCount = data.size,
-                fileSize = exportFile.length()
-            )
+            Log.d(TAG, "Plugin export completed")
+            return@withContext result
             
         } catch (e: Exception) {
             Log.e(TAG, "Plugin export failed", e)
             ExportResult.Error("Export failed: ${e.message}")
+        }
+    }
+    
+    /**
+     * Save to Downloads using MediaStore (Android 10+)
+     */
+    @TargetApi(Build.VERSION_CODES.Q)
+    private fun saveToDownloadsMediaStore(
+        context: Context, 
+        fileName: String, 
+        content: String, 
+        recordCount: Int
+    ): ExportResult {
+        try {
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/csv")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            }
+            
+            Log.d(TAG, "Creating file in Downloads via MediaStore...")
+            val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+            
+            if (uri == null) {
+                throw Exception("Failed to create file in Downloads")
+            }
+            
+            Log.d(TAG, "Writing to Downloads URI: $uri")
+            context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                outputStream.write(content.toByteArray())
+                outputStream.flush()
+                Log.d(TAG, "Successfully wrote to Downloads folder")
+            } ?: throw Exception("Failed to write to Downloads")
+            
+            return ExportResult.Success(
+                filePath = "Downloads/$fileName",
+                fileName = fileName,
+                recordCount = recordCount,
+                fileSize = content.length.toLong()
+            )
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "MediaStore save failed, trying legacy", e)
+            return saveToDownloadsLegacy(context, fileName, content, recordCount)
+        }
+    }
+    
+    /**
+     * Save to Downloads using legacy approach (Android 9 and below)
+     */
+    private fun saveToDownloadsLegacy(
+        context: Context, 
+        fileName: String, 
+        content: String, 
+        recordCount: Int
+    ): ExportResult {
+        try {
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            if (!downloadsDir.exists()) {
+                downloadsDir.mkdirs()
+            }
+            
+            val exportFile = File(downloadsDir, fileName)
+            Log.d(TAG, "Writing to legacy Downloads: ${exportFile.absolutePath}")
+            
+            FileWriter(exportFile).use { writer ->
+                writer.write(content)
+                writer.flush()
+            }
+            
+            Log.d(TAG, "Successfully wrote to Downloads folder (legacy)")
+            
+            return ExportResult.Success(
+                filePath = exportFile.absolutePath,
+                fileName = fileName,
+                recordCount = recordCount,
+                fileSize = exportFile.length()
+            )
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Legacy Downloads save failed", e)
+            throw e
         }
     }
     
@@ -232,31 +216,13 @@ class ExportManager @Inject constructor(
         dataPoints: List<DataPoint>,
         plugins: Map<String, Plugin>
     ): String {
-        Log.d(TAG, "Generating CSV for ${dataPoints.size} data points")
-        
         val csv = StringBuilder()
         
-        // Universal headers
-        val headers = listOf(
-            "Date",
-            "Time", 
-            "Plugin",
-            "Type",
-            "Value",
-            "Source",
-            "Plugin_Specific_Data"
-        )
-        
+        val headers = listOf("Date", "Time", "Plugin", "Type", "Value", "Source", "Plugin_Specific_Data")
         csv.appendLine(headers.joinToString(",") { "\"$it\"" })
-        Log.d(TAG, "Added CSV headers")
         
-        // Group by plugin for consistent formatting
-        val groupedData = dataPoints.groupBy { it.pluginId }
-        Log.d(TAG, "Grouped data into ${groupedData.size} plugin groups")
-        
-        groupedData.forEach { (pluginId, pluginData) ->
+        dataPoints.groupBy { it.pluginId }.forEach { (pluginId, pluginData) ->
             val plugin = plugins[pluginId]
-            Log.d(TAG, "Processing ${pluginData.size} records for plugin $pluginId")
             
             pluginData.forEach { dataPoint ->
                 try {
@@ -280,7 +246,6 @@ class ExportManager @Inject constructor(
             }
         }
         
-        Log.d(TAG, "CSV generation complete. Total length: ${csv.length}")
         return csv.toString()
     }
     
@@ -305,79 +270,6 @@ class ExportManager @Inject constructor(
         }
         
         return csv.toString()
-    }
-    
-    /**
-     * Create export file using modern Android storage API
-     */
-    private fun createExportFile(context: Context, fileName: String): File {
-        Log.d(TAG, "Creating export file: $fileName")
-        Log.d(TAG, "Android SDK: ${Build.VERSION.SDK_INT}")
-        
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Modern scoped storage approach for Android 10+
-            Log.d(TAG, "Using app-specific storage for Android 10+")
-            createExportFileAppSpecific(context, fileName)
-        } else {
-            // Legacy approach for older Android versions
-            Log.d(TAG, "Using legacy file approach")
-            createExportFileLegacy(context, fileName)
-        }
-    }
-    
-    /**
-     * App-specific storage for Android 10+ (no permissions needed)
-     */
-    private fun createExportFileAppSpecific(context: Context, fileName: String): File {
-        try {
-            // Use app-specific external storage (no permissions required)
-            val appExportDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "BehavioralData")
-            Log.d(TAG, "App-specific export directory: ${appExportDir.absolutePath}")
-            
-            if (!appExportDir.exists()) {
-                Log.d(TAG, "Creating app-specific export directory...")
-                val created = appExportDir.mkdirs()
-                Log.d(TAG, "Directory creation result: $created")
-            }
-            
-            val exportFile = File(appExportDir, fileName)
-            Log.d(TAG, "App-specific export file path: ${exportFile.absolutePath}")
-            
-            return exportFile
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "App-specific file creation failed, falling back to internal storage", e)
-            
-            // Fallback to internal storage
-            val internalDir = File(context.filesDir, "exports")
-            if (!internalDir.exists()) {
-                internalDir.mkdirs()
-            }
-            return File(internalDir, fileName)
-        }
-    }
-    
-    /**
-     * Legacy file creation for older Android versions
-     */
-    private fun createExportFileLegacy(context: Context, fileName: String): File {
-        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        Log.d(TAG, "Downloads directory: ${downloadsDir?.absolutePath}")
-        Log.d(TAG, "Downloads directory exists: ${downloadsDir?.exists()}")
-        
-        val appExportDir = File(downloadsDir, "BehavioralData")
-        Log.d(TAG, "App export directory: ${appExportDir.absolutePath}")
-        
-        if (!appExportDir.exists()) {
-            Log.d(TAG, "Creating app export directory...")
-            val created = appExportDir.mkdirs()
-            Log.d(TAG, "Directory creation result: $created")
-        }
-        
-        val exportFile = File(appExportDir, fileName)
-        Log.d(TAG, "Final export file path: ${exportFile.absolutePath}")
-        
-        return exportFile
     }
 }
 
