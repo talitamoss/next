@@ -1,26 +1,31 @@
 package com.domain.app.ui.settings
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.data.DataRepository
+import com.domain.app.core.export.ExportManager
+import com.domain.app.core.export.ExportResult
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginCapability
 import com.domain.app.core.plugin.PluginManager
 import com.domain.app.core.plugin.PluginState
 import com.domain.app.core.plugin.security.PluginPermissionManager
-import com.domain.app.core.plugin.security.PluginTrustLevel
 import com.domain.app.core.preferences.PreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val pluginManager: PluginManager,
     private val dataRepository: DataRepository,
     private val preferencesManager: PreferencesManager,
-    private val permissionManager: PluginPermissionManager
+    private val permissionManager: PluginPermissionManager,
+    private val exportManager: ExportManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -58,87 +63,25 @@ class SettingsViewModel @Inject constructor(
     fun togglePlugin(pluginId: String) {
         viewModelScope.launch {
             val plugin = pluginManager.getPlugin(pluginId) ?: return@launch
-            val currentState = _uiState.value.pluginStates[pluginId]
             
-            // Check if plugin is currently collecting (enabled)
-            if (currentState?.isCollecting == true) {
-                // Disabling - just disable
-                pluginManager.disablePlugin(pluginId)
+            if (_uiState.value.dashboardPluginIds.contains(pluginId)) {
+                preferencesManager.removeFromDashboard(pluginId)
                 _uiState.update { 
-                    it.copy(message = "${plugin.metadata.name} disabled") 
+                    it.copy(message = "${plugin.metadata.name} removed from dashboard") 
                 }
             } else {
-                // Enabling - check permissions first
-                val hasPermissions = permissionManager.hasPermission(
-                    pluginId, 
-                    PluginCapability.COLLECT_DATA
-                )
-                
-                if (!hasPermissions && plugin.trustLevel != PluginTrustLevel.OFFICIAL) {
-                    // Show permission request dialog
-                    _uiState.update {
-                        it.copy(
-                            pendingPlugin = plugin,
-                            showPermissionRequest = true
-                        )
-                    }
-                } else {
-                    // Already has permissions or is official plugin
-                    pluginManager.enablePlugin(pluginId)
+                if (_uiState.value.dashboardPluginIds.size >= 6) {
                     _uiState.update { 
-                        it.copy(message = "${plugin.metadata.name} enabled") 
+                        it.copy(message = "Maximum 6 plugins allowed on dashboard") 
                     }
+                    return@launch
+                }
+                
+                preferencesManager.addToDashboard(pluginId)
+                _uiState.update { 
+                    it.copy(message = "${plugin.metadata.name} added to dashboard") 
                 }
             }
-        }
-    }
-    
-    fun grantPendingPermissions() {
-        viewModelScope.launch {
-            val plugin = _uiState.value.pendingPlugin ?: return@launch
-            
-            // Grant all requested permissions
-            permissionManager.grantPermissions(
-                pluginId = plugin.id,
-                permissions = plugin.securityManifest.requestedCapabilities,
-                grantedBy = "user_settings"
-            )
-            
-            // Now enable the plugin
-            pluginManager.enablePlugin(plugin.id)
-            
-            _uiState.update {
-                it.copy(
-                    pendingPlugin = null,
-                    showPermissionRequest = false,
-                    message = "${plugin.metadata.name} enabled with permissions granted"
-                )
-            }
-        }
-    }
-    
-    fun denyPendingPermissions() {
-        val plugin = _uiState.value.pendingPlugin
-        _uiState.update {
-            it.copy(
-                pendingPlugin = null,
-                showPermissionRequest = false,
-                message = if (plugin != null) 
-                    "${plugin.metadata.name} cannot be enabled without permissions" 
-                else null
-            )
-        }
-    }
-    
-    fun navigateToPluginSecurity(pluginId: String) {
-        _uiState.update {
-            it.copy(navigateToSecurity = pluginId)
-        }
-    }
-    
-    fun clearNavigation() {
-        _uiState.update {
-            it.copy(navigateToSecurity = null)
         }
     }
     
@@ -152,7 +95,6 @@ class SettingsViewModel @Inject constructor(
                     it.copy(message = "${plugin.metadata.name} removed from dashboard") 
                 }
             } else {
-                // Check if we've reached the maximum
                 if (_uiState.value.dashboardPluginIds.size >= 6) {
                     _uiState.update { 
                         it.copy(message = "Maximum 6 plugins allowed on dashboard") 
@@ -176,7 +118,54 @@ class SettingsViewModel @Inject constructor(
     
     fun exportData() {
         viewModelScope.launch {
-            _uiState.update { it.copy(message = "Export feature coming soon") }
+            _uiState.update { it.copy(isExporting = true, message = null) }
+            
+            when (val result = exportManager.exportAllDataToCsv(context)) {
+                is ExportResult.Success -> {
+                    val sizeKb = result.fileSize / 1024
+                    _uiState.update { 
+                        it.copy(
+                            isExporting = false,
+                            message = "Exported ${result.recordCount} records (${sizeKb}KB) to Downloads/BehavioralData/${result.fileName}",
+                            lastExportPath = result.filePath
+                        )
+                    }
+                }
+                is ExportResult.Error -> {
+                    _uiState.update { 
+                        it.copy(
+                            isExporting = false,
+                            message = result.message
+                        )
+                    }
+                }
+            }
+        }
+    }
+    
+    fun exportPluginData(pluginId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isExporting = true, message = null) }
+            
+            when (val result = exportManager.exportPluginData(context, pluginId)) {
+                is ExportResult.Success -> {
+                    val plugin = pluginManager.getPlugin(pluginId)
+                    _uiState.update { 
+                        it.copy(
+                            isExporting = false,
+                            message = "Exported ${plugin?.metadata?.name ?: "plugin"} data: ${result.recordCount} records"
+                        )
+                    }
+                }
+                is ExportResult.Error -> {
+                    _uiState.update { 
+                        it.copy(
+                            isExporting = false,
+                            message = result.message
+                        )
+                    }
+                }
+            }
         }
     }
     
@@ -187,17 +176,14 @@ class SettingsViewModel @Inject constructor(
     }
     
     fun clearAllData() {
-        viewModelScope.launch {
-            // Show confirmation dialog
-            _uiState.update { 
-                it.copy(showClearDataConfirmation = true) 
-            }
+        _uiState.update { 
+            it.copy(showClearDataConfirmation = true) 
         }
     }
     
     fun confirmClearAllData() {
         viewModelScope.launch {
-            dataRepository.cleanupOldData(0) // This will delete all data
+            dataRepository.cleanupOldData(0)
             _uiState.update { 
                 it.copy(
                     message = "All data cleared",
@@ -210,6 +196,49 @@ class SettingsViewModel @Inject constructor(
     fun cancelClearData() {
         _uiState.update { 
             it.copy(showClearDataConfirmation = false) 
+        }
+    }
+    
+    fun navigateToPluginSecurity(pluginId: String) {
+        _uiState.update { 
+            it.copy(navigateToSecurity = pluginId) 
+        }
+    }
+    
+    fun clearNavigation() {
+        _uiState.update { 
+            it.copy(navigateToSecurity = null) 
+        }
+    }
+    
+    fun grantPendingPermissions() {
+        viewModelScope.launch {
+            val plugin = _uiState.value.pendingPlugin ?: return@launch
+            
+            permissionManager.grantPermissions(
+                pluginId = plugin.id,
+                permissions = plugin.securityManifest.requestedCapabilities,
+                grantedBy = "user_settings"
+            )
+            
+            _uiState.update { 
+                it.copy(
+                    pendingPlugin = null,
+                    showPermissionRequest = false,
+                    message = "Permissions granted for ${plugin.metadata.name}"
+                )
+            }
+        }
+    }
+    
+    fun denyPendingPermissions() {
+        val plugin = _uiState.value.pendingPlugin
+        _uiState.update { 
+            it.copy(
+                pendingPlugin = null,
+                showPermissionRequest = false,
+                message = plugin?.let { "Permissions denied for ${it.metadata.name}" }
+            )
         }
     }
     
@@ -227,5 +256,7 @@ data class SettingsUiState(
     val showClearDataConfirmation: Boolean = false,
     val navigateToSecurity: String? = null,
     val isLoading: Boolean = false,
-    val message: String? = null
+    val isExporting: Boolean = false,
+    val message: String? = null,
+    val lastExportPath: String? = null
 )
