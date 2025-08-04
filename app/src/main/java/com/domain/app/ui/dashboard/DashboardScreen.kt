@@ -37,7 +37,8 @@ fun DashboardScreen(
             TopAppBar(
                 title = { Text("Dashboard") },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 actions = {
                     TextButton(
