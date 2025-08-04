@@ -96,23 +96,34 @@ class DashboardViewModel @Inject constructor(
     }
     
     private fun observePluginPermissions() {
-        viewModelScope.launch {
-            // Check permissions for all plugins
-            val allPlugins = pluginManager.getAllActivePlugins()
-            val permissionMap = mutableMapOf<String, Boolean>()
-            
-            allPlugins.forEach { plugin ->
-                val hasPermissions = permissionManager.hasPermission(
-                    plugin.id, 
-                    PluginCapability.COLLECT_DATA
-                )
-                permissionMap[plugin.id] = hasPermissions
+        // Reactively observe permission changes for all dashboard plugins
+        combine(
+            _uiState.map { it.allPlugins },
+            _uiState.map { it.allPlugins }.flatMapLatest { plugins ->
+                if (plugins.isEmpty()) {
+                    flowOf(emptyMap<String, Boolean>())
+                } else {
+                    combine(
+                        plugins.map { plugin ->
+                            permissionManager.getGrantedPermissionsFlow(plugin.id)
+                                .map { grantedPermissions ->
+                                    plugin.id to grantedPermissions.contains(PluginCapability.COLLECT_DATA)
+                                }
+                        }
+                    ) { permissionPairs ->
+                        permissionPairs.toMap()
+                    }
+                }
             }
-            
+        ) { _, permissionMap ->
+            permissionMap
+        }
+        .onEach { permissionMap ->
             _uiState.update {
                 it.copy(pluginPermissions = permissionMap)
             }
         }
+        .launchIn(viewModelScope)
     }
     
     private fun loadDataCounts() {
@@ -190,10 +201,7 @@ class DashboardViewModel @Inject constructor(
                 grantedBy = "user_quick_add"
             )
             
-            // Re-check permissions
-            observePluginPermissions()
-            
-            // Continue with quick add
+            // Continue with quick add - permissions will be updated reactively
             _uiState.update {
                 it.copy(needsPermission = false)
             }
@@ -215,6 +223,7 @@ class DashboardViewModel @Inject constructor(
             try {
                 val dataPoint = pluginManager.createManualEntry(plugin.id, data)
                 if (dataPoint != null) {
+                    _uiState.update { it.copy(showQuickAdd = false) }
                     // Success handled by event observer
                 } else {
                     _uiState.update {

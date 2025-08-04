@@ -37,7 +37,8 @@ fun DashboardScreen(
             TopAppBar(
                 title = { Text("Dashboard") },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 actions = {
                     TextButton(
@@ -127,7 +128,7 @@ fun DashboardScreen(
         }
     }
 
-    // Quick Add Bottom Sheet with permission check
+    // Direct plugin dialogs - no intermediate bottom sheet
     val currentPlugin = selectedPlugin
     if (uiState.showQuickAdd && currentPlugin != null) {
         if (uiState.needsPermission) {
@@ -137,13 +138,57 @@ fun DashboardScreen(
                 onDeny = { viewModel.dismissQuickAdd() }
             )
         } else {
-            QuickAddBottomSheet(
-                plugin = currentPlugin,
-                onDismiss = { viewModel.dismissQuickAdd() },
-                onDataSubmit = { plugin, data ->
-                    viewModel.onQuickAdd(plugin, data)
+            // Show plugin-specific dialog directly
+            when {
+                // Multi-stage plugins
+                currentPlugin.getQuickAddStages() != null -> {
+                    MultiStageQuickAddDialog(
+                        plugin = currentPlugin,
+                        stages = currentPlugin.getQuickAddStages()!!,
+                        onDismiss = { viewModel.dismissQuickAdd() },
+                        onComplete = { stageData ->
+                            viewModel.onQuickAdd(currentPlugin, stageData)
+                        }
+                    )
                 }
-            )
+                // Plugin-specific dialogs
+                currentPlugin.id == "water" -> {
+                    val config = currentPlugin.getQuickAddConfig()
+                    if (config != null) {
+                        WaterQuickAddDialog(
+                            options = config.options ?: emptyList(),
+                            onDismiss = { viewModel.dismissQuickAdd() },
+                            onConfirm = { amount ->
+                                viewModel.onQuickAdd(currentPlugin, mapOf("amount" to amount))
+                            }
+                        )
+                    }
+                }
+                currentPlugin.id == "mood" -> {
+                    val config = currentPlugin.getQuickAddConfig()
+                    if (config != null) {
+                        MoodQuickAddDialog(
+                            options = config.options ?: emptyList(),
+                            onDismiss = { viewModel.dismissQuickAdd() },
+                            onConfirm = { moodValue, note ->
+                                val data = mutableMapOf<String, Any>("value" to moodValue)
+                                note?.let { data["note"] = it }
+                                viewModel.onQuickAdd(currentPlugin, data)
+                            }
+                        )
+                    }
+                }
+                // Generic dialog for other plugins
+                else -> {
+                    GenericQuickAddDialog(
+                        plugin = currentPlugin,
+                        onDismiss = { viewModel.dismissQuickAdd() },
+                        onConfirm = { data ->
+                            viewModel.onQuickAdd(currentPlugin, data)
+                        }
+                    )
+                }
+            }
         }
     }
     
@@ -198,6 +243,7 @@ fun DashboardPluginTile(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
+                // Plugin icon
                 Box(
                     modifier = Modifier
                         .size(48.dp)
