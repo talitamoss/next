@@ -2,6 +2,7 @@ package com.domain.app.ui.theme
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -17,6 +18,7 @@ object AppIcons {
         val dashboard = Icons.Filled.GridView
         val data = Icons.Filled.Analytics
         val settings = Icons.Filled.Settings
+        val social = Icons.Filled.People
         val back = Icons.Filled.ArrowBack
         val close = Icons.Filled.Close
         val menu = Icons.Filled.Menu
