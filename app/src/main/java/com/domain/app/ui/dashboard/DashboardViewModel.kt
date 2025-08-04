@@ -223,6 +223,7 @@ class DashboardViewModel @Inject constructor(
             try {
                 val dataPoint = pluginManager.createManualEntry(plugin.id, data)
                 if (dataPoint != null) {
+                    _uiState.update { it.copy(showQuickAdd = false) }
                     // Success handled by event observer
                 } else {
                     _uiState.update {
