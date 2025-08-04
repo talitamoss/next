@@ -1,4 +1,3 @@
-// app/build.gradle.kts
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -63,7 +62,7 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     
-    // Room
+    // Room Database
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     kapt("androidx.room:room-compiler:2.6.1")
@@ -72,7 +71,7 @@ dependencies {
     implementation("net.zetetic:android-database-sqlcipher:4.5.4")
     implementation("androidx.sqlite:sqlite-ktx:2.4.0")
     
-    // Security
+    // Security & Encryption
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     
     // DataStore for preferences
@@ -94,10 +93,6 @@ dependencies {
     implementation("com.google.dagger:hilt-android:2.48")
     kapt("com.google.dagger:hilt-compiler:2.48")
     implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
-    
-    // TODO: Briar dependencies (will be added when implementing real backend)
-    // implementation("org.briarproject:briar-api:1.4.0")
-    // implementation("org.briarproject:briar-core:1.4.0")
     
     // Testing
     testImplementation(libs.junit)
