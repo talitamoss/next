@@ -1,5 +1,6 @@
 package com.domain.app.core.data
 
+import android.util.Log
 import com.domain.app.core.storage.AppDatabase
 import com.domain.app.core.storage.entity.DataPointEntity
 import kotlinx.coroutines.Dispatchers
@@ -17,26 +18,63 @@ class DataRepository @Inject constructor(
     private val database: AppDatabase
 ) {
     
+    companion object {
+        private const val TAG = "DataRepository"
+    }
+    
     /**
      * Save a data point
      */
     suspend fun saveDataPoint(dataPoint: DataPoint) = withContext(Dispatchers.IO) {
-        database.dataPointDao().insert(dataPoint.toEntity())
+        Log.d(TAG, "=== SAVING DATA POINT ===")
+        Log.d(TAG, "Plugin ID: ${dataPoint.pluginId}")
+        Log.d(TAG, "Type: ${dataPoint.type}")
+        Log.d(TAG, "Value: ${dataPoint.value}")
+        Log.d(TAG, "Timestamp: ${dataPoint.timestamp}")
+        
+        try {
+            val entity = dataPoint.toEntity()
+            Log.d(TAG, "Converted to entity:")
+            Log.d(TAG, "  Entity ID: ${entity.id}")
+            Log.d(TAG, "  Entity valueJson: ${entity.valueJson}")
+            
+            database.dataPointDao().insert(entity)
+            Log.d(TAG, "Successfully inserted into database")
+            
+            // Verify insertion
+            val count = database.dataPointDao().getCountByPlugin(dataPoint.pluginId)
+            Log.d(TAG, "Plugin ${dataPoint.pluginId} now has $count total records")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save data point", e)
+            throw e
+        }
     }
     
     /**
      * Save multiple data points
      */
     suspend fun saveDataPoints(dataPoints: List<DataPoint>) = withContext(Dispatchers.IO) {
-        database.dataPointDao().insertAll(dataPoints.map { it.toEntity() })
+        Log.d(TAG, "Saving ${dataPoints.size} data points")
+        try {
+            database.dataPointDao().insertAll(dataPoints.map { it.toEntity() })
+            Log.d(TAG, "Successfully saved ${dataPoints.size} data points")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save data points", e)
+            throw e
+        }
     }
     
     /**
      * Get data for a specific plugin
      */
     fun getPluginData(pluginId: String): Flow<List<DataPoint>> {
+        Log.d(TAG, "Getting data for plugin: $pluginId")
         return database.dataPointDao().getByPlugin(pluginId)
-            .map { entities -> entities.map { it.toDataPoint() } }
+            .map { entities -> 
+                Log.d(TAG, "Plugin $pluginId: found ${entities.size} entities")
+                entities.map { it.toDataPoint() }
+            }
     }
     
     /**
@@ -47,9 +85,11 @@ class DataRepository @Inject constructor(
         start: Instant,
         end: Instant
     ): List<DataPoint> = withContext(Dispatchers.IO) {
-        database.dataPointDao()
+        Log.d(TAG, "Getting plugin $pluginId data from $start to $end")
+        val entities = database.dataPointDao()
             .getByPluginAndTimeRange(pluginId, start, end)
-            .map { it.toDataPoint() }
+        Log.d(TAG, "Found ${entities.size} entities in range")
+        entities.map { it.toDataPoint() }
     }
     
     /**
@@ -57,23 +97,37 @@ class DataRepository @Inject constructor(
      */
     fun getRecentData(hours: Int = 24): Flow<List<DataPoint>> {
         val since = Instant.now().minus(hours.toLong(), ChronoUnit.HOURS)
+        Log.d(TAG, "Getting recent data since: $since (last $hours hours)")
+        
         return database.dataPointDao().getRecentData(since)
-            .map { entities -> entities.map { it.toDataPoint() } }
+            .map { entities -> 
+                Log.d(TAG, "Recent data query returned ${entities.size} entities")
+                entities.forEach { entity ->
+                    Log.d(TAG, "  Entity: ${entity.pluginId} at ${entity.timestamp}")
+                }
+                entities.map { it.toDataPoint() }
+            }
     }
     
     /**
      * Get latest data points with limit
      */
     fun getLatestDataPoints(limit: Int): Flow<List<DataPoint>> {
+        Log.d(TAG, "Getting latest $limit data points")
         return database.dataPointDao().getLatestDataPoints(limit)
-            .map { entities -> entities.map { it.toDataPoint() } }
+            .map { entities -> 
+                Log.d(TAG, "Latest query returned ${entities.size} entities")
+                entities.map { it.toDataPoint() }
+            }
     }
     
     /**
      * Get count of data points for a plugin
      */
     suspend fun getDataCount(pluginId: String): Int = withContext(Dispatchers.IO) {
-        database.dataPointDao().getCountByPlugin(pluginId)
+        val count = database.dataPointDao().getCountByPlugin(pluginId)
+        Log.d(TAG, "Plugin $pluginId has $count data points")
+        count
     }
     
     /**
@@ -123,29 +177,47 @@ class DataRepository @Inject constructor(
  * Extension functions for data conversion
  */
 fun DataPoint.toEntity(): DataPointEntity {
-    return DataPointEntity(
-        id = id,
-        pluginId = pluginId,
-        timestamp = timestamp,
-        type = type,
-        valueJson = JSONObject(value).toString(),
-        metadataJson = metadata?.let { JSONObject(it).toString() },
-        source = source,
-        version = version
-    )
+    Log.d("DataConversion", "Converting DataPoint to Entity:")
+    Log.d("DataConversion", "  ID: $id")
+    Log.d("DataConversion", "  Value: $value")
+    
+    try {
+        val valueJson = JSONObject(value).toString()
+        Log.d("DataConversion", "  ValueJSON: $valueJson")
+        
+        return DataPointEntity(
+            id = id,
+            pluginId = pluginId,
+            timestamp = timestamp,
+            type = type,
+            valueJson = valueJson,
+            metadataJson = metadata?.let { JSONObject(it).toString() },
+            source = source,
+            version = version
+        )
+    } catch (e: Exception) {
+        Log.e("DataConversion", "Failed to convert DataPoint to Entity", e)
+        throw e
+    }
 }
 
 fun DataPointEntity.toDataPoint(): DataPoint {
-    return DataPoint(
-        id = id,
-        pluginId = pluginId,
-        timestamp = timestamp,
-        type = type,
-        value = JSONObject(valueJson).toMap(),
-        metadata = metadataJson?.let { JSONObject(it).toStringMap() },
-        source = source,
-        version = version
-    )
+    try {
+        return DataPoint(
+            id = id,
+            pluginId = pluginId,
+            timestamp = timestamp,
+            type = type,
+            value = JSONObject(valueJson).toMap(),
+            metadata = metadataJson?.let { JSONObject(it).toStringMap() },
+            source = source,
+            version = version
+        )
+    } catch (e: Exception) {
+        Log.e("DataConversion", "Failed to convert Entity to DataPoint", e)
+        Log.e("DataConversion", "Entity valueJson: $valueJson")
+        throw e
+    }
 }
 
 fun JSONObject.toMap(): Map<String, Any> {
