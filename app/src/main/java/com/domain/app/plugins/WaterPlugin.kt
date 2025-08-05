@@ -65,12 +65,12 @@ class WaterPlugin : Plugin {
     
     override fun getQuickAddConfig() = QuickAddConfig(
         title = "Add Water",
-        defaultValue = 250,
+        defaultValue = 500,
         inputType = InputType.CHOICE,
         options = listOf(
-            QuickOption("Glass", 250, "💧"),
-            QuickOption("Bottle", 500, "💧"),
-            QuickOption("Liter", 1000, "💧"),
+            QuickOption("500ml", 500, "💧"),
+            QuickOption("750ml", 750, "💧"),
+            QuickOption("1L", 1000, "💧"),
             QuickOption("Custom", -1, "💧")
         ),
         unit = "ml"

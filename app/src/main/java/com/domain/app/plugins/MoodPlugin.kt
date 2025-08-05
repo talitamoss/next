@@ -19,7 +19,7 @@ class MoodPlugin : Plugin {
         category = PluginCategory.MENTAL_WELLNESS,
         tags = listOf("mood", "emotion", "mental-health", "wellbeing", "qualitative"),
         dataPattern = DataPattern.RATING,
-        inputType = InputType.CHOICE,
+        inputType = InputType.SLIDER,  // Changed from CHOICE to SLIDER
         supportsMultiStage = false,
         relatedPlugins = listOf("sleep", "exercise", "meditation"),
         exportFormat = ExportFormat.CSV,
@@ -66,23 +66,22 @@ class MoodPlugin : Plugin {
     
     override fun getQuickAddConfig() = QuickAddConfig(
         title = "How are you feeling?",
-        inputType = InputType.CHOICE,
-        options = listOf(
-            QuickOption("Great", 5, "😊"),
-            QuickOption("Good", 4, "🙂"),
-            QuickOption("Okay", 3, "😐"),
-            QuickOption("Not Great", 2, "😕"),
-            QuickOption("Bad", 1, "😢")
-        )
+        inputType = InputType.SLIDER,  // Changed to SLIDER
+        defaultValue = 50,  // Middle of 0-100 scale
+        unit = null  // No unit needed for mood scale
     )
     
     override suspend fun createManualEntry(data: Map<String, Any>): DataPoint? {
+        // Accept value from 0-100 scale
         val moodValue = when (val value = data["value"] ?: data["mood"]) {
             is Number -> value.toInt()
-            else -> 3
+            else -> 50  // Default to middle
         }
         
         val note = data["note"] as? String
+        
+        // Convert 0-100 to descriptive label
+        val label = getMoodLabel(moodValue)
         
         return DataPoint(
             pluginId = id,
@@ -90,8 +89,7 @@ class MoodPlugin : Plugin {
             value = mapOf(
                 "mood" to moodValue,
                 "note" to (note ?: ""),
-                "emoji" to getEmojiForMood(moodValue),
-                "label" to getLabelForMood(moodValue)
+                "label" to label
             ),
             metadata = mapOf(
                 "quick_add" to "true",
@@ -106,13 +104,13 @@ class MoodPlugin : Plugin {
         
         return when {
             mood == null -> ValidationResult.Error("Mood value is required")
-            mood !in 1..5 -> ValidationResult.Error("Mood must be between 1 and 5")
+            mood !in 0..100 -> ValidationResult.Error("Mood must be between 0 and 100")
             else -> ValidationResult.Success
         }
     }
     
     override fun exportHeaders() = listOf(
-        "Date", "Time", "Mood (1-5)", "Label", "Note"
+        "Date", "Time", "Mood (0-100)", "Label", "Note"
     )
     
     override fun formatForExport(dataPoint: DataPoint): Map<String, String> {
@@ -125,27 +123,17 @@ class MoodPlugin : Plugin {
         return mapOf(
             "Date" to date,
             "Time" to time,
-            "Mood (1-5)" to mood,
+            "Mood (0-100)" to mood,
             "Label" to label,
             "Note" to note
         )
     }
     
-    private fun getEmojiForMood(value: Int) = when(value) {
-        5 -> "😊"
-        4 -> "🙂"
-        3 -> "😐"
-        2 -> "😕"
-        1 -> "😢"
-        else -> "😐"
-    }
-    
-    private fun getLabelForMood(value: Int) = when(value) {
-        5 -> "Great"
-        4 -> "Good"
-        3 -> "Okay"
-        2 -> "Not Great"
-        1 -> "Bad"
-        else -> "Unknown"
+    private fun getMoodLabel(value: Int) = when {
+        value >= 80 -> "Light"
+        value >= 60 -> "Bright"
+        value >= 40 -> "Neutral"
+        value >= 20 -> "Dim"
+        else -> "Dark"
     }
 }

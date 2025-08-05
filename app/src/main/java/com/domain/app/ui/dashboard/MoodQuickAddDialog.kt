@@ -1,52 +1,122 @@
 package com.domain.app.ui.dashboard
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.domain.app.core.plugin.QuickOption
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MoodQuickAddDialog(
-    options: List<QuickOption>,
+    options: List<QuickOption>,  // Keeping for compatibility but not used
     onDismiss: () -> Unit,
     onConfirm: (Int, String?) -> Unit
 ) {
-    var selectedMood by remember { mutableStateOf<QuickOption?>(null) }
+    var moodValue by remember { mutableStateOf(50f) }  // 0-100 scale
     var note by remember { mutableStateOf("") }
     var showNoteField by remember { mutableStateOf(false) }
     
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("How are you feeling?") },
+        title = { 
+            Text(
+                "How are you feeling?",
+                style = MaterialTheme.typography.headlineSmall
+            )
+        },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(400.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Mood selection grid
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.height(80.dp)
+                // Vertical mood slider
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    items(options) { option ->
-                        MoodOptionCard(
-                            option = option,
-                            isSelected = selectedMood == option,
-                            onClick = {
-                                selectedMood = option
+                    // Labels on the left
+                    Column(
+                        modifier = Modifier.padding(end = 16.dp),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Text(
+                            text = "Light",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = "Dark",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                    
+                    // Custom vertical slider
+                    Box(
+                        modifier = Modifier
+                            .width(80.dp)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(40.dp))
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        MaterialTheme.colorScheme.surface,
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    ),
+                                    startY = 0f,
+                                    endY = Float.POSITIVE_INFINITY
+                                )
+                            )
+                    ) {
+                        MoodVerticalSlider(
+                            value = moodValue,
+                            onValueChange = { newValue ->
+                                moodValue = newValue
                                 showNoteField = true
-                            }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    
+                    // Current value indicator
+                    Column(
+                        modifier = Modifier.padding(start = 16.dp),
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "${moodValue.roundToInt()}",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = getMoodDescription(moodValue.roundToInt()),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -67,12 +137,8 @@ fun MoodQuickAddDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    selectedMood?.let { mood ->
-                        val moodValue = (mood.value as? Number)?.toInt() ?: 3
-                        onConfirm(moodValue, note.takeIf { it.isNotBlank() })
-                    }
-                },
-                enabled = selectedMood != null
+                    onConfirm(moodValue.roundToInt(), note.takeIf { it.isNotBlank() })
+                }
             ) {
                 Text("Save")
             }
@@ -85,41 +151,77 @@ fun MoodQuickAddDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MoodOptionCard(
-    option: QuickOption,
-    isSelected: Boolean,
-    onClick: () -> Unit
+fun MoodVerticalSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..100f
 ) {
-    Card(
-        onClick = onClick,
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) 
-                MaterialTheme.colorScheme.primaryContainer 
-            else 
-                MaterialTheme.colorScheme.surface
-        ),
-        modifier = Modifier
-            .aspectRatio(1f)
-            .fillMaxWidth()
+    BoxWithConstraints(
+        modifier = modifier
     ) {
-        Column(
+        val height = constraints.maxHeight.toFloat()
+        val thumbY = remember(value, height) {
+            val normalized = (value - valueRange.start) / (valueRange.endInclusive - valueRange.start)
+            height * (1f - normalized)  // Invert for top = max
+        }
+        
+        Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures { _, _ -> }
+                }
+                .pointerInput(valueRange) {
+                    detectVerticalDragGestures { change, _ ->
+                        val newY = change.position.y.coerceIn(0f, height)
+                        val normalized = 1f - (newY / height)  // Invert for top = max
+                        val newValue = valueRange.start + 
+                            (normalized * (valueRange.endInclusive - valueRange.start))
+                        onValueChange(newValue.coerceIn(valueRange))
+                    }
+                }
         ) {
-            Text(
-                text = option.icon ?: "",
-                fontSize = 28.sp
+            val centerX = size.width / 2
+            
+            // Track
+            drawLine(
+                color = Color.Gray.copy(alpha = 0.3f),
+                start = Offset(centerX, 20f),
+                end = Offset(centerX, size.height - 20f),
+                strokeWidth = 4.dp.toPx(),
+                cap = StrokeCap.Round
             )
-            Text(
-                text = option.label,
-                style = MaterialTheme.typography.labelSmall,
-                textAlign = TextAlign.Center
+            
+            // Active track
+            drawLine(
+                color = Color.Gray.copy(alpha = 0.6f),
+                start = Offset(centerX, thumbY),
+                end = Offset(centerX, size.height - 20f),
+                strokeWidth = 4.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+            
+            // Thumb
+            drawCircle(
+                color = Color.White,
+                radius = 12.dp.toPx(),
+                center = Offset(centerX, thumbY)
+            )
+            drawCircle(
+                color = Color.Gray,
+                radius = 10.dp.toPx(),
+                center = Offset(centerX, thumbY)
             )
         }
     }
+}
+
+private fun getMoodDescription(value: Int) = when {
+    value >= 80 -> "Light"
+    value >= 60 -> "Bright"
+    value >= 40 -> "Neutral"
+    value >= 20 -> "Dim"
+    else -> "Dark"
 }

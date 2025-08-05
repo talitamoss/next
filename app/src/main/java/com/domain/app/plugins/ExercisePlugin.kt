@@ -74,22 +74,47 @@ class ExercisePlugin : Plugin {
             inputType = InputType.CHOICE,
             required = true,
             options = listOf(
-                QuickOption("Walk", "walk", "🚶"),
-                QuickOption("Run", "run", "🏃"),
-                QuickOption("Gym", "gym", "💪"),
-                QuickOption("Yoga", "yoga", "🧘"),
-                QuickOption("Bike", "bike", "🚴"),
-                QuickOption("Swim", "swim", "🏊"),
-                QuickOption("Sports", "sports", "⚽"),
-                QuickOption("Other", "other", "🏋️")
+                // Cardio
+                QuickOption("Running", "running", null),
+                QuickOption("Walking", "walking", null),
+                QuickOption("Cycling", "cycling", null),
+                QuickOption("Swimming", "swimming", null),
+                QuickOption("Hiking", "hiking", null),
+                QuickOption("Rowing", "rowing", null),
+                QuickOption("Elliptical", "elliptical", null),
+                
+                // Strength
+                QuickOption("Weight Training", "weights", null),
+                QuickOption("Bodyweight", "bodyweight", null),
+                QuickOption("CrossFit", "crossfit", null),
+                
+                // Flexibility & Balance
+                QuickOption("Yoga", "yoga", null),
+                QuickOption("Pilates", "pilates", null),
+                QuickOption("Stretching", "stretching", null),
+                
+                // Sports
+                QuickOption("Tennis", "tennis", null),
+                QuickOption("Basketball", "basketball", null),
+                QuickOption("Soccer", "soccer", null),
+                QuickOption("Golf", "golf", null),
+                QuickOption("Martial Arts", "martial_arts", null),
+                
+                // Dance & Movement
+                QuickOption("Dancing", "dancing", null),
+                QuickOption("Boxing", "boxing", null),
+                
+                // Other
+                QuickOption("Rock Climbing", "climbing", null),
+                QuickOption("Other", "other", null)
             )
         ),
         QuickAddStage(
             id = "duration",
             title = "How long did you exercise?",
-            inputType = InputType.NUMBER,
+            inputType = InputType.SLIDER,  // Changed to SLIDER
             required = true,
-            hint = "Duration in minutes",
+            hint = "Slide to set duration",
             defaultValue = 30
         ),
         QuickAddStage(
@@ -98,9 +123,9 @@ class ExercisePlugin : Plugin {
             inputType = InputType.CHOICE,
             required = true,
             options = listOf(
-                QuickOption("Light", "light", "😌"),
-                QuickOption("Moderate", "moderate", "😊"),
-                QuickOption("Intense", "intense", "😤")
+                QuickOption("Light", "light", null),
+                QuickOption("Moderate", "moderate", null),
+                QuickOption("Intense", "intense", null)
             )
         ),
         QuickAddStage(
@@ -116,12 +141,12 @@ class ExercisePlugin : Plugin {
         title = "Log Exercise",
         inputType = InputType.CHOICE,
         options = listOf(
-            QuickOption("Walk", "walk", "🚶"),
-            QuickOption("Run", "run", "🏃"),
-            QuickOption("Gym", "gym", "💪"),
-            QuickOption("Yoga", "yoga", "🧘"),
-            QuickOption("Bike", "bike", "🚴"),
-            QuickOption("Other", "other", "🏋️")
+            QuickOption("Running", "running", null),
+            QuickOption("Walking", "walking", null),
+            QuickOption("Gym", "gym", null),
+            QuickOption("Yoga", "yoga", null),
+            QuickOption("Cycling", "cycling", null),
+            QuickOption("Other", "other", null)
         )
     )
     
@@ -141,8 +166,7 @@ class ExercisePlugin : Plugin {
                 "duration_minutes" to duration,
                 "intensity" to intensity,
                 "calories" to (calories ?: estimateCalories(activityType, duration, intensity)),
-                "notes" to (notes ?: ""),
-                "emoji" to getEmojiForActivity(activityType)
+                "notes" to (notes ?: "")
             ),
             metadata = mapOf(
                 "quick_add" to "true",
@@ -185,43 +209,62 @@ class ExercisePlugin : Plugin {
     }
     
     private fun getActivityLabel(activity: String) = when(activity) {
-        "walk" -> "Walking"
-        "run" -> "Running"
-        "gym" -> "Gym Workout"
+        "running" -> "Running"
+        "walking" -> "Walking"
+        "cycling" -> "Cycling"
+        "swimming" -> "Swimming"
+        "hiking" -> "Hiking"
+        "rowing" -> "Rowing"
+        "elliptical" -> "Elliptical"
+        "weights" -> "Weight Training"
+        "bodyweight" -> "Bodyweight"
+        "crossfit" -> "CrossFit"
         "yoga" -> "Yoga"
-        "bike" -> "Cycling"
-        "swim" -> "Swimming"
-        "sports" -> "Sports"
+        "pilates" -> "Pilates"
+        "stretching" -> "Stretching"
+        "tennis" -> "Tennis"
+        "basketball" -> "Basketball"
+        "soccer" -> "Soccer"
+        "golf" -> "Golf"
+        "martial_arts" -> "Martial Arts"
+        "dancing" -> "Dancing"
+        "boxing" -> "Boxing"
+        "climbing" -> "Rock Climbing"
+        "gym" -> "Gym Workout"
         else -> "Other Exercise"
     }
     
-    private fun getEmojiForActivity(activity: String) = when(activity) {
-        "walk" -> "🚶"
-        "run" -> "🏃"
-        "gym" -> "💪"
-        "yoga" -> "🧘"
-        "bike" -> "🚴"
-        "swim" -> "🏊"
-        "sports" -> "⚽"
-        else -> "🏋️"
-    }
-    
     private fun estimateCalories(activity: String, duration: Int, intensity: String): Int {
+        // Calories per minute at moderate intensity (rough estimates)
         val baseRate = when(activity) {
-            "walk" -> 4
-            "run" -> 10
-            "gym" -> 8
+            "running" -> 10
+            "walking" -> 4
+            "cycling" -> 7
+            "swimming" -> 9
+            "hiking" -> 6
+            "rowing" -> 8
+            "elliptical" -> 7
+            "weights" -> 6
+            "bodyweight" -> 7
+            "crossfit" -> 10
             "yoga" -> 3
-            "bike" -> 7
-            "swim" -> 9
-            "sports" -> 7
+            "pilates" -> 4
+            "stretching" -> 2
+            "tennis" -> 7
+            "basketball" -> 8
+            "soccer" -> 8
+            "golf" -> 3
+            "martial_arts" -> 9
+            "dancing" -> 5
+            "boxing" -> 9
+            "climbing" -> 10
             else -> 5
         }
         
         val intensityMultiplier = when(intensity) {
-            "light" -> 0.8
+            "light" -> 0.7
             "moderate" -> 1.0
-            "intense" -> 1.5
+            "intense" -> 1.4
             else -> 1.0
         }
         
