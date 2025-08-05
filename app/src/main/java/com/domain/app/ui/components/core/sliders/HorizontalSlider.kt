@@ -82,40 +82,31 @@ fun HorizontalSlider(
     
     Column(
         modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // Value label above slider
+        // Value label
         if (showLabel) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
             ) {
-                // Calculate label position
-                val labelOffset = normalizedValue
-                
                 Card(
                     modifier = Modifier
-                        .alpha(if (isDragging) 1f else 0.9f)
-                        .fillMaxWidth(0.2f)
-                        .offset(x = (labelOffset * 0.8f - 0.4f).let { (it * 100).dp }),
-                    shape = RoundedCornerShape(12.dp),
+                        .alpha(if (isDragging) 1f else 0.8f),
+                    shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = colors.labelBackground
                     ),
                     elevation = CardDefaults.cardElevation(
-                        defaultElevation = if (isDragging) 6.dp else 2.dp
+                        defaultElevation = if (isDragging) 4.dp else 1.dp
                     )
                 ) {
                     Text(
                         text = labelFormatter(value),
-                        modifier = Modifier
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                            .fillMaxWidth(),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
-                        color = colors.labelText,
-                        textAlign = TextAlign.Center
+                        color = colors.labelText
                     )
                 }
             }
@@ -170,21 +161,16 @@ fun HorizontalSlider(
                 )
                 
                 // Draw active track
-                val thumbX = startPadding + (trackLength * normalizedValue)
+                val progressX = startPadding + (normalizedValue * trackLength)
                 drawLine(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            colors.activeTrackColor.copy(alpha = 0.7f),
-                            colors.activeTrackColor
-                        )
-                    ),
+                    color = colors.activeTrackColor,
                     start = Offset(startPadding, centerY),
-                    end = Offset(thumbX, centerY),
+                    end = Offset(progressX, centerY),
                     strokeWidth = trackHeight,
                     cap = StrokeCap.Round
                 )
                 
-                // Draw tick marks if enabled
+                // Draw ticks if enabled
                 if (showTicks && steps > 0) {
                     drawTicks(
                         steps = steps,
@@ -196,36 +182,30 @@ fun HorizontalSlider(
                     )
                 }
                 
-                // Draw thumb shadow
-                if (isDragging) {
-                    drawCircle(
-                        color = Color.Black.copy(alpha = 0.2f),
-                        radius = trackHeight * 1.8f,
-                        center = Offset(thumbX, centerY + 2.dp.toPx())
-                    )
-                }
-                
                 // Draw thumb
+                val thumbX = startPadding + (normalizedValue * trackLength)
                 drawCircle(
                     color = colors.thumbColor,
-                    radius = if (isDragging) trackHeight * 1.5f else trackHeight * 1.2f,
+                    radius = if (isDragging) trackHeight * 1.2f else trackHeight,
                     center = Offset(thumbX, centerY)
                 )
                 
                 // Draw thumb border
                 drawCircle(
                     color = colors.thumbBorderColor,
-                    radius = if (isDragging) trackHeight * 1.5f else trackHeight * 1.2f,
+                    radius = if (isDragging) trackHeight * 1.2f else trackHeight,
                     center = Offset(thumbX, centerY),
                     style = Stroke(width = 2.dp.toPx())
                 )
                 
-                // Draw inner thumb circle for better visual
-                drawCircle(
-                    color = colors.thumbBorderColor.copy(alpha = 0.3f),
-                    radius = trackHeight * 0.5f,
-                    center = Offset(thumbX, centerY)
-                )
+                // Thumb glow when dragging
+                if (isDragging) {
+                    drawCircle(
+                        color = colors.thumbBorderColor.copy(alpha = 0.3f),
+                        radius = trackHeight * 1.5f,
+                        center = Offset(thumbX, centerY)
+                    )
+                }
             }
         }
         
@@ -290,7 +270,7 @@ private fun updateValue(
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int,
     onValueChange: (Float) -> Unit,
-    haptics: HapticFeedback,
+    haptics: androidx.compose.ui.hapticfeedback.HapticFeedback,
     enableHaptics: Boolean
 ) {
     val normalizedPosition = (x / width).coerceIn(0f, 1f)
@@ -350,86 +330,4 @@ object HorizontalSliderDefaults {
         labelText = labelText,
         markerTextColor = markerTextColor
     )
-}
-
-/**
- * Common preset configurations
- */
-object HorizontalSliderPresets {
-    /**
-     * Preset for water intake (0-1000ml)
-     */
-    @Composable
-    fun waterIntakeSlider(
-        value: Float,
-        onValueChange: (Float) -> Unit,
-        modifier: Modifier = Modifier
-    ) {
-        HorizontalSlider(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = modifier,
-            valueRange = 0f..1000f,
-            steps = 10,
-            showValueMarkers = true,
-            labelFormatter = { "${it.roundToInt()} ml" },
-            markerLabels = mapOf(
-                0f to "0",
-                250f to "250ml",
-                500f to "500ml",
-                750f to "750ml",
-                1000f to "1L"
-            )
-        )
-    }
-    
-    /**
-     * Preset for mood rating (1-5)
-     */
-    @Composable
-    fun moodRatingSlider(
-        value: Float,
-        onValueChange: (Float) -> Unit,
-        modifier: Modifier = Modifier
-    ) {
-        HorizontalSlider(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = modifier,
-            valueRange = 1f..5f,
-            steps = 4,
-            showTicks = true,
-            labelFormatter = { 
-                when(it.roundToInt()) {
-                    1 -> "😢 Very Bad"
-                    2 -> "😕 Bad"
-                    3 -> "😐 Neutral"
-                    4 -> "🙂 Good"
-                    5 -> "😄 Excellent"
-                    else -> it.roundToInt().toString()
-                }
-            }
-        )
-    }
-    
-    /**
-     * Preset for percentage (0-100%)
-     */
-    @Composable
-    fun percentageSlider(
-        value: Float,
-        onValueChange: (Float) -> Unit,
-        modifier: Modifier = Modifier,
-        steps: Int = 10
-    ) {
-        HorizontalSlider(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = modifier,
-            valueRange = 0f..100f,
-            steps = steps,
-            showTicks = steps > 0,
-            labelFormatter = { "${it.roundToInt()}%" }
-        )
-    }
 }

@@ -144,7 +144,13 @@ data class QuickAddConfig(
     val defaultValue: Any? = null,
     val inputType: InputType = InputType.NUMBER,
     val options: List<QuickOption>? = null,
-    val unit: String? = null
+    val unit: String? = null,
+    val id: String = "value",
+    val min: Number? = null,
+    val max: Number? = null,
+    val step: Number? = null,
+    val stages: List<QuickAddStage>? = null,
+    val presets: List<QuickOption>? = null
 )
 
 /**
@@ -167,7 +173,10 @@ data class QuickAddStage(
     val options: List<QuickOption>? = null,
     val validation: ((Any?) -> ValidationResult)? = null,
     val hint: String? = null,
-    val defaultValue: Any? = null
+    val defaultValue: Any? = null,
+    val min: Number? = null,
+    val max: Number? = null,
+    val step: Number? = null
 )
 
 /**

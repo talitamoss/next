@@ -143,47 +143,44 @@ fun VerticalSlider(
                             }
                         ) { _, dragAmount ->
                             val currentY = sliderHeight * (1f - normalizedValue)
-                            val newY = (currentY - dragAmount).coerceIn(0f, sliderHeight.toFloat())
+                            val newY = (currentY + dragAmount).coerceIn(0f, sliderHeight.toFloat())
                             updateValue(newY, sliderHeight, valueRange, steps, onValueChange, haptics, hapticFeedback)
                         }
-                    }
+                    },
+                contentAlignment = Alignment.Center
             ) {
                 Canvas(
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    val trackWidth = width.toPx() * 0.3f
+                    val trackWidth = width.toPx() * 0.15f
                     val centerX = size.center.x
+                    val trackHeight = size.height
                     
                     // Draw track background
                     drawLine(
                         color = colors.trackColor,
-                        start = Offset(centerX, trackWidth),
-                        end = Offset(centerX, size.height - trackWidth),
+                        start = Offset(centerX, 0f),
+                        end = Offset(centerX, trackHeight),
                         strokeWidth = trackWidth,
                         cap = StrokeCap.Round
                     )
                     
                     // Draw active track
-                    val thumbY = size.height * (1f - normalizedValue)
+                    val thumbY = trackHeight * (1f - normalizedValue)
                     drawLine(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                colors.activeTrackColor,
-                                colors.activeTrackColor.copy(alpha = 0.7f)
-                            )
-                        ),
+                        color = colors.activeTrackColor,
                         start = Offset(centerX, thumbY),
-                        end = Offset(centerX, size.height - trackWidth),
+                        end = Offset(centerX, trackHeight),
                         strokeWidth = trackWidth,
                         cap = StrokeCap.Round
                     )
                     
-                    // Draw tick marks if enabled
+                    // Draw ticks if enabled
                     if (showTicks && steps > 0) {
                         drawTicks(
                             steps = steps,
                             centerX = centerX,
-                            height = size.height,
+                            height = trackHeight,
                             trackWidth = trackWidth,
                             color = colors.tickColor
                         )
@@ -243,7 +240,7 @@ private fun updateValue(
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int,
     onValueChange: (Float) -> Unit,
-    haptics: HapticFeedback,
+    haptics: androidx.compose.ui.hapticfeedback.HapticFeedback,
     enableHaptics: Boolean
 ) {
     val normalizedPosition = 1f - (y / height).coerceIn(0f, 1f)
@@ -299,22 +296,5 @@ object VerticalSliderDefaults {
         tickColor = tickColor,
         labelBackground = labelBackground,
         labelText = labelText
-    )
-}
-
-/**
- * Preview-friendly sample usage
- */
-@Composable
-fun VerticalSliderSample() {
-    var value by remember { mutableStateOf(50f) }
-    
-    VerticalSlider(
-        value = value,
-        onValueChange = { value = it },
-        valueRange = 0f..100f,
-        steps = 10,
-        showTicks = true,
-        labelFormatter = { "${it.roundToInt()}%" }
     )
 }

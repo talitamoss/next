@@ -14,7 +14,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.domain.app.core.plugin.*
 import com.domain.app.ui.components.core.sliders.HorizontalSlider
 import com.domain.app.ui.components.core.sliders.VerticalSlider
-import com.domain.app.ui.components.core.sliders.HorizontalSliderPresets
+import kotlin.math.roundToInt
 
 /**
  * Unified quick-add dialog that adapts to any plugin configuration.
@@ -38,47 +38,54 @@ fun UnifiedQuickAddDialog(
     modifier: Modifier = Modifier
 ) {
     val config = plugin.getQuickAddConfig()
+    val stages = plugin.getQuickAddStages()
     
-    if (config == null) {
-        // Fallback to generic text input if no config
-        GenericQuickAddContent(
-            plugin = plugin,
-            onDismiss = onDismiss,
-            onConfirm = onConfirm
-        )
-        return
-    }
-    
-    when (config.inputType) {
-        InputType.SLIDER -> SliderQuickAddContent(
-            plugin = plugin,
-            config = config,
-            onDismiss = onDismiss,
-            onConfirm = onConfirm
-        )
-        InputType.CHOICE -> ChoiceQuickAddContent(
-            plugin = plugin,
-            config = config,
-            onDismiss = onDismiss,
-            onConfirm = onConfirm
-        )
-        InputType.SCALE -> ScaleQuickAddContent(
-            plugin = plugin,
-            config = config,
-            onDismiss = onDismiss,
-            onConfirm = onConfirm
-        )
-        InputType.MULTI_STAGE -> MultiStageQuickAddContent(
-            plugin = plugin,
-            stages = config.stages ?: emptyList(),
-            onDismiss = onDismiss,
-            onConfirm = onConfirm
-        )
-        else -> GenericQuickAddContent(
-            plugin = plugin,
-            onDismiss = onDismiss,
-            onConfirm = onConfirm
-        )
+    when {
+        // Multi-stage takes priority
+        stages != null && stages.isNotEmpty() -> {
+            MultiStageQuickAddContent(
+                plugin = plugin,
+                stages = stages,
+                onDismiss = onDismiss,
+                onConfirm = onConfirm
+            )
+        }
+        // Then check for single-stage config
+        config != null -> {
+            when (config.inputType) {
+                InputType.SLIDER -> SliderQuickAddContent(
+                    plugin = plugin,
+                    config = config,
+                    onDismiss = onDismiss,
+                    onConfirm = onConfirm
+                )
+                InputType.CHOICE -> ChoiceQuickAddContent(
+                    plugin = plugin,
+                    config = config,
+                    onDismiss = onDismiss,
+                    onConfirm = onConfirm
+                )
+                InputType.SCALE -> ScaleQuickAddContent(
+                    plugin = plugin,
+                    config = config,
+                    onDismiss = onDismiss,
+                    onConfirm = onConfirm
+                )
+                else -> GenericQuickAddContent(
+                    plugin = plugin,
+                    onDismiss = onDismiss,
+                    onConfirm = onConfirm
+                )
+            }
+        }
+        // Fallback to generic
+        else -> {
+            GenericQuickAddContent(
+                plugin = plugin,
+                onDismiss = onDismiss,
+                onConfirm = onConfirm
+            )
+        }
     }
 }
 
@@ -100,56 +107,49 @@ private fun SliderQuickAddContent(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                text = "Add ${plugin.metadata.name}",
-                style = MaterialTheme.typography.headlineSmall
-            )
+            Text(config.title)
         },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = config.title,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                
-                // Use plugin-specific slider preset if available
-                when (plugin.id) {
-                    "water" -> {
-                        HorizontalSliderPresets.waterIntakeSlider(
-                            value = value,
-                            onValueChange = { value = it },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                // Use slider parameters from config if available
+                val range = when {
+                    config.options?.isNotEmpty() == true -> {
+                        val minVal = config.options.minOfOrNull { (it.value as? Number)?.toFloat() ?: 0f } ?: 0f
+                        val maxVal = config.options.maxOfOrNull { (it.value as? Number)?.toFloat() ?: 100f } ?: 100f
+                        minVal..maxVal
                     }
-                    "mood" -> {
-                        HorizontalSliderPresets.moodRatingSlider(
-                            value = value,
-                            onValueChange = { value = it },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                    config.min != null && config.max != null -> {
+                        (config.min as Number).toFloat()..(config.max as Number).toFloat()
                     }
-                    else -> {
-                        // Generic horizontal slider
-                        HorizontalSlider(
-                            value = value,
-                            onValueChange = { value = it },
-                            valueRange = config.min?.toFloat() ?: 0f..config.max?.toFloat() ?: 100f,
-                            steps = config.step?.toInt() ?: 0,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+                    else -> 0f..100f
                 }
                 
-                // Optional hint text
-                config.hint?.let { hint ->
-                    Text(
-                        text = hint,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                val steps = (config.step as? Number)?.toInt() ?: config.options?.size?.minus(1) ?: 0
+                
+                HorizontalSlider(
+                    value = value,
+                    onValueChange = { value = it },
+                    valueRange = range,
+                    steps = steps,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                config.presets?.let { presets ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        presets.forEach { preset ->
+                            FilterChip(
+                                selected = value == (preset.value as? Number)?.toFloat(),
+                                onClick = { value = (preset.value as? Number)?.toFloat() ?: 0f },
+                                label = { Text(preset.label) }
+                            )
+                        }
+                    }
                 }
             }
         },
@@ -171,7 +171,7 @@ private fun SliderQuickAddContent(
 }
 
 /**
- * Choice-based quick add (e.g., Activity type)
+ * Choice-based quick add (e.g., selecting from options)
  */
 @Composable
 private fun ChoiceQuickAddContent(
@@ -180,45 +180,24 @@ private fun ChoiceQuickAddContent(
     onDismiss: () -> Unit,
     onConfirm: (Map<String, Any>) -> Unit
 ) {
-    var selectedOption by remember { 
-        mutableStateOf(config.options?.firstOrNull()) 
-    }
+    var selectedOption by remember { mutableStateOf(config.options?.firstOrNull()) }
     
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                text = "Add ${plugin.metadata.name}",
-                style = MaterialTheme.typography.headlineSmall
-            )
+            Text(config.title)
         },
         text = {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = config.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                
                 config.options?.forEach { option ->
                     FilterChip(
                         selected = selectedOption == option,
                         onClick = { selectedOption = option },
-                        label = { 
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                option.icon?.let { 
-                                    Text(text = it, style = MaterialTheme.typography.titleMedium)
-                                }
-                                Text(text = option.label)
-                            }
+                        label = { Text(option.label) },
+                        leadingIcon = {
+                            option.icon?.let { Text(it) }
                         },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -246,7 +225,7 @@ private fun ChoiceQuickAddContent(
 }
 
 /**
- * Scale-based quick add with vertical slider
+ * Scale-based quick add (1-5 rating)
  */
 @Composable
 private fun ScaleQuickAddContent(
@@ -262,60 +241,38 @@ private fun ScaleQuickAddContent(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                text = "Add ${plugin.metadata.name}",
-                style = MaterialTheme.typography.headlineSmall
-            )
+            Text(config.title)
         },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = config.title,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                
-                // Use vertical slider for scale inputs
                 VerticalSlider(
                     value = value,
                     onValueChange = { value = it },
-                    valueRange = config.min?.toFloat() ?: 1f..config.max?.toFloat() ?: 5f,
-                    steps = ((config.max ?: 5) - (config.min ?: 1)).toInt(),
+                    valueRange = (config.min as? Number)?.toFloat() ?: 1f..(config.max as? Number)?.toFloat() ?: 5f,
+                    steps = (((config.max as? Number)?.toInt() ?: 5) - ((config.min as? Number)?.toInt() ?: 1)),
                     height = 200.dp,
                     showTicks = true,
                     labelFormatter = { 
-                        when (plugin.id) {
-                            "energy" -> {
-                                when(it.roundToInt()) {
-                                    1 -> "Exhausted"
-                                    2 -> "Tired"
-                                    3 -> "Normal"
-                                    4 -> "Energetic"
-                                    5 -> "Very Energetic"
-                                    else -> it.roundToInt().toString()
-                                }
-                            }
+                        when(it.roundToInt()) {
+                            1 -> "Exhausted"
+                            2 -> "Tired"
+                            3 -> "Normal"
+                            4 -> "Energetic"
+                            5 -> "Very Energetic"
                             else -> it.roundToInt().toString()
                         }
                     }
                 )
-                
-                config.hint?.let { hint ->
-                    Text(
-                        text = hint,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
-                    onConfirm(mapOf(config.id to value))
+                    onConfirm(mapOf(config.id to value.roundToInt()))
                 }
             ) {
                 Text("Add")
@@ -325,11 +282,7 @@ private fun ScaleQuickAddContent(
             TextButton(onClick = onDismiss) {
                 Text("Cancel")
             }
-        },
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = false
-        )
+        }
     )
 }
 
@@ -434,6 +387,14 @@ private fun QuickAddStageContent(
             fontWeight = FontWeight.Medium
         )
         
+        stage.hint?.let { hint ->
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        
         when (stage.inputType) {
             InputType.TEXT, InputType.NUMBER -> {
                 var textValue by remember(stage.id) { 
@@ -455,8 +416,17 @@ private fun QuickAddStageContent(
             
             InputType.SLIDER -> {
                 var sliderValue by remember(stage.id) { 
-                    mutableStateOf(stage.defaultValue as? Float ?: 0f) 
+                    mutableStateOf(stage.defaultValue as? Float ?: 50f) 
                 }
+                
+                val range = when {
+                    stage.min != null && stage.max != null -> {
+                        (stage.min as Number).toFloat()..(stage.max as Number).toFloat()
+                    }
+                    else -> 0f..100f
+                }
+                
+                val steps = (stage.step as? Number)?.toInt() ?: 0
                 
                 HorizontalSlider(
                     value = sliderValue,
@@ -464,8 +434,14 @@ private fun QuickAddStageContent(
                         sliderValue = it
                         onValueChange(it)
                     },
-                    valueRange = stage.min?.toFloat() ?: 0f..stage.max?.toFloat() ?: 100f,
-                    steps = stage.step?.toInt() ?: 0,
+                    valueRange = range,
+                    steps = steps,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Text(
+                    text = sliderValue.roundToInt().toString(),
+                    style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -497,14 +473,6 @@ private fun QuickAddStageContent(
             else -> {
                 Text("Unsupported input type: ${stage.inputType}")
             }
-        }
-        
-        stage.hint?.let { hint ->
-            Text(
-                text = hint,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
