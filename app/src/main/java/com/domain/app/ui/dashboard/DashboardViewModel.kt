@@ -216,6 +216,13 @@ class DashboardViewModel @Inject constructor(
         _uiState.update { it.copy(showPluginSelector = false) }
     }
     
+    // THIS IS THE MISSING METHOD THAT NEEDS TO BE ADDED
+    fun addPluginToDashboard(pluginId: String) {
+        viewModelScope.launch {
+            preferencesManager.addToDashboard(pluginId)
+        }
+    }
+    
     fun onQuickAdd(plugin: Plugin, data: Map<String, Any>) {
         viewModelScope.launch {
             _uiState.update { it.copy(isProcessing = true) }

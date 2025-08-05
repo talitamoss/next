@@ -1,6 +1,11 @@
 // app/src/main/java/com/domain/app/ui/dashboard/DashboardScreen.kt
 package com.domain.app.ui.dashboard
 
+// Import the components from DashboardComponents.kt
+import com.domain.app.ui.dashboard.SummaryCard
+import com.domain.app.ui.dashboard.AddPluginTile  
+import com.domain.app.ui.dashboard.EmptyPluginTile
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -22,21 +27,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginCapability
-import com.domain.app.core.plugin.PluginState
-import com.domain.app.ui.components.plugin.quickadd.UnifiedQuickAddDialog  // MIGRATED: New import
+import com.domain.app.ui.components.plugin.quickadd.UnifiedQuickAddDialog
 import com.domain.app.ui.theme.AppIcons
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Main dashboard screen for the app.
- * MIGRATED: Now using UnifiedQuickAddDialog for all plugin quick-add operations.
- * This reduces code complexity and ensures consistent UI across all plugin types.
- * 
- * Changes from previous version:
- * - Removed individual dialog imports (WaterQuickAddDialog, MoodQuickAddDialog, etc.)
- * - Replaced complex when/if logic with single UnifiedQuickAddDialog
- * - Reduced dialog code from ~50 lines to ~10 lines
+ * Main dashboard screen for the app
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -148,29 +145,16 @@ fun DashboardScreen(
         }
     }
 
-    // ==================== MIGRATED DIALOG SECTION ====================
-    // This section has been significantly simplified by using UnifiedQuickAddDialog
-    // Previous: 50+ lines with multiple when/if branches for different plugin types
-    // Current: 10 lines that handle ALL plugin types automatically
-    
-    // Quick Add Dialog - Using UnifiedQuickAddDialog for ALL plugins
+    // Quick Add Dialog
     val currentPlugin = selectedPlugin
     if (uiState.showQuickAdd && currentPlugin != null) {
         if (uiState.needsPermission) {
-            // Permission dialog remains the same
             PluginPermissionQuickDialog(
                 plugin = currentPlugin,
                 onGrant = { viewModel.grantQuickAddPermission() },
                 onDeny = { viewModel.dismissQuickAdd() }
             )
         } else {
-            // MIGRATED: Single dialog handles all plugin types!
-            // The UnifiedQuickAddDialog automatically detects:
-            // - Multi-stage plugins (exercise, etc.)
-            // - Slider plugins (water intake)
-            // - Scale plugins (mood rating)
-            // - Choice plugins (activity type)
-            // - Generic text input (fallback)
             UnifiedQuickAddDialog(
                 plugin = currentPlugin,
                 onDismiss = { viewModel.dismissQuickAdd() },
@@ -180,9 +164,8 @@ fun DashboardScreen(
             )
         }
     }
-    // ==================== END OF MIGRATED SECTION ====================
     
-    // Plugin Selector Bottom Sheet (unchanged)
+    // Plugin Selector Bottom Sheet
     if (uiState.showPluginSelector) {
         PluginSelectorBottomSheet(
             availablePlugins = uiState.allPlugins.filter { plugin ->
@@ -190,13 +173,13 @@ fun DashboardScreen(
             },
             onDismiss = { viewModel.dismissPluginSelector() },
             onSelect = { plugin ->
-                viewModel.addPluginToDashboard(plugin)
+                viewModel.addPluginToDashboard(plugin.id)
                 viewModel.dismissPluginSelector()
             }
         )
     }
     
-    // Success feedback (unchanged)
+    // Success feedback
     if (uiState.showSuccessFeedback) {
         LaunchedEffect(Unit) {
             delay(2000)
@@ -208,7 +191,6 @@ fun DashboardScreen(
     uiState.error?.let { error ->
         LaunchedEffect(error) {
             scope.launch {
-                // Show error snackbar or toast
                 delay(3000)
                 viewModel.clearError()
             }
@@ -228,7 +210,7 @@ fun DashboardPluginTile(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val hapticFeedback = LocalHapticFeedback.current
+    val haptic = LocalHapticFeedback.current
     
     Card(
         modifier = Modifier
@@ -236,149 +218,75 @@ fun DashboardPluginTile(
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = {
-                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onLongClick()
                 }
             ),
         colors = CardDefaults.cardColors(
-            containerColor = if (hasPermissions) {
-                MaterialTheme.colorScheme.surface
+            containerColor = if (isCollecting) {
+                MaterialTheme.colorScheme.primaryContainer
             } else {
-                MaterialTheme.colorScheme.surfaceVariant
+                MaterialTheme.colorScheme.surface
             }
-        )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Plugin icon
-                Text(
-                    text = plugin.metadata.icon,
-                    style = MaterialTheme.typography.headlineLarge,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
-                
-                // Plugin name and status
-                Column {
-                    Text(
-                        text = plugin.metadata.name,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        fontWeight = FontWeight.Medium
-                    )
-                    
-                    if (!hasPermissions) {
-                        Text(
-                            text = "Tap to enable",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-            
-            // Loading indicator
-            if (isCollecting) {
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .align(Alignment.TopEnd),
-                    strokeWidth = 2.dp
-                )
-            }
-        }
-    }
-}
-
-/**
- * Add plugin tile
- */
-@Composable
-fun AddPluginTile(
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .aspectRatio(1f)
-            .combinedClickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ),
-        border = CardDefaults.outlinedCardBorder()
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Add Plugin",
-                    modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "Add Plugin",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-/**
- * Empty plugin tile placeholder
- */
-@Composable
-fun EmptyPluginTile() {
-    Spacer(
-        modifier = Modifier.aspectRatio(1f)
-    )
-}
-
-/**
- * Summary card component
- */
-@Composable
-fun SummaryCard(
-    title: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isCollecting) 8.dp else 2.dp
         )
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+            // Plugin Icon - Using AppIcons helper
+            Icon(
+                imageVector = AppIcons.getPluginIcon(plugin.id),
+                contentDescription = plugin.metadata.name,
+                modifier = Modifier.size(48.dp),
+                tint = if (isCollecting) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
             )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Plugin Name
             Text(
-                text = title,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                text = plugin.metadata.name,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = if (isCollecting) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
             )
+            
+            // Permission Status
+            if (!hasPermissions) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Tap to enable",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            
+            // Collection Status
+            if (isCollecting) {
+                Spacer(modifier = Modifier.height(4.dp))
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }
@@ -399,30 +307,26 @@ fun PluginPermissionQuickDialog(
             Text("Enable ${plugin.metadata.name}?")
         },
         text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("This plugin needs the following permissions:")
-                
+            Column {
+                Text("This plugin requires the following permissions:")
+                Spacer(modifier = Modifier.height(8.dp))
+                // Using the correct property path
                 plugin.securityManifest.requestedCapabilities.forEach { capability ->
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = when (capability) {
-                                PluginCapability.COLLECT_DATA -> Icons.Default.Edit
-                                PluginCapability.READ_OWN_DATA -> Icons.Default.Visibility
-                                PluginCapability.LOCAL_STORAGE -> Icons.Default.Storage
-                                else -> Icons.Default.Security
-                            },
+                            imageVector = Icons.Default.Check,
                             contentDescription = null,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = capability.name.replace('_', ' ').lowercase()
                                 .replaceFirstChar { it.uppercase() },
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
@@ -435,7 +339,7 @@ fun PluginPermissionQuickDialog(
         },
         dismissButton = {
             TextButton(onClick = onDeny) {
-                Text("Cancel")
+                Text("Deny")
             }
         }
     )
@@ -452,61 +356,71 @@ fun PluginSelectorBottomSheet(
     onSelect: (Plugin) -> Unit
 ) {
     ModalBottomSheet(
-        onDismissRequest = onDismiss
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 32.dp)
+                .padding(16.dp)
         ) {
             Text(
                 text = "Add Plugin to Dashboard",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+                modifier = Modifier.padding(bottom = 16.dp)
             )
             
-            if (availablePlugins.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "All plugins are already on your dashboard",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            } else {
-                availablePlugins.forEach { plugin ->
-                    ListItem(
-                        headlineContent = { 
-                            Text(plugin.metadata.name)
-                        },
-                        supportingContent = { 
-                            Text(plugin.metadata.description)
-                        },
-                        leadingContent = {
-                            Text(
-                                text = plugin.metadata.icon,
-                                style = MaterialTheme.typography.headlineMedium
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.height(300.dp)
+            ) {
+                items(availablePlugins) { plugin ->
+                    Card(
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .combinedClickable(
+                                onClick = { onSelect(plugin) }
+                            ),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = AppIcons.getPluginIcon(plugin.id),
+                                contentDescription = plugin.metadata.name,
+                                modifier = Modifier.size(32.dp),
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer
                             )
-                        },
-                        modifier = Modifier.clickable {
-                            onSelect(plugin)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = plugin.metadata.name,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
-                    )
+                    }
                 }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Cancel")
             }
         }
     }
-}
-
-/**
- * Extension function to add plugin to dashboard
- */
-fun DashboardViewModel.addPluginToDashboard(plugin: Plugin) {
-    // Implementation handled by ViewModel
 }
