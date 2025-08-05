@@ -43,11 +43,7 @@ fun DashboardScreen(
                 actions = {
                     TextButton(
                         onClick = { 
-                            navController.navigate("settings") {
-                                popUpTo(navController.graph.id) {
-                                    inclusive = false
-                                }
-                            }
+                            navController.navigate("plugins")
                         }
                     ) {
                         Text("Manage")
@@ -146,23 +142,20 @@ fun DashboardScreen(
                         plugin = currentPlugin,
                         stages = currentPlugin.getQuickAddStages()!!,
                         onDismiss = { viewModel.dismissQuickAdd() },
-                        onComplete = { stageData ->
-                            viewModel.onQuickAdd(currentPlugin, stageData)
+                        onComplete = { data ->
+                            viewModel.onQuickAdd(currentPlugin, data)
                         }
                     )
                 }
-                // Plugin-specific dialogs
+                // Water plugin
                 currentPlugin.id == "water" -> {
-                    val config = currentPlugin.getQuickAddConfig()
-                    if (config != null) {
-                        WaterQuickAddDialog(
-                            options = config.options ?: emptyList(),
-                            onDismiss = { viewModel.dismissQuickAdd() },
-                            onConfirm = { amount ->
-                                viewModel.onQuickAdd(currentPlugin, mapOf("amount" to amount))
-                            }
-                        )
-                    }
+                    WaterQuickAddDialog(
+                        amounts = currentPlugin.getQuickAddConfig()?.options ?: emptyList(),
+                        onDismiss = { viewModel.dismissQuickAdd() },
+                        onConfirm = { amount ->
+                            viewModel.onQuickAdd(currentPlugin, mapOf("amount" to amount))
+                        }
+                    )
                 }
                 currentPlugin.id == "mood" -> {
                     val config = currentPlugin.getQuickAddConfig()
@@ -275,37 +268,119 @@ fun DashboardPluginTile(
                     color = if (hasPermissions)
                         MaterialTheme.colorScheme.onSurface
                     else
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )
-                if (!hasPermissions) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Needs permission",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                } else if (isCollecting) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Active",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
             }
             
-            // Trust indicator
-            if (plugin.trustLevel == PluginTrustLevel.OFFICIAL) {
-                Icon(
-                    imageVector = AppIcons.Security.shield,
-                    contentDescription = "Official plugin",
+            // Status indicator
+            if (isCollecting && hasPermissions) {
+                Box(
                     modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
                         .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .size(16.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                        .offset((-8).dp, 8.dp)
                 )
             }
+            
+            // Permission warning
+            if (!hasPermissions) {
+                Icon(
+                    imageVector = AppIcons.Status.warning,
+                    contentDescription = "Needs permission",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .align(Alignment.TopEnd)
+                        .offset((-8).dp, 8.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AddPluginTile(
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .aspectRatio(1f),
+        onClick = onClick,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            2.dp, 
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+        )
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    imageVector = AppIcons.Action.add,
+                    contentDescription = "Add plugin",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.size(32.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Add Plugin",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun EmptyPluginTile() {
+    Card(
+        modifier = Modifier
+            .aspectRatio(1f),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
+        )
+    ) {
+        // Empty tile for layout structure
+    }
+}
+
+@Composable
+fun SummaryCard(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+            )
         }
     }
 }
@@ -320,42 +395,14 @@ fun PluginPermissionQuickDialog(
     AlertDialog(
         onDismissRequest = onDeny,
         title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = AppIcons.getPluginIcon(plugin.id),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Text("Enable ${plugin.metadata.name}?")
-            }
+            Text("Grant Permission?")
         },
         text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("This plugin needs permissions to collect data.")
-                
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    )
-                ) {
-                    Text(
-                        text = "Required: ${plugin.securityManifest.requestedCapabilities.size} permissions",
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                
-                Text(
-                    text = "You can review detailed permissions in Settings.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                text = "${plugin.metadata.name} needs permission to collect data. Grant permission to continue?",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         },
         confirmButton = {
             FilledTonalButton(onClick = onGrant) {
