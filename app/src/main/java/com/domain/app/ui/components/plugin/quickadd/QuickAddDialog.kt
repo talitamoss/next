@@ -249,11 +249,14 @@ private fun ScaleQuickAddContent(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                val minValue = (config.min as? Number)?.toFloat() ?: 1f
+                val maxValue = (config.max as? Number)?.toFloat() ?: 5f
+                
                 VerticalSlider(
                     value = value,
                     onValueChange = { value = it },
-                    valueRange = (config.min as? Number)?.toFloat() ?: 1f..(config.max as? Number)?.toFloat() ?: 5f,
-                    steps = (((config.max as? Number)?.toInt() ?: 5) - ((config.min as? Number)?.toInt() ?: 1)),
+                    valueRange = minValue..maxValue,
+                    steps = ((maxValue - minValue).toInt()),
                     height = 200.dp,
                     showTicks = true,
                     labelFormatter = { 
