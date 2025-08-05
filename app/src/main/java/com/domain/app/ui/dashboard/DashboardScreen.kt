@@ -1,6 +1,11 @@
 // app/src/main/java/com/domain/app/ui/dashboard/DashboardScreen.kt
 package com.domain.app.ui.dashboard
 
+// Import the components from DashboardComponents.kt
+import com.domain.app.ui.dashboard.SummaryCard
+import com.domain.app.ui.dashboard.AddPluginTile  
+import com.domain.app.ui.dashboard.EmptyPluginTile
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -342,8 +347,9 @@ fun PluginPermissionQuickDialog(
 
 /**
  * Plugin selector bottom sheet
+ * FIX: Added ExperimentalFoundationApi annotation for combinedClickable usage
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PluginSelectorBottomSheet(
     availablePlugins: List<Plugin>,
