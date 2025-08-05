@@ -82,13 +82,14 @@ class CoffeePlugin : Plugin {
     )
     
     override suspend fun createManualEntry(data: Map<String, Any>): DataPoint? {
-        val amount = when (val value = data["amount"]) {
+        // Support both "value" (from GenericQuickAddDialog) and "amount" (from specific dialogs)
+        val amount = when (val value = data["value"] ?: data["amount"]) {
             is Number -> value.toDouble()
             is String -> value.toDoubleOrNull() ?: return null
             else -> return null
         }
         
-        val validationResult = validateDataPoint(mapOf("amount" to amount))
+        val validationResult = validateDataPoint(mapOf("value" to amount))
         if (validationResult is ValidationResult.Error) {
             return null
         }
@@ -115,7 +116,9 @@ class CoffeePlugin : Plugin {
     }
     
     override fun validateDataPoint(data: Map<String, Any>): ValidationResult {
-        val amount = (data["amount"] as? Number)?.toDouble() ?: return ValidationResult.Error("Amount is required")
+        // Support both "value" and "amount" keys for validation
+        val amount = ((data["value"] ?: data["amount"]) as? Number)?.toDouble() 
+            ?: return ValidationResult.Error("Amount is required")
         
         return when {
             amount <= 0 -> ValidationResult.Error("Amount must be positive")

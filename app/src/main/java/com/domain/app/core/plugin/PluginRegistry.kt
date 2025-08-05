@@ -84,7 +84,6 @@ class PluginRegistry @Inject constructor() {
         register(MedicationPlugin())
         register(CounterPlugin())
         register(CoffeePlugin())
-        register(CoffeePlugin())
         
         // Future plugins will be added here
         // register(JournalPlugin())
