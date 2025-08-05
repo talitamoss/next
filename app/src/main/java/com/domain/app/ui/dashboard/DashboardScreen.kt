@@ -150,7 +150,7 @@ fun DashboardScreen(
                 // Water plugin
                 currentPlugin.id == "water" -> {
                     WaterQuickAddDialog(
-                        amounts = currentPlugin.getQuickAddConfig()?.options ?: emptyList(),
+                        options = currentPlugin.getQuickAddConfig()?.options ?: emptyList(),
                         onDismiss = { viewModel.dismissQuickAdd() },
                         onConfirm = { amount ->
                             viewModel.onQuickAdd(currentPlugin, mapOf("amount" to amount))
@@ -296,91 +296,6 @@ fun DashboardPluginTile(
                         .offset((-8).dp, 8.dp)
                 )
             }
-        }
-    }
-}
-
-@Composable
-fun AddPluginTile(
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .aspectRatio(1f),
-        onClick = onClick,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        ),
-        border = androidx.compose.foundation.BorderStroke(
-            2.dp, 
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-        )
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    imageVector = AppIcons.Action.add,
-                    contentDescription = "Add plugin",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.size(32.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Add Plugin",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun EmptyPluginTile() {
-    Card(
-        modifier = Modifier
-            .aspectRatio(1f),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
-        )
-    ) {
-        // Empty tile for layout structure
-    }
-}
-
-@Composable
-fun SummaryCard(
-    title: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
-            )
         }
     }
 }
