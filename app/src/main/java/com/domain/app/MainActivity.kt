@@ -4,7 +4,6 @@ package com.domain.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
@@ -24,6 +23,7 @@ import kotlinx.coroutines.launch
 import com.domain.app.ui.dashboard.DashboardScreen
 import com.domain.app.ui.data.DataScreen
 import com.domain.app.ui.settings.SettingsScreen
+import com.domain.app.ui.settings.PluginsScreen
 import com.domain.app.ui.security.PluginSecurityScreen
 import com.domain.app.ui.security.SecurityAuditScreen
 import com.domain.app.ui.theme.AppTheme
@@ -46,72 +46,64 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainAppNavigation() {
     val navController = rememberNavController()
+    
+    // UNIFIED NAVIGATION - Single NavHost handles all routes
+    NavHost(
+        navController = navController,
+        startDestination = "main_tabs"
+    ) {
+        // Main tabs with pager
+        composable("main_tabs") {
+            MainTabsWithPager(navController)
+        }
+        
+        // Plugins management screen
+        composable("plugins") { 
+            PluginsScreen(navController) 
+        }
+        
+        // Plugin security details screen
+        composable(
+            route = "plugin_security/{pluginId}",
+            arguments = listOf(
+                navArgument("pluginId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val pluginId = backStackEntry.arguments?.getString("pluginId") ?: ""
+            PluginSecurityScreen(
+                pluginId = pluginId,
+                navController = navController
+            )
+        }
+        
+        // Security audit screen
+        composable("security_audit") {
+            SecurityAuditScreen(navController)
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@Composable
+fun MainTabsWithPager(navController: androidx.navigation.NavController) {
     val pagerState = rememberPagerState(pageCount = { 4 })
     val coroutineScope = rememberCoroutineScope()
     
     // Define the main tabs
     val mainTabs = listOf(
         TabItem("Dashboard", AppIcons.Navigation.dashboard),
-        TabItem("Social", AppIcons.Navigation.social), // Using health icon as noted in Screen.kt
+        TabItem("Social", AppIcons.Navigation.social),
         TabItem("Data", AppIcons.Navigation.data),
         TabItem("Settings", AppIcons.Navigation.settings)
     )
     
-    // Check if we're on a modal screen (plugin_security or security_audit)
-    val isModalScreen = navController.currentBackStackEntry?.destination?.route?.let { route ->
-        route.startsWith("plugin_security") || route == "security_audit"
-    } ?: false
-    
-    if (isModalScreen) {
-        // Show modal screens using standard navigation
-        NavHost(
-            navController = navController,
-            startDestination = "main_tabs"
-        ) {
-            composable("main_tabs") {
-                MainTabsWithPager(mainTabs, pagerState, navController, coroutineScope)
-            }
-            
-            // Plugin security details screen
-            composable(
-                route = "plugin_security/{pluginId}",
-                arguments = listOf(
-                    navArgument("pluginId") { type = NavType.StringType }
-                )
-            ) { backStackEntry ->
-                val pluginId = backStackEntry.arguments?.getString("pluginId") ?: ""
-                PluginSecurityScreen(
-                    pluginId = pluginId,
-                    navController = navController
-                )
-            }
-            
-            // Security audit screen
-            composable("security_audit") {
-                SecurityAuditScreen(navController)
-            }
-        }
-    } else {
-        // Show main tabs with swipe functionality
-        MainTabsWithPager(mainTabs, pagerState, navController, coroutineScope)
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
-@Composable
-fun MainTabsWithPager(
-    tabs: List<TabItem>,
-    pagerState: androidx.compose.foundation.pager.PagerState,
-    navController: androidx.navigation.NavController,
-    coroutineScope: kotlinx.coroutines.CoroutineScope
-) {
     Scaffold(
         bottomBar = {
             TabRow(
                 selectedTabIndex = pagerState.currentPage,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                tabs.forEachIndexed { index, tab ->
+                mainTabs.forEachIndexed { index, tab ->
                     Tab(
                         selected = pagerState.currentPage == index,
                         onClick = {

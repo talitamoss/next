@@ -47,20 +47,75 @@ fun SettingsScreen(
                 .padding(paddingValues),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
-            // Plugin Management Section
+            // Plugin Management Section - Compressed to button
             item {
                 SettingsSectionHeader(title = "Plugins")
             }
             
-            items(uiState.plugins) { plugin ->
-                PluginSettingsItem(
-                    plugin = plugin,
-                    isEnabled = uiState.pluginStates[plugin.id]?.isCollecting ?: false,
-                    isOnDashboard = uiState.dashboardPluginIds.contains(plugin.id),
-                    onToggle = { viewModel.togglePlugin(plugin.id) },
-                    onDashboardToggle = { viewModel.toggleDashboard(plugin.id) },
-                    onSecurityClick = { viewModel.navigateToPluginSecurity(plugin.id) }
-                )
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    onClick = { navController.navigate("plugins") }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Manage Plugins",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = "${uiState.plugins.size} plugins installed • ${uiState.pluginStates.values.count { it.isCollecting }} active",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Plugin icons preview (first 3 active plugins)
+                            val activePlugins = uiState.plugins.filter { plugin ->
+                                uiState.pluginStates[plugin.id]?.isCollecting == true
+                            }.take(3)
+                            
+                            activePlugins.forEach { plugin ->
+                                Icon(
+                                    imageVector = AppIcons.getPluginIcon(plugin.id),
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            
+                            if (activePlugins.size < uiState.plugins.filter { plugin ->
+                                uiState.pluginStates[plugin.id]?.isCollecting == true
+                            }.size) {
+                                Text(
+                                    text = "+${uiState.plugins.filter { plugin ->
+                                        uiState.pluginStates[plugin.id]?.isCollecting == true
+                                    }.size - activePlugins.size}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            
+                            Icon(
+                                imageVector = AppIcons.Control.chevronRight,
+                                contentDescription = "Open plugins",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
             
             item { Divider(modifier = Modifier.padding(vertical = 16.dp)) }
@@ -235,86 +290,4 @@ fun SettingsItem(
         },
         modifier = Modifier.clickable { onClick() }
     )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun PluginSettingsItem(
-    plugin: Plugin,
-    isEnabled: Boolean,
-    isOnDashboard: Boolean,
-    onToggle: () -> Unit,
-    onDashboardToggle: () -> Unit,
-    onSecurityClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        onClick = onSecurityClick
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = plugin.metadata.name,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = plugin.metadata.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                
-                Switch(
-                    checked = isEnabled,
-                    onCheckedChange = { onToggle() }
-                )
-            }
-            
-            // Plugin actions
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Dashboard toggle
-                FilterChip(
-                    selected = isOnDashboard,
-                    onClick = onDashboardToggle,
-                    label = { Text("Dashboard") },
-                    leadingIcon = if (isOnDashboard) {
-                        {
-                            Icon(
-                                imageVector = AppIcons.Action.check,
-                                contentDescription = null,
-                                modifier = Modifier.size(FilterChipDefaults.IconSize)
-                            )
-                        }
-                    } else null
-                )
-                
-                // Security info
-                AssistChip(
-                    onClick = onSecurityClick,
-                    label = { Text("Security") },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = AppIcons.Security.shield,
-                            contentDescription = null,
-                            modifier = Modifier.size(AssistChipDefaults.IconSize)
-                        )
-                    }
-                )
-            }
-        }
-    }
 }
