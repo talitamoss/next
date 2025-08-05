@@ -131,6 +131,7 @@ object AppIcons {
             "exercise" -> Plugin.exercise
             "location" -> Plugin.location
             "counter" -> Plugin.counter
+            "coffee" -> Plugin.custom  // Using custom icon for coffee, could add dedicated coffee icon
             else -> Plugin.custom
         }
     }
