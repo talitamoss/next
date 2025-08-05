@@ -22,6 +22,7 @@ import androidx.navigation.NavController
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.security.PluginTrustLevel
 import kotlinx.coroutines.delay
+import com.domain.app.ui.dashboard.GenericQuickAddDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
