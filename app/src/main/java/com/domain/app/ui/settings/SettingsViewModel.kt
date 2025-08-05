@@ -60,31 +60,34 @@ class SettingsViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
     
-    fun togglePlugin(pluginId: String) {
-        viewModelScope.launch {
-            val plugin = pluginManager.getPlugin(pluginId) ?: return@launch
-            
-            if (_uiState.value.dashboardPluginIds.contains(pluginId)) {
-                preferencesManager.removeFromDashboard(pluginId)
+fun togglePlugin(pluginId: String) {
+    viewModelScope.launch {
+        val plugin = pluginManager.getPlugin(pluginId) ?: return@launch
+        
+        val currentState = _uiState.value.pluginStates[pluginId]
+        val isCurrentlyEnabled = currentState?.isCollecting ?: false
+        
+        try {
+            if (isCurrentlyEnabled) {
+                // Disable the plugin
+                pluginManager.disablePlugin(pluginId)
                 _uiState.update { 
-                    it.copy(message = "${plugin.metadata.name} removed from dashboard") 
+                    it.copy(message = "${plugin.metadata.name} disabled") 
                 }
             } else {
-                if (_uiState.value.dashboardPluginIds.size >= 6) {
-                    _uiState.update { 
-                        it.copy(message = "Maximum 6 plugins allowed on dashboard") 
-                    }
-                    return@launch
-                }
-                
-                preferencesManager.addToDashboard(pluginId)
+                // Enable the plugin
+                pluginManager.enablePlugin(pluginId)
                 _uiState.update { 
-                    it.copy(message = "${plugin.metadata.name} added to dashboard") 
+                    it.copy(message = "${plugin.metadata.name} enabled") 
                 }
+            }
+        } catch (e: Exception) {
+            _uiState.update { 
+                it.copy(message = "Failed to toggle ${plugin.metadata.name}: ${e.message}") 
             }
         }
     }
-    
+}    
     fun toggleDashboard(pluginId: String) {
         viewModelScope.launch {
             val plugin = pluginManager.getPlugin(pluginId) ?: return@launch
