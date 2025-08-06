@@ -92,13 +92,14 @@ fun DataScreen(
                         items = dataPoints,
                         key = { it.id }
                     ) { dataPoint ->
-                        val pluginInfo = uiState.plugins.find { 
-                            it.id == dataPoint.pluginId 
+                        // Find plugin name from availablePlugins (which is List<Pair<String, String>>)
+                        val pluginInfo = uiState.availablePlugins.find { 
+                            it.first == dataPoint.pluginId 
                         }
                         
                         DataPointCard(
                             dataPoint = dataPoint,
-                            pluginName = pluginInfo?.metadata?.name ?: dataPoint.pluginId,
+                            pluginName = pluginInfo?.second ?: dataPoint.pluginId,
                             onDelete = { viewModel.deleteDataPoint(dataPoint.id) },
                             onEdit = { /* TODO: Edit functionality */ }
                         )
@@ -114,10 +115,10 @@ fun DataScreen(
             expanded = showFilterMenu,
             onDismissRequest = { showFilterMenu = false },
             selectedPlugin = uiState.selectedPluginFilter,
-            availablePlugins = uiState.plugins.map { plugin ->
+            availablePlugins = uiState.availablePlugins.map { (id, name) ->
                 PluginInfo(
-                    id = plugin.id,
-                    name = plugin.metadata.name,
+                    id = id,
+                    name = name,
                     icon = null // Could add icon support later
                 )
             },

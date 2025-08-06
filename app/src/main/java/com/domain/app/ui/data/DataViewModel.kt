@@ -1,3 +1,4 @@
+// app/src/main/java/com/domain/app/ui/data/DataViewModel.kt
 package com.domain.app.ui.data
 
 import androidx.lifecycle.ViewModel
@@ -73,6 +74,20 @@ class DataViewModel @Inject constructor(
             // Trigger refresh by updating the filter
             val currentFilter = selectedPluginFilter.value
             selectedPluginFilter.value = currentFilter
+        }
+    }
+    
+    fun deleteDataPoint(id: String) {
+        viewModelScope.launch {
+            try {
+                dataRepository.deleteDataPoint(id)
+                // Refresh data after deletion
+                refreshData()
+            } catch (e: Exception) {
+                _uiState.update { 
+                    it.copy(error = "Failed to delete: ${e.message}")
+                }
+            }
         }
     }
 }
