@@ -1,3 +1,4 @@
+// app/src/main/java/com/domain/app/ui/settings/SettingsViewModel.kt
 package com.domain.app.ui.settings
 
 import android.content.Context
@@ -39,7 +40,15 @@ class SettingsViewModel @Inject constructor(
     
     private fun loadPlugins() {
         val plugins = pluginManager.getAllActivePlugins()
-        _uiState.update { it.copy(plugins = plugins) }
+        
+        _uiState.update { 
+            it.copy(
+                plugins = plugins,
+                pluginSummaries = plugins.map { plugin ->
+                    plugin.id to plugin.metadata.name
+                }
+            )
+        }
     }
     
     private fun observePluginStates() {
@@ -60,47 +69,69 @@ class SettingsViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
     
-fun togglePlugin(pluginId: String) {
-    viewModelScope.launch {
-        val plugin = pluginManager.getPlugin(pluginId) ?: return@launch
-        
-        val currentState = _uiState.value.pluginStates[pluginId]
-        val isCurrentlyEnabled = currentState?.isCollecting ?: false
-        
-        try {
-            if (isCurrentlyEnabled) {
-                // Disable the plugin
-                pluginManager.disablePlugin(pluginId)
-                _uiState.update { 
-                    it.copy(message = "${plugin.metadata.name} disabled") 
-                }
-            } else {
-                // Enable the plugin
-                pluginManager.enablePlugin(pluginId)
-                _uiState.update { 
-                    it.copy(message = "${plugin.metadata.name} enabled") 
+    fun togglePlugin(pluginId: String) {
+        viewModelScope.launch {
+            val plugin = pluginManager.getPlugin(pluginId) ?: return@launch
+            
+            // Store state in local variable to avoid smart cast issues
+            val currentState = _uiState.value.pluginStates[pluginId]
+            val isCurrentlyEnabled = currentState?.isCollecting ?: false
+            
+            if (!isCurrentlyEnabled) {
+                // Check permissions before enabling
+                val hasPermissions = permissionManager.hasRequiredPermissions(
+                    pluginId = plugin.id,
+                    capabilities = plugin.securityManifest.requestedCapabilities
+                )
+                
+                if (!hasPermissions && plugin.securityManifest.requestedCapabilities.isNotEmpty()) {
+                    // Store plugin for permission request
+                    _uiState.update { 
+                        it.copy(
+                            pendingPlugin = plugin,
+                            showPermissionRequest = true
+                        )
+                    }
+                    return@launch
                 }
             }
-        } catch (e: Exception) {
-            _uiState.update { 
-                it.copy(message = "Failed to toggle ${plugin.metadata.name}: ${e.message}") 
+            
+            // Toggle the plugin
+            try {
+                if (isCurrentlyEnabled) {
+                    pluginManager.disablePlugin(pluginId)
+                    _uiState.update { 
+                        it.copy(message = "${plugin.metadata.name} disabled")
+                    }
+                } else {
+                    pluginManager.enablePlugin(pluginId)
+                    _uiState.update { 
+                        it.copy(message = "${plugin.metadata.name} enabled")
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update { 
+                    it.copy(error = "Failed to toggle plugin: ${e.message}")
+                }
             }
         }
     }
-}    
+    
     fun toggleDashboard(pluginId: String) {
         viewModelScope.launch {
             val plugin = pluginManager.getPlugin(pluginId) ?: return@launch
             
-            if (_uiState.value.dashboardPluginIds.contains(pluginId)) {
+            val currentDashboardIds = _uiState.value.dashboardPluginIds
+            
+            if (currentDashboardIds.contains(pluginId)) {
                 preferencesManager.removeFromDashboard(pluginId)
                 _uiState.update { 
                     it.copy(message = "${plugin.metadata.name} removed from dashboard") 
                 }
             } else {
-                if (_uiState.value.dashboardPluginIds.size >= 6) {
+                if (currentDashboardIds.size >= 6) {
                     _uiState.update { 
-                        it.copy(message = "Maximum 6 plugins allowed on dashboard") 
+                        it.copy(error = "Maximum 6 plugins allowed on dashboard") 
                     }
                     return@launch
                 }
@@ -115,13 +146,22 @@ fun togglePlugin(pluginId: String) {
     
     fun reorderDashboard(pluginIds: List<String>) {
         viewModelScope.launch {
-            preferencesManager.updateDashboardPlugins(pluginIds)
+            try {
+                preferencesManager.updateDashboardPlugins(pluginIds)
+                _uiState.update { 
+                    it.copy(message = "Dashboard order updated")
+                }
+            } catch (e: Exception) {
+                _uiState.update { 
+                    it.copy(error = "Failed to reorder dashboard: ${e.message}")
+                }
+            }
         }
     }
     
     fun exportData() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isExporting = true, message = null) }
+            _uiState.update { it.copy(isExporting = true, message = null, error = null) }
             
             when (val result = exportManager.exportAllDataToCsv(context)) {
                 is ExportResult.Success -> {
@@ -138,7 +178,7 @@ fun togglePlugin(pluginId: String) {
                     _uiState.update { 
                         it.copy(
                             isExporting = false,
-                            message = result.message
+                            error = result.message
                         )
                     }
                 }
@@ -148,15 +188,16 @@ fun togglePlugin(pluginId: String) {
     
     fun exportPluginData(pluginId: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isExporting = true, message = null) }
+            _uiState.update { it.copy(isExporting = true, message = null, error = null) }
             
             when (val result = exportManager.exportPluginData(context, pluginId)) {
                 is ExportResult.Success -> {
                     val plugin = pluginManager.getPlugin(pluginId)
+                    val sizeKb = result.fileSize / 1024
                     _uiState.update { 
                         it.copy(
                             isExporting = false,
-                            message = "Exported ${plugin?.metadata?.name ?: "plugin"} data: ${result.recordCount} records"
+                            message = "Exported ${plugin?.metadata?.name ?: "plugin"} data: ${result.recordCount} records (${sizeKb}KB)"
                         )
                     }
                 }
@@ -164,7 +205,7 @@ fun togglePlugin(pluginId: String) {
                     _uiState.update { 
                         it.copy(
                             isExporting = false,
-                            message = result.message
+                            error = result.message
                         )
                     }
                 }
@@ -186,12 +227,26 @@ fun togglePlugin(pluginId: String) {
     
     fun confirmClearAllData() {
         viewModelScope.launch {
-            dataRepository.cleanupOldData(0)
-            _uiState.update { 
-                it.copy(
-                    message = "All data cleared",
-                    showClearDataConfirmation = false
-                ) 
+            try {
+                _uiState.update { it.copy(isDeleting = true) }
+                
+                dataRepository.cleanupOldData(0)
+                
+                _uiState.update { 
+                    it.copy(
+                        message = "All data cleared successfully",
+                        showClearDataConfirmation = false,
+                        isDeleting = false
+                    ) 
+                }
+            } catch (e: Exception) {
+                _uiState.update { 
+                    it.copy(
+                        error = "Failed to clear data: ${e.message}",
+                        showClearDataConfirmation = false,
+                        isDeleting = false
+                    )
+                }
             }
         }
     }
@@ -218,18 +273,32 @@ fun togglePlugin(pluginId: String) {
         viewModelScope.launch {
             val plugin = _uiState.value.pendingPlugin ?: return@launch
             
-            permissionManager.grantPermissions(
-                pluginId = plugin.id,
-                permissions = plugin.securityManifest.requestedCapabilities,
-                grantedBy = "user_settings"
-            )
-            
-            _uiState.update { 
-                it.copy(
-                    pendingPlugin = null,
-                    showPermissionRequest = false,
-                    message = "Permissions granted for ${plugin.metadata.name}"
+            try {
+                permissionManager.grantPermissions(
+                    pluginId = plugin.id,
+                    permissions = plugin.securityManifest.requestedCapabilities,
+                    grantedBy = "user_settings"
                 )
+                
+                _uiState.update { 
+                    it.copy(
+                        pendingPlugin = null,
+                        showPermissionRequest = false,
+                        message = "Permissions granted for ${plugin.metadata.name}"
+                    )
+                }
+                
+                // Now enable the plugin
+                pluginManager.enablePlugin(plugin.id)
+                
+            } catch (e: Exception) {
+                _uiState.update { 
+                    it.copy(
+                        pendingPlugin = null,
+                        showPermissionRequest = false,
+                        error = "Failed to grant permissions: ${e.message}"
+                    )
+                }
             }
         }
     }
@@ -248,18 +317,40 @@ fun togglePlugin(pluginId: String) {
     fun dismissMessage() {
         _uiState.update { it.copy(message = null) }
     }
+    
+    fun dismissError() {
+        _uiState.update { it.copy(error = null) }
+    }
 }
 
+/**
+ * UI state for the Settings screen
+ */
 data class SettingsUiState(
+    // Plugin data
     val plugins: List<Plugin> = emptyList(),
+    val pluginSummaries: List<Pair<String, String>> = emptyList(), // For dropdowns if needed
     val pluginStates: Map<String, PluginState> = emptyMap(),
     val dashboardPluginIds: Set<String> = emptySet(),
+    
+    // Permission handling
     val pendingPlugin: Plugin? = null,
     val showPermissionRequest: Boolean = false,
+    
+    // Dialogs
     val showClearDataConfirmation: Boolean = false,
+    
+    // Navigation
     val navigateToSecurity: String? = null,
-    val isLoading: Boolean = false,
+    
+    // Export/Import
+    val lastExportPath: String? = null,
+    
+    // Loading states
     val isExporting: Boolean = false,
+    val isDeleting: Boolean = false,
+    
+    // Messages
     val message: String? = null,
-    val lastExportPath: String? = null
+    val error: String? = null
 )

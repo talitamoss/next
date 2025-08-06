@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.data.DataPoint
 import com.domain.app.core.data.DataRepository
+import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -21,6 +22,7 @@ class DataViewModel @Inject constructor(
     val uiState: StateFlow<DataUiState> = _uiState.asStateFlow()
     
     private val selectedPluginFilter = MutableStateFlow<String?>(null)
+    private val refreshTrigger = MutableStateFlow(0)
     
     init {
         loadPluginInfo()
@@ -29,23 +31,25 @@ class DataViewModel @Inject constructor(
     
     private fun loadPluginInfo() {
         val plugins = pluginManager.getAllActivePlugins()
-        val pluginNames = plugins.associate { plugin -> 
-            plugin.id to plugin.metadata.name 
-        }
-        val availablePlugins = plugins.map { plugin -> 
-            plugin.id to plugin.metadata.name 
-        }
         
         _uiState.update {
             it.copy(
-                pluginNames = pluginNames,
-                availablePlugins = availablePlugins
+                plugins = plugins,
+                pluginNames = plugins.associate { plugin -> 
+                    plugin.id to plugin.metadata.name 
+                },
+                pluginSummaries = plugins.map { plugin -> 
+                    plugin.id to plugin.metadata.name 
+                }
             )
         }
     }
     
     private fun observeDataPoints() {
-        selectedPluginFilter
+        combine(
+            selectedPluginFilter,
+            refreshTrigger
+        ) { filter, _ -> filter }
             .flatMapLatest { pluginId ->
                 when (pluginId) {
                     null -> dataRepository.getLatestDataPoints(100)
@@ -56,7 +60,16 @@ class DataViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         dataPoints = dataPoints,
-                        isLoading = false
+                        isLoading = false,
+                        error = null
+                    )
+                }
+            }
+            .catch { exception ->
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = "Failed to load data: ${exception.message}"
                     )
                 }
             }
@@ -70,33 +83,168 @@ class DataViewModel @Inject constructor(
     
     fun refreshData() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            // Trigger refresh by updating the filter
-            val currentFilter = selectedPluginFilter.value
-            selectedPluginFilter.value = currentFilter
+            _uiState.update { it.copy(isLoading = true, error = null) }
+            // Trigger refresh by incrementing the trigger
+            refreshTrigger.value++
         }
     }
     
     fun deleteDataPoint(id: String) {
         viewModelScope.launch {
+            _uiState.update { it.copy(isDeleting = true, error = null) }
+            
             try {
                 dataRepository.deleteDataPoint(id)
-                // Refresh data after deletion
-                refreshData()
+                
+                // Remove from UI immediately for better UX
+                _uiState.update { state ->
+                    state.copy(
+                        dataPoints = state.dataPoints.filter { it.id != id },
+                        isDeleting = false,
+                        message = "Data point deleted successfully"
+                    )
+                }
+                
+                // Trigger background refresh
+                refreshTrigger.value++
+                
             } catch (e: Exception) {
                 _uiState.update { 
-                    it.copy(error = "Failed to delete: ${e.message}")
+                    it.copy(
+                        isDeleting = false,
+                        error = "Failed to delete: ${e.message}"
+                    )
                 }
             }
         }
     }
+    
+    fun deleteMultipleDataPoints(ids: List<String>) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDeleting = true, error = null) }
+            
+            try {
+                dataRepository.deleteDataPoints(ids)
+                
+                // Remove from UI immediately
+                _uiState.update { state ->
+                    state.copy(
+                        dataPoints = state.dataPoints.filter { it.id !in ids },
+                        isDeleting = false,
+                        selectedDataPoints = emptySet(),
+                        isInSelectionMode = false,
+                        message = "${ids.size} data points deleted"
+                    )
+                }
+                
+                // Trigger background refresh
+                refreshTrigger.value++
+                
+            } catch (e: Exception) {
+                _uiState.update { 
+                    it.copy(
+                        isDeleting = false,
+                        error = "Failed to delete: ${e.message}"
+                    )
+                }
+            }
+        }
+    }
+    
+    fun toggleDataPointSelection(id: String) {
+        _uiState.update { state ->
+            val newSelection = if (state.selectedDataPoints.contains(id)) {
+                state.selectedDataPoints - id
+            } else {
+                state.selectedDataPoints + id
+            }
+            
+            state.copy(
+                selectedDataPoints = newSelection,
+                isInSelectionMode = newSelection.isNotEmpty()
+            )
+        }
+    }
+    
+    fun selectAllDataPoints() {
+        _uiState.update { state ->
+            state.copy(
+                selectedDataPoints = state.dataPoints.map { it.id }.toSet(),
+                isInSelectionMode = true
+            )
+        }
+    }
+    
+    fun clearSelection() {
+        _uiState.update { 
+            it.copy(
+                selectedDataPoints = emptySet(),
+                isInSelectionMode = false
+            )
+        }
+    }
+    
+    fun searchDataPoints(query: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(searchQuery = query, isLoading = true) }
+            
+            if (query.isBlank()) {
+                refreshData()
+                return@launch
+            }
+            
+            dataRepository.searchDataPoints(query)
+                .catch { exception ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = "Search failed: ${exception.message}"
+                        )
+                    }
+                }
+                .collect { results ->
+                    _uiState.update {
+                        it.copy(
+                            dataPoints = results,
+                            isLoading = false
+                        )
+                    }
+                }
+        }
+    }
+    
+    fun clearMessage() {
+        _uiState.update { it.copy(message = null) }
+    }
+    
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
+    }
 }
 
+/**
+ * UI state for the Data screen
+ */
 data class DataUiState(
+    // Data
     val dataPoints: List<DataPoint> = emptyList(),
+    val plugins: List<Plugin> = emptyList(),
     val pluginNames: Map<String, String> = emptyMap(),
-    val availablePlugins: List<Pair<String, String>> = emptyList(),
+    val pluginSummaries: List<Pair<String, String>> = emptyList(), // For dropdowns
+    
+    // Filters and search
     val selectedPluginFilter: String? = null,
+    val searchQuery: String = "",
+    
+    // Selection mode
+    val isInSelectionMode: Boolean = false,
+    val selectedDataPoints: Set<String> = emptySet(),
+    
+    // Loading states
     val isLoading: Boolean = true,
-    val error: String? = null
+    val isDeleting: Boolean = false,
+    
+    // Messages
+    val error: String? = null,
+    val message: String? = null
 )

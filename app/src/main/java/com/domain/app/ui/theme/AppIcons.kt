@@ -28,6 +28,8 @@ object AppIcons {
         val back = Icons.Filled.ArrowBack
         val close = Icons.Filled.Close
         val menu = Icons.Filled.Menu
+        val moreVert = Icons.Filled.MoreVert
+        val moreHoriz = Icons.Filled.MoreHoriz
     }
     
     // Action Icons
@@ -46,11 +48,15 @@ object AppIcons {
         val check = Icons.Filled.Check
         val checkCircle = Icons.Filled.CheckCircle
         val close = Icons.Filled.Close
+        val cancel = Icons.Filled.Cancel
+        val clear = Icons.Filled.Clear
         val favorite = Icons.Filled.Favorite
         val favoriteBorder = Icons.Filled.FavoriteBorder
         val copy = Icons.Filled.ContentCopy
         val paste = Icons.Filled.ContentPaste
         val cut = Icons.Filled.ContentCut
+        val undo = Icons.Filled.Undo
+        val redo = Icons.Filled.Redo
     }
     
     // Data & Time Icons
@@ -67,6 +73,8 @@ object AppIcons {
         val sync = Icons.Filled.Sync
         val analytics = Icons.Filled.Analytics
         val pieChart = Icons.Filled.PieChart
+        val lineChart = Icons.Filled.ShowChart
+        val dataUsage = Icons.Filled.DataUsage
     }
     
     // Plugin & Feature Icons
@@ -83,6 +91,9 @@ object AppIcons {
         val energy = Icons.Filled.BatteryChargingFull
         val food = Icons.Filled.Restaurant
         val medication = Icons.Filled.Medication
+        val weight = Icons.Filled.MonitorWeight
+        val note = Icons.Filled.Note
+        val habit = Icons.Filled.CheckCircle
     }
     
     // Security Icons
@@ -97,6 +108,8 @@ object AppIcons {
         val visibilityOff = Icons.Filled.VisibilityOff
         val verified = Icons.Filled.VerifiedUser
         val privacy = Icons.Filled.PrivacyTip
+        val warning = Icons.Filled.Warning
+        val admin = Icons.Filled.AdminPanelSettings
     }
     
     // Status Icons
@@ -113,6 +126,46 @@ object AppIcons {
         val sync = Icons.Filled.Sync
         val syncDisabled = Icons.Filled.SyncDisabled
         val syncProblem = Icons.Filled.SyncProblem
+        val done = Icons.Filled.Done
+        val doneAll = Icons.Filled.DoneAll
+    }
+    
+    // Storage Icons
+    object Storage {
+        val folder = Icons.Filled.Folder
+        val folderOpen = Icons.Filled.FolderOpen
+        val storage = Icons.Filled.Storage
+        val database = Icons.Filled.Storage
+        val cloud = Icons.Filled.Cloud
+        val cloudUpload = Icons.Filled.CloudUpload
+        val cloudDownload = Icons.Filled.CloudDownload
+        val cloudSync = Icons.Filled.CloudSync
+        val cloudOff = Icons.Filled.CloudOff
+        val file = Icons.Filled.InsertDriveFile
+        val attachment = Icons.Filled.AttachFile
+        val download = Icons.Filled.Download
+        val upload = Icons.Filled.Upload
+        val save = Icons.Filled.Save
+        val saveAlt = Icons.Filled.SaveAlt
+    }
+    
+    // Communication Icons
+    object Communication {
+        // Both singular and plural for compatibility
+        val notification = Icons.Filled.Notifications
+        val notifications = Icons.Filled.Notifications
+        val notificationActive = Icons.Filled.NotificationsActive
+        val notificationOff = Icons.Filled.NotificationsOff
+        val email = Icons.Filled.Email
+        val message = Icons.Filled.Message
+        val chat = Icons.Filled.Chat
+        val send = Icons.Filled.Send
+        val inbox = Icons.Filled.Inbox
+        val drafts = Icons.Filled.Drafts
+        val mail = Icons.Filled.Mail
+        val markEmailRead = Icons.Filled.MarkEmailRead
+        val markEmailUnread = Icons.Filled.MarkEmailUnread
+        val cloud = Icons.Filled.Cloud
     }
     
     // UI Control Icons
@@ -123,46 +176,14 @@ object AppIcons {
         val chevronLeft = Icons.Filled.ChevronLeft
         val arrowUp = Icons.Filled.KeyboardArrowUp
         val arrowDown = Icons.Filled.KeyboardArrowDown
+        val arrowLeft = Icons.Filled.KeyboardArrowLeft
+        val arrowRight = Icons.Filled.KeyboardArrowRight
         val arrowForward = Icons.Filled.ArrowForward
         val arrowBack = Icons.Filled.ArrowBack
-        val dragHandle = Icons.Filled.DragHandle
-        val clear = Icons.Filled.Clear
-        val help = Icons.Filled.Help
-        val helpOutline = Icons.Filled.HelpOutline
-        val settings = Icons.Filled.Settings
-    }
-    
-    // File & Storage Icons
-    object Storage {
-        val folder = Icons.Filled.Folder
-        val folderOpen = Icons.Filled.FolderOpen
-        val archive = Icons.Filled.Archive
-        val cloud = Icons.Filled.Cloud
-        val cloudUpload = Icons.Filled.CloudUpload
-        val cloudDownload = Icons.Filled.CloudDownload
-        val cloudOff = Icons.Filled.CloudOff
-        val save = Icons.Filled.Save
-        val file = Icons.Filled.InsertDriveFile
-        val attachment = Icons.Filled.AttachFile
-        val download = Icons.Filled.Download
-        val upload = Icons.Filled.Upload
-        val delete = Icons.Filled.Delete
-        val deleteForever = Icons.Filled.DeleteForever
-    }
-    
-    // Communication Icons
-    object Communication {
-        val email = Icons.Filled.Email
-        val phone = Icons.Filled.Phone
-        val message = Icons.Filled.Message
-        val chat = Icons.Filled.Chat
-        val forum = Icons.Filled.Forum
-        val send = Icons.Filled.Send
-        val notifications = Icons.Filled.Notifications
-        val notificationsActive = Icons.Filled.NotificationsActive
-        val notificationsOff = Icons.Filled.NotificationsOff
-        val comment = Icons.Filled.Comment
-        val feedback = Icons.Filled.Feedback
+        val firstPage = Icons.Filled.FirstPage
+        val lastPage = Icons.Filled.LastPage
+        val navigateNext = Icons.Filled.NavigateNext
+        val navigateBefore = Icons.Filled.NavigateBefore
     }
     
     // Media Icons
@@ -172,14 +193,19 @@ object AppIcons {
         val stop = Icons.Filled.Stop
         val skipNext = Icons.Filled.SkipNext
         val skipPrevious = Icons.Filled.SkipPrevious
+        val fastForward = Icons.Filled.FastForward
+        val fastRewind = Icons.Filled.FastRewind
         val volumeUp = Icons.Filled.VolumeUp
         val volumeDown = Icons.Filled.VolumeDown
+        val volumeMute = Icons.Filled.VolumeMute
         val volumeOff = Icons.Filled.VolumeOff
         val mic = Icons.Filled.Mic
         val micOff = Icons.Filled.MicOff
         val camera = Icons.Filled.Camera
         val image = Icons.Filled.Image
         val video = Icons.Filled.Videocam
+        val photo = Icons.Filled.Photo
+        val photoCamera = Icons.Filled.PhotoCamera
     }
     
     // User & Account Icons
@@ -193,6 +219,9 @@ object AppIcons {
         val profile = Icons.Filled.AccountBox
         val logout = Icons.Filled.Logout
         val login = Icons.Filled.Login
+        val contacts = Icons.Filled.Contacts
+        val badge = Icons.Filled.Badge
+        val manage = Icons.Filled.ManageAccounts
     }
     
     // Utility functions for dynamic icon selection
@@ -218,6 +247,7 @@ object AppIcons {
             return when {
                 level <= 2 -> Icons.Filled.BatteryAlert
                 level <= 4 -> Icons.Filled.Battery4Bar
+                level <= 6 -> Icons.Filled.Battery6Bar
                 else -> Icons.Filled.BatteryFull
             }
         }
@@ -227,10 +257,26 @@ object AppIcons {
          */
         fun getWeatherIcon(condition: String): ImageVector {
             return when (condition.lowercase()) {
-                "sunny" -> Icons.Filled.WbSunny
-                "cloudy" -> Icons.Filled.Cloud
-                "rainy" -> Icons.Filled.Thunderstorm
+                "sunny", "clear" -> Icons.Filled.WbSunny
+                "cloudy", "overcast" -> Icons.Filled.Cloud
+                "rainy", "rain" -> Icons.Filled.Umbrella
+                "stormy", "thunder" -> Icons.Filled.Thunderstorm
+                "snowy", "snow" -> Icons.Filled.AcUnit
+                "foggy", "fog" -> Icons.Filled.CloudQueue
                 else -> Icons.Filled.WbCloudy
+            }
+        }
+        
+        /**
+         * Get sync status icon
+         */
+        fun getSyncIcon(status: String): ImageVector {
+            return when (status.lowercase()) {
+                "synced", "complete" -> Icons.Filled.CloudDone
+                "syncing", "pending" -> Icons.Filled.Sync
+                "error", "failed" -> Icons.Filled.SyncProblem
+                "disabled", "off" -> Icons.Filled.SyncDisabled
+                else -> Icons.Filled.CloudSync
             }
         }
     }

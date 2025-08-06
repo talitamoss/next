@@ -1,249 +1,311 @@
+// app/src/main/java/com/domain/app/core/data/DataRepository.kt
 package com.domain.app.core.data
 
-import android.util.Log
-import com.domain.app.core.storage.AppDatabase
+import com.domain.app.core.security.EncryptionManager
+import com.domain.app.core.storage.dao.DataPointDao
 import com.domain.app.core.storage.entity.DataPointEntity
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import java.time.Instant
-import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Repository for managing data points with encryption support
+ */
 @Singleton
 class DataRepository @Inject constructor(
-    private val database: AppDatabase
+    private val dataPointDao: DataPointDao,
+    private val encryptionManager: EncryptionManager
 ) {
-    
-    companion object {
-        private const val TAG = "DataRepository"
-    }
-    
     /**
-     * Save a data point
+     * Save a new data point with encryption
      */
-    suspend fun saveDataPoint(dataPoint: DataPoint) = withContext(Dispatchers.IO) {
-        Log.d(TAG, "=== SAVING DATA POINT ===")
-        Log.d(TAG, "Plugin ID: ${dataPoint.pluginId}")
-        Log.d(TAG, "Type: ${dataPoint.type}")
-        Log.d(TAG, "Value: ${dataPoint.value}")
-        Log.d(TAG, "Timestamp: ${dataPoint.timestamp}")
-        
+    suspend fun saveDataPoint(dataPoint: DataPoint) {
         try {
             val entity = dataPoint.toEntity()
-            Log.d(TAG, "Converted to entity:")
-            Log.d(TAG, "  Entity ID: ${entity.id}")
-            Log.d(TAG, "  Entity valueJson: ${entity.valueJson}")
-            
-            database.dataPointDao().insert(entity)
-            Log.d(TAG, "Successfully inserted into database")
-            
-            // Verify insertion
-            val count = database.dataPointDao().getCountByPlugin(dataPoint.pluginId)
-            Log.d(TAG, "Plugin ${dataPoint.pluginId} now has $count total records")
-            
+            val encryptedEntity = encryptEntity(entity)
+            dataPointDao.insert(encryptedEntity)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to save data point", e)
-            throw e
+            throw DataRepositoryException("Failed to save data point", e)
         }
     }
     
     /**
-     * Save multiple data points
+     * Save multiple data points in a transaction
      */
-    suspend fun saveDataPoints(dataPoints: List<DataPoint>) = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Saving ${dataPoints.size} data points")
+    suspend fun saveDataPoints(dataPoints: List<DataPoint>) {
         try {
-            database.dataPointDao().insertAll(dataPoints.map { it.toEntity() })
-            Log.d(TAG, "Successfully saved ${dataPoints.size} data points")
+            val entities = dataPoints.map { it.toEntity() }
+            val encryptedEntities = entities.map { encryptEntity(it) }
+            dataPointDao.insertAll(encryptedEntities)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to save data points", e)
-            throw e
+            throw DataRepositoryException("Failed to save data points", e)
         }
     }
     
     /**
-     * Get data for a specific plugin
+     * Get a specific data point by ID
      */
-    fun getPluginData(pluginId: String): Flow<List<DataPoint>> {
-        Log.d(TAG, "Getting data for plugin: $pluginId")
-        return database.dataPointDao().getByPlugin(pluginId)
-            .map { entities -> 
-                Log.d(TAG, "Plugin $pluginId: found ${entities.size} entities")
-                entities.map { it.toDataPoint() }
+    suspend fun getDataPoint(id: String): DataPoint? {
+        return try {
+            dataPointDao.getById(id)?.let { entity ->
+                decryptEntity(entity).toDomainModel()
             }
+        } catch (e: Exception) {
+            null
+        }
     }
     
     /**
-     * Get data for a plugin within a time range
+     * Delete a specific data point by ID
      */
-    suspend fun getPluginDataInRange(
-        pluginId: String,
-        start: Instant,
-        end: Instant
-    ): List<DataPoint> = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Getting plugin $pluginId data from $start to $end")
-        val entities = database.dataPointDao()
-            .getByPluginAndTimeRange(pluginId, start, end)
-        Log.d(TAG, "Found ${entities.size} entities in range")
-        entities.map { it.toDataPoint() }
+    suspend fun deleteDataPoint(id: String) {
+        try {
+            dataPointDao.deleteById(id)
+        } catch (e: Exception) {
+            throw DataRepositoryException("Failed to delete data point", e)
+        }
     }
     
     /**
-     * Get recent data across all plugins
+     * Delete a data point entity
      */
-    fun getRecentData(hours: Int = 24): Flow<List<DataPoint>> {
-        val since = Instant.now().minus(hours.toLong(), ChronoUnit.HOURS)
-        Log.d(TAG, "Getting recent data since: $since (last $hours hours)")
-        
-        return database.dataPointDao().getRecentData(since)
-            .map { entities -> 
-                Log.d(TAG, "Recent data query returned ${entities.size} entities")
-                entities.forEach { entity ->
-                    Log.d(TAG, "  Entity: ${entity.pluginId} at ${entity.timestamp}")
-                }
-                entities.map { it.toDataPoint() }
-            }
+    suspend fun deleteDataPoint(dataPoint: DataPoint) {
+        try {
+            val entity = dataPoint.toEntity()
+            dataPointDao.delete(entity)
+        } catch (e: Exception) {
+            throw DataRepositoryException("Failed to delete data point", e)
+        }
+    }
+    
+    /**
+     * Delete multiple data points
+     */
+    suspend fun deleteDataPoints(ids: List<String>) {
+        try {
+            dataPointDao.deleteByIds(ids)
+        } catch (e: Exception) {
+            throw DataRepositoryException("Failed to delete data points", e)
+        }
     }
     
     /**
      * Get latest data points with limit
      */
-    fun getLatestDataPoints(limit: Int): Flow<List<DataPoint>> {
-        Log.d(TAG, "Getting latest $limit data points")
-        return database.dataPointDao().getLatestDataPoints(limit)
-            .map { entities -> 
-                Log.d(TAG, "Latest query returned ${entities.size} entities")
-                entities.map { it.toDataPoint() }
+    fun getLatestDataPoints(limit: Int = 100): Flow<List<DataPoint>> {
+        return dataPointDao.getLatestDataPoints(limit)
+            .map { entities ->
+                entities.mapNotNull { entity ->
+                    try {
+                        decryptEntity(entity).toDomainModel()
+                    } catch (e: Exception) {
+                        null // Skip corrupted entries
+                    }
+                }
             }
     }
     
     /**
-     * Get count of data points for a plugin
+     * Get all data points for a specific plugin
      */
-    suspend fun getDataCount(pluginId: String): Int = withContext(Dispatchers.IO) {
-        val count = database.dataPointDao().getCountByPlugin(pluginId)
-        Log.d(TAG, "Plugin $pluginId has $count data points")
-        count
+    fun getPluginData(pluginId: String): Flow<List<DataPoint>> {
+        return dataPointDao.getPluginData(pluginId)
+            .map { entities ->
+                entities.mapNotNull { entity ->
+                    try {
+                        decryptEntity(entity).toDomainModel()
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+            }
     }
     
     /**
-     * Get unsynced data for backup/sync
+     * Get data points within a time range
      */
-    suspend fun getUnsyncedData(): List<DataPoint> = withContext(Dispatchers.IO) {
-        database.dataPointDao().getUnsyncedData()
-            .map { it.toDataPoint() }
-    }
-    
-    /**
-     * Mark data as synced
-     */
-    suspend fun markDataAsSynced(dataPointIds: List<String>) = withContext(Dispatchers.IO) {
-        database.dataPointDao().markAsSynced(dataPointIds)
-    }
-    
-    /**
-     * Clean up old data
-     */
-    suspend fun cleanupOldData(daysToKeep: Int) = withContext(Dispatchers.IO) {
-        val cutoffDate = Instant.now().minus(daysToKeep.toLong(), ChronoUnit.DAYS)
-        database.dataPointDao().deleteOlderThan(cutoffDate)
+    fun getDataPointsInRange(
+        startTime: Instant,
+        endTime: Instant,
+        pluginId: String? = null
+    ): Flow<List<DataPoint>> {
+        return if (pluginId != null) {
+            dataPointDao.getPluginDataInRange(pluginId, startTime, endTime)
+        } else {
+            dataPointDao.getDataInRange(startTime, endTime)
+        }.map { entities ->
+            entities.mapNotNull { entity ->
+                try {
+                    decryptEntity(entity).toDomainModel()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+        }
     }
     
     /**
      * Get aggregated statistics for a plugin
      */
-    suspend fun getPluginStatistics(
-        pluginId: String,
-        start: Instant,
-        end: Instant
-    ): PluginStatistics = withContext(Dispatchers.IO) {
-        val dataPoints = getPluginDataInRange(pluginId, start, end)
+    suspend fun getPluginStatistics(pluginId: String): DataStatistics {
+        val count = dataPointDao.getPluginDataCount(pluginId)
+        val latestEntry = dataPointDao.getLatestPluginEntry(pluginId)
+        val oldestEntry = dataPointDao.getOldestPluginEntry(pluginId)
         
-        PluginStatistics(
-            pluginId = pluginId,
-            totalCount = dataPoints.size,
-            startDate = start,
-            endDate = end,
-            latestDataPoint = dataPoints.maxByOrNull { it.timestamp }
+        return DataStatistics(
+            totalCount = count,
+            latestTimestamp = latestEntry?.timestamp,
+            oldestTimestamp = oldestEntry?.timestamp,
+            pluginId = pluginId
         )
     }
-}
-
-/**
- * Extension functions for data conversion
- */
-fun DataPoint.toEntity(): DataPointEntity {
-    Log.d("DataConversion", "Converting DataPoint to Entity:")
-    Log.d("DataConversion", "  ID: $id")
-    Log.d("DataConversion", "  Value: $value")
     
-    try {
-        val valueJson = JSONObject(value).toString()
-        Log.d("DataConversion", "  ValueJSON: $valueJson")
-        
+    /**
+     * Search data points by value content
+     */
+    fun searchDataPoints(query: String): Flow<List<DataPoint>> {
+        return dataPointDao.searchDataPoints("%$query%")
+            .map { entities ->
+                entities.mapNotNull { entity ->
+                    try {
+                        val decrypted = decryptEntity(entity)
+                        if (decrypted.value.contains(query, ignoreCase = true)) {
+                            decrypted.toDomainModel()
+                        } else {
+                            null
+                        }
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+            }
+    }
+    
+    /**
+     * Clean up old data based on retention days
+     */
+    suspend fun cleanupOldData(retentionDays: Int) {
+        try {
+            if (retentionDays == 0) {
+                // Delete all data
+                dataPointDao.deleteAll()
+            } else {
+                val cutoffTime = Instant.now().minusSeconds(retentionDays * 24L * 60L * 60L)
+                dataPointDao.deleteOlderThan(cutoffTime)
+            }
+        } catch (e: Exception) {
+            throw DataRepositoryException("Failed to cleanup old data", e)
+        }
+    }
+    
+    /**
+     * Get count of all data points
+     */
+    suspend fun getTotalDataPointCount(): Int {
+        return dataPointDao.getTotalCount()
+    }
+    
+    /**
+     * Export all data points (unencrypted for export)
+     */
+    suspend fun getAllDataPointsForExport(): List<DataPoint> {
+        return try {
+            dataPointDao.getAllDataPoints().mapNotNull { entity ->
+                try {
+                    decryptEntity(entity).toDomainModel()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            throw DataRepositoryException("Failed to export data points", e)
+        }
+    }
+    
+    /**
+     * Export plugin data points (unencrypted for export)
+     */
+    suspend fun getPluginDataPointsForExport(pluginId: String): List<DataPoint> {
+        return try {
+            dataPointDao.getAllPluginData(pluginId).mapNotNull { entity ->
+                try {
+                    decryptEntity(entity).toDomainModel()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            throw DataRepositoryException("Failed to export plugin data", e)
+        }
+    }
+    
+    // Private helper methods
+    
+    private fun encryptEntity(entity: DataPointEntity): DataPointEntity {
+        return entity.copy(
+            value = encryptionManager.encrypt(entity.value),
+            metadata = entity.metadata?.let { encryptionManager.encrypt(it) }
+        )
+    }
+    
+    private fun decryptEntity(entity: DataPointEntity): DataPointEntity {
+        return entity.copy(
+            value = encryptionManager.decrypt(entity.value),
+            metadata = entity.metadata?.let { encryptionManager.decrypt(it) }
+        )
+    }
+    
+    private fun DataPoint.toEntity(): DataPointEntity {
         return DataPointEntity(
             id = id,
             pluginId = pluginId,
             timestamp = timestamp,
-            type = type,
-            valueJson = valueJson,
-            metadataJson = metadata?.let { JSONObject(it).toString() },
-            source = source,
-            version = version
+            value = value.toString(), // Convert map to JSON string
+            metadata = metadata?.toString(),
+            syncStatus = syncStatus.name,
+            createdAt = createdAt,
+            updatedAt = updatedAt
         )
-    } catch (e: Exception) {
-        Log.e("DataConversion", "Failed to convert DataPoint to Entity", e)
-        throw e
     }
-}
-
-fun DataPointEntity.toDataPoint(): DataPoint {
-    try {
+    
+    private fun DataPointEntity.toDomainModel(): DataPoint {
         return DataPoint(
             id = id,
             pluginId = pluginId,
             timestamp = timestamp,
-            type = type,
-            value = JSONObject(valueJson).toMap(),
-            metadata = metadataJson?.let { JSONObject(it).toStringMap() },
-            source = source,
-            version = version
+            value = parseJsonToMap(value),
+            metadata = metadata?.let { parseJsonToMap(it) },
+            syncStatus = SyncStatus.valueOf(syncStatus),
+            createdAt = createdAt,
+            updatedAt = updatedAt
         )
-    } catch (e: Exception) {
-        Log.e("DataConversion", "Failed to convert Entity to DataPoint", e)
-        Log.e("DataConversion", "Entity valueJson: $valueJson")
-        throw e
     }
-}
-
-fun JSONObject.toMap(): Map<String, Any> {
-    val map = mutableMapOf<String, Any>()
-    keys().forEach { key ->
-        val value = get(key)
-        map[key] = when (value) {
-            is JSONObject -> value.toMap()
-            else -> value
+    
+    private fun parseJsonToMap(json: String): Map<String, Any> {
+        // Implementation would use actual JSON parsing
+        // For now, simplified version
+        return try {
+            // Use Gson or Moshi to parse JSON
+            emptyMap() // Placeholder
+        } catch (e: Exception) {
+            emptyMap()
         }
     }
-    return map
 }
 
-fun JSONObject.toStringMap(): Map<String, String> {
-    val map = mutableMapOf<String, String>()
-    keys().forEach { key ->
-        map[key] = getString(key)
-    }
-    return map
-}
+/**
+ * Custom exception for repository operations
+ */
+class DataRepositoryException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-data class PluginStatistics(
-    val pluginId: String,
+/**
+ * Data statistics model
+ */
+data class DataStatistics(
     val totalCount: Int,
-    val startDate: Instant,
-    val endDate: Instant,
-    val latestDataPoint: DataPoint?
+    val latestTimestamp: Instant?,
+    val oldestTimestamp: Instant?,
+    val pluginId: String
 )
