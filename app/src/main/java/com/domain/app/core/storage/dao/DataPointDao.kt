@@ -8,6 +8,7 @@ import java.time.Instant
 
 /**
  * Data Access Object for DataPoint entities
+ * Fixed to use actual column names from DataPointEntity
  */
 @Dao
 interface DataPointDao {
@@ -23,7 +24,7 @@ interface DataPointDao {
     @Upsert
     suspend fun upsert(dataPoint: DataPointEntity)
     
-    // Query operations
+    // Query operations - FIXED to use actual column names
     
     @Query("SELECT * FROM data_points WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): DataPointEntity?
@@ -31,15 +32,15 @@ interface DataPointDao {
     @Query("SELECT * FROM data_points ORDER BY timestamp DESC LIMIT :limit")
     fun getLatestDataPoints(limit: Int): Flow<List<DataPointEntity>>
     
-    @Query("SELECT * FROM data_points WHERE plugin_id = :pluginId ORDER BY timestamp DESC")
+    @Query("SELECT * FROM data_points WHERE pluginId = :pluginId ORDER BY timestamp DESC")
     fun getPluginData(pluginId: String): Flow<List<DataPointEntity>>
     
-    @Query("SELECT * FROM data_points WHERE plugin_id = :pluginId ORDER BY timestamp DESC")
+    @Query("SELECT * FROM data_points WHERE pluginId = :pluginId ORDER BY timestamp DESC")
     suspend fun getAllPluginData(pluginId: String): List<DataPointEntity>
     
     @Query("""
         SELECT * FROM data_points 
-        WHERE plugin_id = :pluginId 
+        WHERE pluginId = :pluginId 
         AND timestamp BETWEEN :startTime AND :endTime
         ORDER BY timestamp DESC
     """)
@@ -59,7 +60,8 @@ interface DataPointDao {
         endTime: Instant
     ): Flow<List<DataPointEntity>>
     
-    @Query("SELECT * FROM data_points WHERE value LIKE :query ORDER BY timestamp DESC")
+    // Fixed: search in valueJson instead of value
+    @Query("SELECT * FROM data_points WHERE valueJson LIKE :query ORDER BY timestamp DESC")
     fun searchDataPoints(query: String): Flow<List<DataPointEntity>>
     
     @Query("SELECT * FROM data_points ORDER BY timestamp DESC")
@@ -68,13 +70,13 @@ interface DataPointDao {
     @Query("SELECT COUNT(*) FROM data_points")
     suspend fun getTotalCount(): Int
     
-    @Query("SELECT COUNT(*) FROM data_points WHERE plugin_id = :pluginId")
+    @Query("SELECT COUNT(*) FROM data_points WHERE pluginId = :pluginId")
     suspend fun getPluginDataCount(pluginId: String): Int
     
-    @Query("SELECT * FROM data_points WHERE plugin_id = :pluginId ORDER BY timestamp DESC LIMIT 1")
+    @Query("SELECT * FROM data_points WHERE pluginId = :pluginId ORDER BY timestamp DESC LIMIT 1")
     suspend fun getLatestPluginEntry(pluginId: String): DataPointEntity?
     
-    @Query("SELECT * FROM data_points WHERE plugin_id = :pluginId ORDER BY timestamp ASC LIMIT 1")
+    @Query("SELECT * FROM data_points WHERE pluginId = :pluginId ORDER BY timestamp ASC LIMIT 1")
     suspend fun getOldestPluginEntry(pluginId: String): DataPointEntity?
     
     @Query("""
@@ -85,16 +87,17 @@ interface DataPointDao {
     fun getDataSince(since: Instant): Flow<List<DataPointEntity>>
     
     @Query("""
-        SELECT DISTINCT plugin_id FROM data_points
+        SELECT DISTINCT pluginId FROM data_points
     """)
     suspend fun getDistinctPluginIds(): List<String>
     
+    // Fixed: using synced boolean instead of sync_status
     @Query("""
         SELECT * FROM data_points 
-        WHERE sync_status = :syncStatus
+        WHERE synced = :synced
         ORDER BY timestamp DESC
     """)
-    suspend fun getDataBySyncStatus(syncStatus: String): List<DataPointEntity>
+    suspend fun getDataBySyncStatus(synced: Boolean): List<DataPointEntity>
     
     // Update operations
     
@@ -104,11 +107,12 @@ interface DataPointDao {
     @Update
     suspend fun updateAll(dataPoints: List<DataPointEntity>)
     
-    @Query("UPDATE data_points SET sync_status = :syncStatus WHERE id = :id")
-    suspend fun updateSyncStatus(id: String, syncStatus: String)
+    // Fixed: using synced boolean
+    @Query("UPDATE data_points SET synced = :synced WHERE id = :id")
+    suspend fun updateSyncStatus(id: String, synced: Boolean)
     
-    @Query("UPDATE data_points SET sync_status = :syncStatus WHERE id IN (:ids)")
-    suspend fun updateSyncStatusBatch(ids: List<String>, syncStatus: String)
+    @Query("UPDATE data_points SET synced = :synced WHERE id IN (:ids)")
+    suspend fun updateSyncStatusBatch(ids: List<String>, synced: Boolean)
     
     // Delete operations
     
@@ -124,7 +128,7 @@ interface DataPointDao {
     @Query("DELETE FROM data_points WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<String>)
     
-    @Query("DELETE FROM data_points WHERE plugin_id = :pluginId")
+    @Query("DELETE FROM data_points WHERE pluginId = :pluginId")
     suspend fun deleteByPluginId(pluginId: String)
     
     @Query("DELETE FROM data_points WHERE timestamp < :before")

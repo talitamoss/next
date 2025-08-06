@@ -1,4 +1,5 @@
 package com.domain.app.ui.security
+import com.domain.app.ui.utils.getPluginIcon
 
 import androidx.compose.foundation.background
 import com.domain.app.ui.utils.getPluginIcon

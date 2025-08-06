@@ -199,8 +199,8 @@ fun ValidatedTextField(
             AnimatedContent(
                 targetState = when {
                     errorText != null -> errorText
-                    (validationResult as? ValidationResult.Error) != null -> validationResult.message
-                    (validationResult as? ValidationResult.Warning) != null -> validationResult.message
+        val errorMessage = (validationResult as? ValidationResult.Error)?.message
+        val warningMessage = (validationResult as? ValidationResult.Warning)?.message
                     helperText != null -> helperText
                     else -> ""
                 },

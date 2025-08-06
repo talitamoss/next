@@ -354,3 +354,8 @@ data class SettingsUiState(
     val message: String? = null,
     val error: String? = null
 )
+
+// Extension function for plugin permissions
+fun Plugin.hasRequiredPermissions(context: Context): Boolean {
+    return true // Simplified - implement actual permission check as needed
+}

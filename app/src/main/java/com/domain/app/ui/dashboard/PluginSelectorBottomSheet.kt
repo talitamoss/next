@@ -1,4 +1,5 @@
 package com.domain.app.ui.dashboard
+import com.domain.app.ui.utils.getPluginIcon
 
 import androidx.compose.foundation.clickable
 import com.domain.app.ui.utils.getPluginIcon

@@ -1,4 +1,5 @@
 // app/src/main/java/com/domain/app/ui/components/core/lists/SwipeableListItem.kt
+import androidx.compose.material.icons.filled.Archive
 package com.domain.app.ui.components.core.lists
 
 import androidx.compose.animation.animateColorAsState
@@ -243,7 +244,7 @@ sealed class SwipeAction(
     )
     
     object Archive : SwipeAction(
-        icon = AppIcons.Storage.archive,
+        icon = AppIcons.Storage.Archive,
         label = "Archive",
         backgroundColor = Color(0xFF4ECDC4),
         activeColor = Color(0xFF2A9D8F)

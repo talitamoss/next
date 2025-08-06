@@ -1,4 +1,5 @@
 // app/src/main/java/com/domain/app/ui/settings/PluginsScreen.kt
+import kotlinx.coroutines.delay
 package com.domain.app.ui.settings
 
 import androidx.compose.animation.*

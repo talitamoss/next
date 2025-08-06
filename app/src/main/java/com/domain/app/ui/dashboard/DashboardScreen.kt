@@ -1,4 +1,5 @@
 // app/src/main/java/com/domain/app/ui/dashboard/DashboardScreen.kt
+import com.domain.app.ui.utils.getPluginIcon
 package com.domain.app.ui.dashboard
 
 import com.domain.app.ui.utils.getPluginIcon

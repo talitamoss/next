@@ -1,4 +1,5 @@
 // app/src/main/java/com/domain/app/ui/components/core/feedback/LoadingOverlay.kt
+import androidx.compose.ui.draw.scale
 package com.domain.app.ui.components.core.feedback
 
 import androidx.compose.animation.*

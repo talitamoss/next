@@ -1,4 +1,5 @@
 // app/src/main/java/com/domain/app/ui/data/DataScreen.kt
+import androidx.compose.foundation.BorderStroke
 package com.domain.app.ui.data
 
 import androidx.compose.animation.*

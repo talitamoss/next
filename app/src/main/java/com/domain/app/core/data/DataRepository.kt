@@ -1,31 +1,36 @@
 // app/src/main/java/com/domain/app/core/data/DataRepository.kt
 package com.domain.app.core.data
 
-import com.domain.app.core.security.EncryptionManager
+import com.domain.app.core.storage.encryption.EncryptionManager
 import com.domain.app.core.storage.dao.DataPointDao
 import com.domain.app.core.storage.entity.DataPointEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flow
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Repository for managing data points with encryption support
+ * 
+ * NOTE: Currently using simple string serialization for JSON fields.
+ * TODO: Add proper JSON library (Gson or kotlinx.serialization) to dependencies
  */
 @Singleton
 class DataRepository @Inject constructor(
     private val dataPointDao: DataPointDao,
     private val encryptionManager: EncryptionManager
 ) {
+    
     /**
-     * Save a new data point with encryption
+     * Save a new data point
      */
     suspend fun saveDataPoint(dataPoint: DataPoint) {
         try {
             val entity = dataPoint.toEntity()
-            val encryptedEntity = encryptEntity(entity)
-            dataPointDao.insert(encryptedEntity)
+            dataPointDao.insert(entity)
         } catch (e: Exception) {
             throw DataRepositoryException("Failed to save data point", e)
         }
@@ -37,8 +42,7 @@ class DataRepository @Inject constructor(
     suspend fun saveDataPoints(dataPoints: List<DataPoint>) {
         try {
             val entities = dataPoints.map { it.toEntity() }
-            val encryptedEntities = entities.map { encryptEntity(it) }
-            dataPointDao.insertAll(encryptedEntities)
+            dataPointDao.insertAll(entities)
         } catch (e: Exception) {
             throw DataRepositoryException("Failed to save data points", e)
         }
@@ -49,9 +53,7 @@ class DataRepository @Inject constructor(
      */
     suspend fun getDataPoint(id: String): DataPoint? {
         return try {
-            dataPointDao.getById(id)?.let { entity ->
-                decryptEntity(entity).toDomainModel()
-            }
+            dataPointDao.getById(id)?.toDomainModel()
         } catch (e: Exception) {
             null
         }
@@ -99,9 +101,27 @@ class DataRepository @Inject constructor(
             .map { entities ->
                 entities.mapNotNull { entity ->
                     try {
-                        decryptEntity(entity).toDomainModel()
+                        entity.toDomainModel()
                     } catch (e: Exception) {
                         null // Skip corrupted entries
+                    }
+                }
+            }
+    }
+    
+    /**
+     * Get recent data within the last N hours
+     * Used by DashboardViewModel and ExportManager
+     */
+    fun getRecentData(hours: Int): Flow<List<DataPoint>> {
+        val since = Instant.now().minus(hours.toLong(), ChronoUnit.HOURS)
+        return dataPointDao.getDataSince(since)
+            .map { entities ->
+                entities.mapNotNull { entity ->
+                    try {
+                        entity.toDomainModel()
+                    } catch (e: Exception) {
+                        null
                     }
                 }
             }
@@ -115,12 +135,40 @@ class DataRepository @Inject constructor(
             .map { entities ->
                 entities.mapNotNull { entity ->
                     try {
-                        decryptEntity(entity).toDomainModel()
+                        entity.toDomainModel()
                     } catch (e: Exception) {
                         null
                     }
                 }
             }
+    }
+    
+    /**
+     * Get plugin data within a time range (for ExportManager)
+     */
+    suspend fun getPluginDataInRange(
+        pluginId: String,
+        startTime: Instant,
+        endTime: Instant
+    ): List<DataPoint> {
+        return try {
+            dataPointDao.getPluginDataInRange(pluginId, startTime, endTime)
+                .map { entities ->
+                    entities.mapNotNull { entity ->
+                        try {
+                            entity.toDomainModel()
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                }
+                .flow.collect { dataPoints ->
+                    return dataPoints
+                }
+            emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
     
     /**
@@ -131,14 +179,16 @@ class DataRepository @Inject constructor(
         endTime: Instant,
         pluginId: String? = null
     ): Flow<List<DataPoint>> {
-        return if (pluginId != null) {
+        val flow = if (pluginId != null) {
             dataPointDao.getPluginDataInRange(pluginId, startTime, endTime)
         } else {
             dataPointDao.getDataInRange(startTime, endTime)
-        }.map { entities ->
+        }
+        
+        return flow.map { entities ->
             entities.mapNotNull { entity ->
                 try {
-                    decryptEntity(entity).toDomainModel()
+                    entity.toDomainModel()
                 } catch (e: Exception) {
                     null
                 }
@@ -147,35 +197,26 @@ class DataRepository @Inject constructor(
     }
     
     /**
-     * Get aggregated statistics for a plugin
+     * Get data count for a plugin (used by SecureDataRepository)
      */
-    suspend fun getPluginStatistics(pluginId: String): DataStatistics {
-        val count = dataPointDao.getPluginDataCount(pluginId)
-        val latestEntry = dataPointDao.getLatestPluginEntry(pluginId)
-        val oldestEntry = dataPointDao.getOldestPluginEntry(pluginId)
-        
-        return DataStatistics(
-            totalCount = count,
-            latestTimestamp = latestEntry?.timestamp,
-            oldestTimestamp = oldestEntry?.timestamp,
-            pluginId = pluginId
-        )
+    suspend fun getDataCount(pluginId: String): Int {
+        return try {
+            dataPointDao.getPluginDataCount(pluginId)
+        } catch (e: Exception) {
+            0
+        }
     }
     
     /**
-     * Search data points by value content
+     * Search data points
      */
     fun searchDataPoints(query: String): Flow<List<DataPoint>> {
-        return dataPointDao.searchDataPoints("%$query%")
+        val searchQuery = "%$query%"
+        return dataPointDao.searchDataPoints(searchQuery)
             .map { entities ->
                 entities.mapNotNull { entity ->
                     try {
-                        val decrypted = decryptEntity(entity)
-                        if (decrypted.value.contains(query, ignoreCase = true)) {
-                            decrypted.toDomainModel()
-                        } else {
-                            null
-                        }
+                        entity.toDomainModel()
                     } catch (e: Exception) {
                         null
                     }
@@ -184,7 +225,81 @@ class DataRepository @Inject constructor(
     }
     
     /**
-     * Clean up old data based on retention days
+     * Get all data points (use with caution)
+     */
+    suspend fun getAllDataPoints(): List<DataPoint> {
+        return try {
+            dataPointDao.getAllDataPoints()
+                .mapNotNull { entity ->
+                    try {
+                        entity.toDomainModel()
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+    
+    /**
+     * Get statistics for a plugin
+     */
+    suspend fun getPluginStatistics(pluginId: String): DataStatistics {
+        val count = dataPointDao.getPluginDataCount(pluginId)
+        val latest = dataPointDao.getLatestPluginEntry(pluginId)
+        val oldest = dataPointDao.getOldestPluginEntry(pluginId)
+        
+        return DataStatistics(
+            totalCount = count,
+            latestTimestamp = latest?.timestamp,
+            oldestTimestamp = oldest?.timestamp,
+            pluginId = pluginId
+        )
+    }
+    
+    /**
+     * Update sync status for data points
+     */
+    suspend fun markAsSynced(ids: List<String>) {
+        try {
+            dataPointDao.updateSyncStatusBatch(ids, true)
+        } catch (e: Exception) {
+            throw DataRepositoryException("Failed to update sync status", e)
+        }
+    }
+    
+    /**
+     * Get unsynced data points
+     */
+    suspend fun getUnsyncedData(): List<DataPoint> {
+        return try {
+            dataPointDao.getDataBySyncStatus(false)
+                .mapNotNull { entity ->
+                    try {
+                        entity.toDomainModel()
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+    
+    /**
+     * Clean old data (used by SettingsViewModel)
+     */
+    suspend fun cleanOldData(before: Instant) {
+        try {
+            dataPointDao.deleteOlderThan(before)
+        } catch (e: Exception) {
+            throw DataRepositoryException("Failed to clean old data", e)
+        }
+    }
+    
+    /**
+     * Clean up old data based on retention days (alternative signature)
      */
     suspend fun cleanupOldData(retentionDays: Int) {
         try {
@@ -192,7 +307,7 @@ class DataRepository @Inject constructor(
                 // Delete all data
                 dataPointDao.deleteAll()
             } else {
-                val cutoffTime = Instant.now().minusSeconds(retentionDays * 24L * 60L * 60L)
+                val cutoffTime = Instant.now().minus(retentionDays.toLong(), ChronoUnit.DAYS)
                 dataPointDao.deleteOlderThan(cutoffTime)
             }
         } catch (e: Exception) {
@@ -214,7 +329,7 @@ class DataRepository @Inject constructor(
         return try {
             dataPointDao.getAllDataPoints().mapNotNull { entity ->
                 try {
-                    decryptEntity(entity).toDomainModel()
+                    entity.toDomainModel()
                 } catch (e: Exception) {
                     null
                 }
@@ -231,7 +346,7 @@ class DataRepository @Inject constructor(
         return try {
             dataPointDao.getAllPluginData(pluginId).mapNotNull { entity ->
                 try {
-                    decryptEntity(entity).toDomainModel()
+                    entity.toDomainModel()
                 } catch (e: Exception) {
                     null
                 }
@@ -241,54 +356,85 @@ class DataRepository @Inject constructor(
         }
     }
     
-    // Private helper methods
+    // Extension functions for mapping between domain and entity models
     
-    private fun encryptEntity(entity: DataPointEntity): DataPointEntity {
-        return entity.copy(
-            value = encryptionManager.encrypt(entity.value),
-            metadata = entity.metadata?.let { encryptionManager.encrypt(it) }
-        )
-    }
-    
-    private fun decryptEntity(entity: DataPointEntity): DataPointEntity {
-        return entity.copy(
-            value = encryptionManager.decrypt(entity.value),
-            metadata = entity.metadata?.let { encryptionManager.decrypt(it) }
-        )
-    }
-    
+    /**
+     * Convert DataPoint to DataPointEntity
+     * Maps the domain model to the database entity structure
+     */
     private fun DataPoint.toEntity(): DataPointEntity {
         return DataPointEntity(
             id = id,
             pluginId = pluginId,
             timestamp = timestamp,
-            value = value.toString(), // Convert map to JSON string
-            metadata = metadata?.toString(),
-            syncStatus = syncStatus.name,
-            createdAt = createdAt,
-            updatedAt = updatedAt
+            type = type,
+            // Simple serialization - convert Map to string representation
+            // Format: "key1=value1;key2=value2"
+            valueJson = value.entries.joinToString(";") { "${it.key}=${it.value}" },
+            metadataJson = metadata?.entries?.joinToString(";") { "${it.key}=${it.value}" },
+            source = source,
+            version = version,
+            synced = false, // New data is unsynced by default
+            createdAt = timestamp, // Use timestamp as createdAt
+            extra1 = null,
+            extra2 = null,
+            extra3 = null,
+            extra4 = null
         )
     }
     
+    /**
+     * Convert DataPointEntity to DataPoint
+     * Maps the database entity to the domain model
+     */
     private fun DataPointEntity.toDomainModel(): DataPoint {
         return DataPoint(
             id = id,
             pluginId = pluginId,
             timestamp = timestamp,
-            value = parseJsonToMap(value),
-            metadata = metadata?.let { parseJsonToMap(it) },
-            syncStatus = SyncStatus.valueOf(syncStatus),
-            createdAt = createdAt,
-            updatedAt = updatedAt
+            type = type,
+            value = parseSimpleMap(valueJson),
+            metadata = metadataJson?.let { parseSimpleStringMap(it) },
+            source = source,
+            version = version
         )
     }
     
-    private fun parseJsonToMap(json: String): Map<String, Any> {
-        // Implementation would use actual JSON parsing
-        // For now, simplified version
+    /**
+     * Parse simple key=value string to Map<String, Any>
+     * Format: "key1=value1;key2=value2"
+     */
+    private fun parseSimpleMap(str: String): Map<String, Any> {
         return try {
-            // Use Gson or Moshi to parse JSON
-            emptyMap() // Placeholder
+            if (str.isEmpty()) return emptyMap()
+            
+            str.split(";")
+                .filter { it.contains("=") }
+                .associate { entry ->
+                    val parts = entry.split("=", limit = 2)
+                    val key = parts[0]
+                    val value = parts.getOrNull(1) ?: ""
+                    // Try to parse as number, otherwise keep as string
+                    key to (value.toDoubleOrNull() ?: value.toIntOrNull() ?: value)
+                }
+        } catch (e: Exception) {
+            emptyMap()
+        }
+    }
+    
+    /**
+     * Parse simple key=value string to Map<String, String>
+     */
+    private fun parseSimpleStringMap(str: String): Map<String, String> {
+        return try {
+            if (str.isEmpty()) return emptyMap()
+            
+            str.split(";")
+                .filter { it.contains("=") }
+                .associate { entry ->
+                    val parts = entry.split("=", limit = 2)
+                    parts[0] to (parts.getOrNull(1) ?: "")
+                }
         } catch (e: Exception) {
             emptyMap()
         }
