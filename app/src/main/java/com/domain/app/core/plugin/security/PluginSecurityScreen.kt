@@ -522,10 +522,10 @@ private fun getIconForCapability(capability: PluginCapability): androidx.compose
         PluginCapability.READ_OWN_DATA,
         PluginCapability.READ_ALL_DATA -> AppIcons.Storage.folder
         PluginCapability.DELETE_DATA -> AppIcons.Action.delete
-        PluginCapability.SHOW_NOTIFICATIONS -> AppIcons.Communication.notification
+        PluginCapability.SHOW_NOTIFICATIONS -> AppIcons.Communication.notifications
         PluginCapability.NETWORK_ACCESS -> AppIcons.Storage.cloud
         PluginCapability.ACCESS_LOCATION -> AppIcons.Plugin.location
-        PluginCapability.LOCAL_STORAGE -> AppIcons.Storage.storage
+        PluginCapability.LOCAL_STORAGE -> AppIcons.Storage.folder
         PluginCapability.EXPORT_DATA -> AppIcons.Data.upload
         PluginCapability.MODIFY_SETTINGS -> AppIcons.Navigation.settings
         else -> AppIcons.Plugin.custom
