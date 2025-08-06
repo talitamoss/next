@@ -1,6 +1,8 @@
 // app/src/main/java/com/domain/app/ui/dashboard/MultiStageQuickAddDialog.kt
 package com.domain.app.ui.dashboard
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -400,4 +402,11 @@ data class QuickAddStage(
     val options: List<QuickAddOption>? = null,
     val formatValue: ((Float) -> String)? = null,
     val scaleLabels: Map<Int, String>? = null
+)
+
+// Missing data class definition
+data class QuickAddOption(
+    val label: String,
+    val value: Any,
+    val icon: String? = null
 )

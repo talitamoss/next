@@ -18,11 +18,15 @@ import com.domain.app.core.data.DataPoint
 import com.domain.app.ui.components.core.feedback.LoadingContainer
 import com.domain.app.ui.components.core.feedback.NoDataEmptyState
 import com.domain.app.ui.theme.AppIcons
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
 /**
- * Refactored DataScreen using the new component library
+ * Data screen showing all collected data points with filtering and management options
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,25 +69,36 @@ fun DataScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Group data by date
+                // Group data by date - handle different timestamp types
                 val groupedData = uiState.dataPoints.groupBy { dataPoint ->
-                    dataPoint.timestamp.toLocalDate()
+                    when (val timestamp = dataPoint.timestamp) {
+                        is LocalDateTime -> timestamp.toLocalDate()
+                        is Instant -> timestamp.atZone(ZoneId.systemDefault()).toLocalDate()
+                        is Long -> Instant.ofEpochMilli(timestamp)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                        else -> LocalDate.now()
+                    }
                 }
                 
                 groupedData.forEach { (date, dataPoints) ->
                     item(key = date) {
-                        DateHeader(date = date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)))
+                        DateHeader(
+                            date = date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
+                        )
                     }
                     
                     items(
                         items = dataPoints,
                         key = { it.id }
                     ) { dataPoint ->
+                        val pluginInfo = uiState.plugins.find { 
+                            it.id == dataPoint.pluginId 
+                        }
+                        
                         DataPointCard(
                             dataPoint = dataPoint,
-                            pluginName = uiState.availablePlugins.find { 
-                                it.id == dataPoint.pluginId 
-                            }?.name ?: dataPoint.pluginId,
+                            pluginName = pluginInfo?.metadata?.name ?: dataPoint.pluginId,
                             onDelete = { viewModel.deleteDataPoint(dataPoint.id) },
                             onEdit = { /* TODO: Edit functionality */ }
                         )
@@ -99,7 +114,13 @@ fun DataScreen(
             expanded = showFilterMenu,
             onDismissRequest = { showFilterMenu = false },
             selectedPlugin = uiState.selectedPluginFilter,
-            availablePlugins = uiState.availablePlugins,
+            availablePlugins = uiState.plugins.map { plugin ->
+                PluginInfo(
+                    id = plugin.id,
+                    name = plugin.metadata.name,
+                    icon = null // Could add icon support later
+                )
+            },
             onPluginSelected = { pluginId ->
                 viewModel.filterByPlugin(pluginId)
                 showFilterMenu = false
@@ -176,9 +197,22 @@ private fun DataPointCard(
                 Column(
                     horizontalAlignment = Alignment.End
                 ) {
+                    // Format time based on timestamp type
+                    val timeText = when (val timestamp = dataPoint.timestamp) {
+                        is LocalDateTime -> timestamp.toLocalTime()
+                            .format(DateTimeFormatter.ofPattern("HH:mm"))
+                        is Instant -> timestamp.atZone(ZoneId.systemDefault())
+                            .toLocalTime()
+                            .format(DateTimeFormatter.ofPattern("HH:mm"))
+                        is Long -> Instant.ofEpochMilli(timestamp)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalTime()
+                            .format(DateTimeFormatter.ofPattern("HH:mm"))
+                        else -> "00:00"
+                    }
+                    
                     Text(
-                        text = dataPoint.timestamp.toLocalTime()
-                            .format(DateTimeFormatter.ofPattern("HH:mm")),
+                        text = timeText,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -288,7 +322,7 @@ private fun FilterDropdownMenu(
             onClick = { onPluginSelected(null) }
         )
         
-        Divider()
+        HorizontalDivider()
         
         availablePlugins.forEach { plugin ->
             DropdownMenuItem(

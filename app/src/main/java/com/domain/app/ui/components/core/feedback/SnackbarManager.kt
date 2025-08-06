@@ -1,6 +1,9 @@
 // app/src/main/java/com/domain/app/ui/components/core/feedback/SnackbarManager.kt
 package com.domain.app.ui.components.core.feedback
 
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color

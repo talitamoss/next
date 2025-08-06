@@ -235,7 +235,6 @@ sealed class SwipeAction(
     val backgroundColor: Color,
     val activeColor: Color
 ) {
-    @Composable
     object Delete : SwipeAction(
         icon = AppIcons.Action.delete,
         label = "Delete",
@@ -243,7 +242,6 @@ sealed class SwipeAction(
         activeColor = Color(0xFFFF3333)
     )
     
-    @Composable
     object Archive : SwipeAction(
         icon = AppIcons.Storage.archive,
         label = "Archive",
@@ -251,7 +249,6 @@ sealed class SwipeAction(
         activeColor = Color(0xFF2A9D8F)
     )
     
-    @Composable
     object Edit : SwipeAction(
         icon = AppIcons.Action.edit,
         label = "Edit",
@@ -259,7 +256,6 @@ sealed class SwipeAction(
         activeColor = Color(0xFF3FC1C9)
     )
     
-    @Composable
     object Share : SwipeAction(
         icon = AppIcons.Action.share,
         label = "Share",
@@ -267,7 +263,6 @@ sealed class SwipeAction(
         activeColor = Color(0xFF5F3DC4)
     )
     
-    @Composable
     object Favorite : SwipeAction(
         icon = AppIcons.Action.favorite,
         label = "Favorite",

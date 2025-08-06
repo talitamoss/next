@@ -1,6 +1,7 @@
 package com.domain.app.ui.dashboard
 
 import androidx.compose.foundation.clickable
+import com.domain.app.ui.utils.getPluginIcon
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items

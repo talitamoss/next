@@ -1,6 +1,7 @@
 // app/src/main/java/com/domain/app/ui/dashboard/DashboardScreen.kt
 package com.domain.app.ui.dashboard
 
+import com.domain.app.ui.utils.getPluginIcon
 // Import the components from DashboardComponents.kt
 import com.domain.app.ui.dashboard.SummaryCard
 import com.domain.app.ui.dashboard.AddPluginTile  
