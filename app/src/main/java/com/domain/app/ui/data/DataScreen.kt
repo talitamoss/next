@@ -6,7 +6,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import com.domain.app.ui.theme.AppIcons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,9 +15,15 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.domain.app.core.data.DataPoint
+import com.domain.app.ui.components.core.feedback.LoadingContainer
+import com.domain.app.ui.components.core.feedback.NoDataEmptyState
+import com.domain.app.ui.theme.AppIcons
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
+/**
+ * Refactored DataScreen using the new component library
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DataScreen(
@@ -46,60 +51,42 @@ fun DataScreen(
             )
         }
     ) { paddingValues ->
-        when {
-            uiState.isLoading -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
+        // Using our new LoadingContainer component
+        LoadingContainer(
+            isLoading = uiState.isLoading,
+            isEmpty = uiState.dataPoints.isEmpty(),
+            errorMessage = uiState.error,
+            onRetry = { viewModel.refreshData() },
+            emptyMessage = "No data recorded yet",
+            modifier = Modifier.padding(paddingValues)
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Group data by date
+                val groupedData = uiState.dataPoints.groupBy { dataPoint ->
+                    dataPoint.timestamp.toLocalDate()
                 }
-            }
-            uiState.dataPoints.isEmpty() -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No data recorded yet",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            else -> {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Group data by day
-                    val groupedData = uiState.dataPoints.groupBy { dataPoint ->
-                        dataPoint.timestamp.atZone(java.time.ZoneId.systemDefault())
-                            .toLocalDate()
+                
+                groupedData.forEach { (date, dataPoints) ->
+                    item(key = date) {
+                        DateHeader(date = date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)))
                     }
                     
-                    groupedData.forEach { (date, dataPoints) ->
-                        item {
-                            Text(
-                                text = date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)),
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        }
-                        
-                        items(dataPoints) { dataPoint ->
-                            DataPointCard(
-                                dataPoint = dataPoint,
-                                pluginName = uiState.pluginNames[dataPoint.pluginId] ?: dataPoint.pluginId
-                            )
-                        }
+                    items(
+                        items = dataPoints,
+                        key = { it.id }
+                    ) { dataPoint ->
+                        DataPointCard(
+                            dataPoint = dataPoint,
+                            pluginName = uiState.availablePlugins.find { 
+                                it.id == dataPoint.pluginId 
+                            }?.name ?: dataPoint.pluginId,
+                            onDelete = { viewModel.deleteDataPoint(dataPoint.id) },
+                            onEdit = { /* TODO: Edit functionality */ }
+                        )
                     }
                 }
             }
@@ -122,15 +109,31 @@ fun DataScreen(
 }
 
 @Composable
-fun DataPointCard(
+private fun DateHeader(date: String) {
+    Text(
+        text = date,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(vertical = 8.dp)
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DataPointCard(
     dataPoint: DataPoint,
-    pluginName: String
+    pluginName: String,
+    onDelete: () -> Unit,
+    onEdit: () -> Unit
 ) {
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+        ),
+        onClick = onEdit
     ) {
         Column(
             modifier = Modifier
@@ -151,55 +154,75 @@ fun DataPointCard(
                     Spacer(modifier = Modifier.height(4.dp))
                     
                     // Display value based on plugin type
-                    val displayText = when (dataPoint.pluginId) {
-                        "water" -> {
-                            val amount = dataPoint.value["amount"] as? Number
-                            val unit = dataPoint.value["unit"] as? String ?: "ml"
-                            "$amount $unit"
-                        }
-                        "counter" -> {
-                            val count = dataPoint.value["count"] as? Number
-                            val label = dataPoint.value["label"] as? String ?: ""
-                            "$count $label"
-                        }
-                        "mood" -> {
-                            val mood = dataPoint.value["mood"] as? Number ?: 3
-                            val note = dataPoint.value["note"] as? String
-                            buildString {
-                                append("Mood: $mood/5")
-                                if (!note.isNullOrBlank()) {
-                                    append("\n$note")
-                                }
-                            }
-                        }
-                        else -> dataPoint.value.toString()
-                    }
-                    
+                    val displayText = formatDataPointValue(dataPoint)
                     Text(
                         text = displayText,
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyLarge
                     )
+                    
+                    // Show notes if available
+                    dataPoint.value["note"]?.let { note ->
+                        if (note.toString().isNotBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = note.toString(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
                 
-                Text(
-                    text = dataPoint.timestamp
-                        .atZone(java.time.ZoneId.systemDefault())
-                        .format(DateTimeFormatter.ofPattern("HH:mm")),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(
+                    horizontalAlignment = Alignment.End
+                ) {
+                    Text(
+                        text = dataPoint.timestamp.toLocalTime()
+                            .format(DateTimeFormatter.ofPattern("HH:mm")),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    Row {
+                        IconButton(
+                            onClick = onEdit,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = AppIcons.Action.edit,
+                                contentDescription = "Edit",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        
+                        IconButton(
+                            onClick = { showDeleteConfirmation = true },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = AppIcons.Action.delete,
+                                contentDescription = "Delete",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
             }
             
-            // Show metadata if present
-            dataPoint.metadata?.let { metadata ->
-                if (metadata.isNotEmpty()) {
+            // Tags or metadata
+            dataPoint.value["tags"]?.let { tags ->
+                if (tags is List<*> && tags.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    metadata.forEach { (key, value) ->
-                        if (key != "note") { // Already displayed note above
-                            Text(
-                                text = "$key: $value",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        tags.forEach { tag ->
+                            AssistChip(
+                                onClick = { },
+                                label = { Text(tag.toString()) },
+                                modifier = Modifier.height(24.dp)
                             )
                         }
                     }
@@ -207,14 +230,38 @@ fun DataPointCard(
             }
         }
     }
+    
+    // Delete confirmation dialog
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Delete Entry?") },
+            text = { Text("This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete()
+                        showDeleteConfirmation = false
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
-fun FilterDropdownMenu(
+private fun FilterDropdownMenu(
     expanded: Boolean,
     onDismissRequest: () -> Unit,
     selectedPlugin: String?,
-    availablePlugins: List<Pair<String, String>>,
+    availablePlugins: List<PluginInfo>,
     onPluginSelected: (String?) -> Unit
 ) {
     DropdownMenu(
@@ -222,21 +269,114 @@ fun FilterDropdownMenu(
         onDismissRequest = onDismissRequest
     ) {
         DropdownMenuItem(
-            text = { Text("All Plugins") },
-            onClick = { onPluginSelected(null) },
-            leadingIcon = if (selectedPlugin == null) {
-                { Icon(Icons.Default.Check, contentDescription = "Selected") }
-            } else null
+            text = { 
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("All Plugins")
+                    if (selectedPlugin == null) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = "Selected",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            },
+            onClick = { onPluginSelected(null) }
         )
         
-        availablePlugins.forEach { (pluginId, pluginName) ->
+        Divider()
+        
+        availablePlugins.forEach { plugin ->
             DropdownMenuItem(
-                text = { Text(pluginName) },
-                onClick = { onPluginSelected(pluginId) },
-                leadingIcon = if (selectedPlugin == pluginId) {
-                    { Icon(Icons.Default.Check, contentDescription = "Selected") }
-                } else null
+                text = { 
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(plugin.name)
+                        if (selectedPlugin == plugin.id) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = "Selected",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                },
+                onClick = { onPluginSelected(plugin.id) }
             )
         }
     }
 }
+
+/**
+ * Format data point value for display based on plugin type
+ */
+private fun formatDataPointValue(dataPoint: DataPoint): String {
+    return when (dataPoint.pluginId) {
+        "water" -> {
+            val amount = dataPoint.value["amount"] as? Number
+            val unit = dataPoint.value["unit"] as? String ?: "ml"
+            "$amount $unit"
+        }
+        "counter" -> {
+            val count = dataPoint.value["count"] as? Number
+            val label = dataPoint.value["label"] as? String ?: ""
+            "$count $label"
+        }
+        "mood" -> {
+            val mood = dataPoint.value["mood"] as? Number ?: 3
+            val moodEmoji = when (mood.toInt()) {
+                1 -> "😢"
+                2 -> "😕"
+                3 -> "😐"
+                4 -> "😊"
+                5 -> "😄"
+                else -> "😐"
+            }
+            val note = dataPoint.value["note"] as? String
+            if (note.isNullOrBlank()) moodEmoji else "$moodEmoji - $note"
+        }
+        "sleep" -> {
+            val hours = dataPoint.value["hours"] as? Number ?: 0
+            val quality = dataPoint.value["quality"] as? Number
+            val qualityText = quality?.let { " (Quality: ${it}/5)" } ?: ""
+            "${hours}h sleep$qualityText"
+        }
+        "exercise" -> {
+            val type = dataPoint.value["type"] as? String ?: "Exercise"
+            val duration = dataPoint.value["duration"] as? Number ?: 0
+            "$type for $duration min"
+        }
+        "energy" -> {
+            val level = dataPoint.value["level"] as? Number ?: 3
+            val levelText = when (level.toInt()) {
+                1 -> "Exhausted"
+                2 -> "Tired"
+                3 -> "Normal"
+                4 -> "Energetic"
+                5 -> "Very Energetic"
+                else -> "Level $level"
+            }
+            "Energy: $levelText"
+        }
+        else -> {
+            // Generic formatting for unknown plugins
+            dataPoint.value.entries.joinToString(", ") { (key, value) ->
+                "$key: $value"
+            }
+        }
+    }
+}
+
+// Data class for plugin info
+data class PluginInfo(
+    val id: String,
+    val name: String,
+    val icon: String? = null
+)
