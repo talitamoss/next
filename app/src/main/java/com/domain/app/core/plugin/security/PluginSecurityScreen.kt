@@ -54,7 +54,7 @@ fun PluginPermissionDialog(
                 
                 Column {
                     Text(
-                        text = plugin.name,
+                        text = plugin.metadata.name,
                         style = MaterialTheme.typography.headlineSmall
                     )
                     Text(

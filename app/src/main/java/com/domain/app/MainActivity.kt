@@ -1,24 +1,23 @@
-// app/src/main/java/com/domain/app/MainActivity.kt
 package com.domain.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.dp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.domain.app.ui.dashboard.DashboardScreen
 import com.domain.app.ui.data.DataScreen
 import com.domain.app.ui.settings.SettingsScreen
-import com.domain.app.ui.theme.AppIcons
 import com.domain.app.ui.theme.AppTheme
-import com.domain.app.ui.components.core.feedback.ScaffoldWithSnackbar
+import com.domain.app.ui.theme.AppIcons
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -36,31 +35,55 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen() {
-    val navController = rememberNavController()
     var selectedTab by remember { mutableStateOf(0) }
     
-    val tabs = listOf(
-        TabItem("Dashboard", AppIcons.Navigation.dashboard),
-        TabItem("Social", AppIcons.Navigation.social),
-        TabItem("Data", AppIcons.Navigation.data),
-        TabItem("Settings", AppIcons.Navigation.settings)
-    )
-    
-    // Using ScaffoldWithSnackbar instead of regular Scaffold
-    ScaffoldWithSnackbar(
-        topBar = {
-            // Top bar can be added here if needed
-        },
+    Scaffold(
         bottomBar = {
             NavigationBar {
-                tabs.forEachIndexed { index, tab ->
-                    NavigationBarItem(
-                        icon = { Icon(tab.icon, contentDescription = tab.title) },
-                        label = { Text(tab.title) },
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index }
-                    )
-                }
+                NavigationBarItem(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    icon = { 
+                        Icon(
+                            imageVector = AppIcons.Navigation.home,
+                            contentDescription = "Dashboard"
+                        )
+                    },
+                    label = { Text("Dashboard") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    icon = { 
+                        Icon(
+                            imageVector = AppIcons.User.group,
+                            contentDescription = "Social"
+                        )
+                    },
+                    label = { Text("Social") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    icon = { 
+                        Icon(
+                            imageVector = AppIcons.Data.chart,
+                            contentDescription = "Data"
+                        )
+                    },
+                    label = { Text("Data") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
+                    icon = { 
+                        Icon(
+                            imageVector = AppIcons.Navigation.settings,
+                            contentDescription = "Settings"
+                        )
+                    },
+                    label = { Text("Settings") }
+                )
             }
         }
     ) { paddingValues ->
@@ -70,10 +93,35 @@ fun MainScreen() {
                 .padding(paddingValues)
         ) {
             when (selectedTab) {
-                0 -> DashboardScreen(navController)
-                1 -> SocialPlaceholderScreen(navController)
-                2 -> DataScreen(navController)
-                3 -> SettingsScreen(navController)
+                0 -> DashboardScreen(
+                    onNavigateToPlugin = { plugin ->
+                        // TODO: Navigate to plugin detail screen
+                        // For now, just log or show a toast
+                    },
+                    onNavigateToSettings = {
+                        selectedTab = 3
+                    }
+                )
+                1 -> SocialPlaceholderScreen()
+                2 -> DataScreen(
+                    onNavigateBack = {
+                        selectedTab = 0
+                    }
+                )
+                3 -> SettingsScreen(
+                    onNavigateBack = {
+                        selectedTab = 0
+                    },
+                    onNavigateToPlugins = {
+                        // TODO: Navigate to plugins management screen
+                    },
+                    onNavigateToSecurity = {
+                        // TODO: Navigate to security settings screen
+                    },
+                    onNavigateToAbout = {
+                        // TODO: Navigate to about screen
+                    }
+                )
             }
         }
     }
@@ -81,7 +129,7 @@ fun MainScreen() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SocialPlaceholderScreen(navController: androidx.navigation.NavController) {
+fun SocialPlaceholderScreen() {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -102,23 +150,22 @@ fun SocialPlaceholderScreen(navController: androidx.navigation.NavController) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                Icon(
+                    imageVector = AppIcons.User.group,
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
                 Text(
-                    text = "Social Feed Coming Soon",
+                    text = "Social Features Coming Soon",
                     style = MaterialTheme.typography.headlineMedium
                 )
                 Text(
-                    text = "This is a placeholder screen.\nThe real SocialFeedScreen will be built here.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
+                    text = "Connect and share with trusted friends",
+                    style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
 }
-
-// Data class for tab configuration
-data class TabItem(
-    val title: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector
-)

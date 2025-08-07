@@ -1,5 +1,6 @@
 package com.domain.app.ui.data
 
+import com.domain.app.core.data.DataPoint
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,7 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.domain.app.core.storage.entity.DataPoint
 import com.domain.app.ui.components.core.lists.SwipeableDataItem
 import com.domain.app.ui.theme.AppIcons
 import kotlinx.coroutines.launch

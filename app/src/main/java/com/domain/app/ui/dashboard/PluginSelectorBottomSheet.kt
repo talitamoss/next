@@ -161,12 +161,12 @@ private fun PluginSelectorItem(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = plugin.name,
+                    text = plugin.metadata.name,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = plugin.description.take(60) + if (plugin.description.length > 60) "..." else "",
+                    text = plugin.metadata.description.take(60) + if (plugin.metadata.description.length > 60) "..." else "",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -175,7 +175,7 @@ private fun PluginSelectorItem(
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    plugin.tags.take(3).forEach { tag ->
+                    plugin.metadata.tags.take(3).forEach { tag ->
                         Surface(
                             shape = MaterialTheme.shapes.small,
                             color = MaterialTheme.colorScheme.surfaceVariant

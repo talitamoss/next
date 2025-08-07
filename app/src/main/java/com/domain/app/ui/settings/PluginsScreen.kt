@@ -117,12 +117,12 @@ private fun PluginCard(
             
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = plugin.name,
+                    text = plugin.metadata.name,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = plugin.description,
+                    text = plugin.metadata.description,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

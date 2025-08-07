@@ -1,5 +1,6 @@
 package com.domain.app.ui.dashboard
 
+import com.domain.app.core.data.DataPoint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -268,12 +269,12 @@ fun PluginTile(
                 // Plugin info
                 Column {
                     Text(
-                        text = plugin.name,
+                        text = plugin.metadata.name,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium
                     )
                     Text(
-                        text = plugin.description.take(50) + if (plugin.description.length > 50) "..." else "",
+                        text = plugin.metadata.description.take(50) + if (plugin.metadata.description.length > 50) "..." else "",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

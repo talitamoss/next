@@ -1,5 +1,6 @@
 package com.domain.app.ui.dashboard
 
+import com.domain.app.core.data.DataPoint
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -9,7 +10,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.domain.app.core.storage.entity.DataPoint
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.ui.components.core.feedback.LoadingButton
 import com.domain.app.ui.components.core.input.ValidatedTextField
@@ -60,7 +60,7 @@ fun MultiStageQuickAddDialog(
                         tint = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "Quick Add: ${plugin.name}",
+                        text = "Quick Add: ${plugin.metadata.name}",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -84,10 +84,10 @@ fun MultiStageQuickAddDialog(
                         ValidatedTextField(
                             value = inputValue,
                             onValueChange = { inputValue = it },
-                            label = plugin.dataType.displayName,
-                            placeholder = "Enter ${plugin.dataType.displayName.lowercase()}",
+                            label = plugin.metadata.inputType.displayName,
+                            placeholder = "Enter ${plugin.metadata.inputType.displayName.lowercase()}",
                             validator = { value ->
-                                when (plugin.dataType) {
+                                when (plugin.metadata.inputType) {
                                     Plugin.DataType.NUMERIC -> {
                                         if (value.toDoubleOrNull() == null) {
                                             ValidationResult.Error("Please enter a valid number")
