@@ -9,7 +9,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.domain.app.core.database.entities.DataPoint
+import com.domain.app.core.storage.entity.DataPoint
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.ui.components.core.feedback.LoadingButton
 import com.domain.app.ui.components.core.input.ValidatedTextField

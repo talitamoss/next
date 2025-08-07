@@ -10,7 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.domain.app.core.database.entities.DataPoint
+import com.domain.app.core.storage.entity.DataPoint
 import com.domain.app.ui.components.core.lists.SwipeableDataItem
 import com.domain.app.ui.theme.AppIcons
 import kotlinx.coroutines.launch
