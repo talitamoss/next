@@ -1,195 +1,268 @@
-// app/src/main/java/com/domain/app/ui/components/core/lists/SwipeableListItem.kt
 package com.domain.app.ui.components.core.lists
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.domain.app.ui.theme.AppIcons
-import kotlinx.coroutines.launch
-import kotlin.math.absoluteValue
-import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 /**
- * A swipeable list item with customizable swipe actions.
- * Replaces duplicate swipe implementations across screens.
- * 
- * @param modifier Modifier for the item
- * @param onSwipeToStart Action when swiping left (e.g., delete)
- * @param onSwipeToEnd Action when swiping right (e.g., archive)
- * @param swipeToStartAction Configuration for left swipe action
- * @param swipeToEndAction Configuration for right swipe action
- * @param swipeThreshold Threshold for triggering swipe action (0-1)
- * @param enableSwipeToStart Enable left swipe
- * @param enableSwipeToEnd Enable right swipe
- * @param content The main content of the list item
+ * A list item that can be swiped to reveal actions
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SwipeableListItem(
     modifier: Modifier = Modifier,
-    onSwipeToStart: (() -> Unit)? = null,
-    onSwipeToEnd: (() -> Unit)? = null,
-    swipeToStartAction: SwipeAction = SwipeAction.Delete,
-    swipeToEndAction: SwipeAction = SwipeAction.Archive,
-    swipeThreshold: Float = 0.3f,
-    enableSwipeToStart: Boolean = true,
-    enableSwipeToEnd: Boolean = true,
+    onDelete: (() -> Unit)? = null,
+    onArchive: (() -> Unit)? = null,
+    onEdit: (() -> Unit)? = null,
+    onShare: (() -> Unit)? = null,
+    confirmDelete: Boolean = true,
+    dismissThreshold: Float = 0.5f,
     content: @Composable () -> Unit
 ) {
-    val density = LocalDensity.current
-    val haptics = LocalHapticFeedback.current
-    val scope = rememberCoroutineScope()
+    var showDeleteDialog by remember { mutableStateOf(false) }
     
-    var offsetX by remember { mutableFloatStateOf(0f) }
-    var isDismissed by remember { mutableStateOf(false) }
-    
-    BoxWithConstraints(
-        modifier = modifier.fillMaxWidth()
-    ) {
-        val maxSwipeDistance = with(density) { constraints.maxWidth.toFloat() }
-        val swipeThresholdPx = maxSwipeDistance * swipeThreshold
-        
-        // Background with swipe actions
-        SwipeBackground(
-            offsetX = offsetX,
-            maxSwipeDistance = maxSwipeDistance,
-            swipeToStartAction = if (enableSwipeToStart) swipeToStartAction else null,
-            swipeToEndAction = if (enableSwipeToEnd) swipeToEndAction else null
-        )
-        
-        // Main content
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset { IntOffset(offsetX.roundToInt(), 0) }
-                .draggable(
-                    orientation = Orientation.Horizontal,
-                    state = rememberDraggableState { delta ->
-                        val newOffset = offsetX + delta
-                        offsetX = when {
-                            !enableSwipeToEnd && newOffset > 0 -> 0f
-                            !enableSwipeToStart && newOffset < 0 -> 0f
-                            else -> newOffset.coerceIn(-maxSwipeDistance, maxSwipeDistance)
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { dismissValue ->
+            when (dismissValue) {
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    // Swipe right - archive/edit action
+                    when {
+                        onArchive != null -> {
+                            onArchive()
+                            true
                         }
-                        
-                        // Haptic feedback at threshold
-                        if (offsetX.absoluteValue >= swipeThresholdPx && 
-                            (offsetX - delta).absoluteValue < swipeThresholdPx) {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onEdit != null -> {
+                            onEdit()
+                            false // Don't dismiss, just trigger edit
                         }
-                    },
-                    onDragStopped = {
-                        when {
-                            offsetX < -swipeThresholdPx && enableSwipeToStart -> {
-                                // Swipe to start (left)
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                isDismissed = true
-                                offsetX = -maxSwipeDistance
-                                onSwipeToStart?.invoke()
-                                // Reset after action
-                                scope.launch {
-                                    kotlinx.coroutines.delay(300)
-                                    offsetX = 0f
-                                    isDismissed = false
-                                }
-                            }
-                            offsetX > swipeThresholdPx && enableSwipeToEnd -> {
-                                // Swipe to end (right)
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                isDismissed = true
-                                offsetX = maxSwipeDistance
-                                onSwipeToEnd?.invoke()
-                                // Reset after action
-                                scope.launch {
-                                    kotlinx.coroutines.delay(300)
-                                    offsetX = 0f
-                                    isDismissed = false
-                                }
-                            }
-                            else -> {
-                                // Spring back to center
-                                offsetX = 0f
-                            }
-                        }
+                        else -> false
                     }
-                )
-        ) {
-            content()
+                }
+                SwipeToDismissBoxValue.EndToStart -> {
+                    // Swipe left - delete/share action
+                    when {
+                        onDelete != null -> {
+                            if (confirmDelete) {
+                                showDeleteDialog = true
+                                false // Don't dismiss yet, show dialog
+                            } else {
+                                onDelete()
+                                true
+                            }
+                        }
+                        onShare != null -> {
+                            onShare()
+                            false // Don't dismiss, just trigger share
+                        }
+                        else -> false
+                    }
+                }
+                SwipeToDismissBoxValue.Settled -> false
+            }
+        },
+        positionalThreshold = { totalDistance ->
+            totalDistance * dismissThreshold
+        }
+    )
+    
+    // Reset state after action
+    LaunchedEffect(dismissState.currentValue) {
+        if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
+            delay(500)
+            dismissState.reset()
+        }
+    }
+    
+    SwipeToDismissBox(
+        state = dismissState,
+        modifier = modifier,
+        backgroundContent = {
+            SwipeBackground(
+                dismissState = dismissState,
+                onDelete = onDelete,
+                onArchive = onArchive,
+                onEdit = onEdit,
+                onShare = onShare
+            )
+        },
+        content = { content() }
+    )
+    
+    // Delete confirmation dialog
+    if (showDeleteDialog && onDelete != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showDeleteDialog = false
+            },
+            title = { Text("Delete Item?") },
+            text = { Text("This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete()
+                        showDeleteDialog = false
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeBackground(
+    dismissState: SwipeToDismissBoxState,
+    onDelete: (() -> Unit)?,
+    onArchive: (() -> Unit)?,
+    onEdit: (() -> Unit)?,
+    onShare: (() -> Unit)?
+) {
+    val direction = dismissState.dismissDirection
+    val isDismissed = dismissState.currentValue != SwipeToDismissBoxValue.Settled
+    
+    val color by animateColorAsState(
+        targetValue = when (direction) {
+            SwipeToDismissBoxValue.StartToEnd -> {
+                when {
+                    onArchive != null -> MaterialTheme.colorScheme.primary
+                    onEdit != null -> MaterialTheme.colorScheme.secondary
+                    else -> Color.Transparent
+                }
+            }
+            SwipeToDismissBoxValue.EndToStart -> {
+                when {
+                    onDelete != null -> MaterialTheme.colorScheme.error
+                    onShare != null -> MaterialTheme.colorScheme.tertiary
+                    else -> Color.Transparent
+                }
+            }
+            else -> Color.Transparent
+        },
+        label = "swipe_bg_color"
+    )
+    
+    val scale by animateFloatAsState(
+        targetValue = if (isDismissed) 1.2f else 1f,
+        label = "swipe_icon_scale"
+    )
+    
+    val (icon, alignment) = when (direction) {
+        SwipeToDismissBoxValue.StartToEnd -> {
+            when {
+                onArchive != null -> AppIcons.Action.archive to Alignment.CenterStart
+                onEdit != null -> AppIcons.Action.edit to Alignment.CenterStart
+                else -> null to Alignment.CenterStart
+            }
+        }
+        SwipeToDismissBoxValue.EndToStart -> {
+            when {
+                onDelete != null -> AppIcons.Action.delete to Alignment.CenterEnd
+                onShare != null -> AppIcons.Action.share to Alignment.CenterEnd
+                else -> null to Alignment.CenterEnd
+            }
+        }
+        else -> null to Alignment.Center
+    }
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(color)
+            .padding(horizontal = 20.dp),
+        contentAlignment = alignment
+    ) {
+        icon?.let {
+            Icon(
+                imageVector = it,
+                contentDescription = null,
+                modifier = Modifier.scale(scale),
+                tint = MaterialTheme.colorScheme.onError
+            )
         }
     }
 }
 
+/**
+ * Specialized swipeable list item for data points
+ */
 @Composable
-private fun SwipeBackground(
-    offsetX: Float,
-    maxSwipeDistance: Float,
-    swipeToStartAction: SwipeAction?,
-    swipeToEndAction: SwipeAction?
+fun SwipeableDataItem(
+    title: String,
+    subtitle: String? = null,
+    value: String,
+    icon: ImageVector? = null,
+    onDelete: () -> Unit,
+    onEdit: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val progress = (offsetX.absoluteValue / maxSwipeDistance).coerceIn(0f, 1f)
-    
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                when {
-                    offsetX < 0 && swipeToStartAction != null -> 
-                        swipeToStartAction.backgroundColor.copy(alpha = progress)
-                    offsetX > 0 && swipeToEndAction != null -> 
-                        swipeToEndAction.backgroundColor.copy(alpha = progress)
-                    else -> Color.Transparent
-                }
-            ),
-        horizontalArrangement = when {
-            offsetX < 0 -> Arrangement.End
-            offsetX > 0 -> Arrangement.Start
-            else -> Arrangement.Center
-        },
-        verticalAlignment = Alignment.CenterVertically
+    SwipeableListItem(
+        onDelete = onDelete,
+        onEdit = onEdit,
+        modifier = modifier
     ) {
-        val iconScale by animateFloatAsState(
-            targetValue = if (progress > 0.5f) 1.2f else 1f,
-            label = "icon_scale"
-        )
-        
-        when {
-            offsetX < 0 && swipeToStartAction != null -> {
-                Icon(
-                    imageVector = swipeToStartAction.icon,
-                    contentDescription = swipeToStartAction.label,
-                    tint = swipeToStartAction.iconColor,
-                    modifier = Modifier
-                        .padding(horizontal = 24.dp)
-                        .scale(iconScale)
-                )
-            }
-            offsetX > 0 && swipeToEndAction != null -> {
-                Icon(
-                    imageVector = swipeToEndAction.icon,
-                    contentDescription = swipeToEndAction.label,
-                    tint = swipeToEndAction.iconColor,
-                    modifier = Modifier
-                        .padding(horizontal = 24.dp)
-                        .scale(iconScale)
+        Card(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                icon?.let {
+                    Icon(
+                        imageVector = it,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    subtitle?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -197,46 +270,34 @@ private fun SwipeBackground(
 }
 
 /**
- * Configuration for swipe actions
+ * List with swipeable items
  */
-sealed class SwipeAction(
-    val icon: ImageVector,
-    val label: String,
-    val backgroundColor: Color,
-    val iconColor: Color
+@Composable
+fun <T> SwipeableList(
+    items: List<T>,
+    onDelete: (T) -> Unit,
+    onEdit: ((T) -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    key: ((T) -> Any)? = null,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
+    verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(8.dp),
+    itemContent: @Composable (T) -> Unit
 ) {
-    object Delete : SwipeAction(
-        icon = Icons.Default.Delete,
-        label = "Delete",
-        backgroundColor = Color(0xFFFF5252),
-        iconColor = Color.White
-    )
-    
-    object Archive : SwipeAction(
-        icon = AppIcons.Action.archive,
-        label = "Archive",
-        backgroundColor = Color(0xFF9E9E9E),
-        iconColor = Color.White
-    )
-    
-    object Save : SwipeAction(
-        icon = AppIcons.Action.save,
-        label = "Save",
-        backgroundColor = Color(0xFF4CAF50),
-        iconColor = Color.White
-    )
-    
-    object Share : SwipeAction(
-        icon = AppIcons.Action.share,
-        label = "Share",
-        backgroundColor = Color(0xFF2196F3),
-        iconColor = Color.White
-    )
-    
-    class Custom(
-        icon: ImageVector,
-        label: String,
-        backgroundColor: Color = Color(0xFF607D8B),
-        iconColor: Color = Color.White
-    ) : SwipeAction(icon, label, backgroundColor, iconColor)
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = contentPadding,
+        verticalArrangement = verticalArrangement
+    ) {
+        items(
+            items = items,
+            key = key
+        ) { item ->
+            SwipeableListItem(
+                onDelete = { onDelete(item) },
+                onEdit = onEdit?.let { { it(item) } }
+            ) {
+                itemContent(item)
+            }
+        }
+    }
 }

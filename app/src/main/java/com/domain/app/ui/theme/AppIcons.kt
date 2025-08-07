@@ -43,6 +43,7 @@ object AppIcons {
         val filter = Icons.Filled.FilterList
         val sort = Icons.Filled.Sort
         val refresh = Icons.Filled.Refresh
+	val archive = Icons.Filled.Archive
         val more = Icons.Filled.MoreVert
         val moreHoriz = Icons.Filled.MoreHoriz
         val check = Icons.Filled.Check

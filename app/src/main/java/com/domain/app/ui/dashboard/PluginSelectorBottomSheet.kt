@@ -1,30 +1,31 @@
 package com.domain.app.ui.dashboard
-import com.domain.app.ui.utils.getPluginIcon
 
 import androidx.compose.foundation.clickable
-import com.domain.app.ui.utils.getPluginIcon
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import com.domain.app.core.plugin.Plugin
-import com.domain.app.core.plugin.PluginCategory
 import com.domain.app.ui.theme.AppIcons
+import com.domain.app.ui.utils.getPluginIcon
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PluginSelectorBottomSheet(
-    availablePlugins: List<Plugin>,
-    onDismiss: () -> Unit,
-    viewModel: PluginSelectorViewModel = hiltViewModel()
+    plugins: List<Plugin>,
+    onPluginSelected: (Plugin) -> Unit,
+    onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = false
+    )
     
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -35,49 +36,79 @@ fun PluginSelectorBottomSheet(
                 .fillMaxWidth()
                 .padding(bottom = 32.dp)
         ) {
-            Text(
-                text = "Add to Dashboard",
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
-            )
-            
-            if (availablePlugins.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "All plugins are already on your dashboard",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+            // Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Select Plugin",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = AppIcons.Navigation.close,
+                        contentDescription = "Close"
                     )
                 }
-            } else {
-                LazyColumn {
-                    // Group by category
-                    val groupedPlugins = availablePlugins.groupBy { it.metadata.category }
-                    
-                    groupedPlugins.forEach { (category, plugins) ->
-                        item {
-                            Text(
-                                text = category.name.replace("_", " "),
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(
-                                    horizontal = 16.dp,
-                                    vertical = 8.dp
+            }
+            
+            Divider()
+            
+            // Plugin list
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(vertical = 8.dp)
+            ) {
+                items(plugins) { plugin ->
+                    PluginSelectorItem(
+                        plugin = plugin,
+                        onClick = { onPluginSelected(plugin) }
+                    )
+                }
+                
+                // Add new plugin option
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                            .clickable { /* Navigate to plugin store */ },
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = AppIcons.Action.add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp),
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
-                            )
-                        }
-                        
-                        items(plugins) { plugin ->
-                            PluginSelectorItem(
-                                plugin = plugin,
-                                onSelect = {
-                                    viewModel.addPluginToDashboard(plugin.id)
-                                    onDismiss()
-                                }
+                            }
+                            
+                            Text(
+                                text = "Browse More Plugins",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                         }
                     }
@@ -88,27 +119,83 @@ fun PluginSelectorBottomSheet(
 }
 
 @Composable
-fun PluginSelectorItem(
+private fun PluginSelectorItem(
     plugin: Plugin,
-    onSelect: () -> Unit
+    onClick: () -> Unit
 ) {
-    ListItem(
-        headlineContent = { Text(plugin.metadata.name) },
-        supportingContent = { Text(plugin.metadata.description) },
-        leadingContent = {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(MaterialTheme.shapes.small),
-                contentAlignment = Alignment.Center
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Plugin icon
+            Surface(
+                modifier = Modifier.size(48.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer
             ) {
-                Icon(
-                    imageVector = AppIcons.getPluginIcon(plugin.id),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Icon(
+                        imageVector = getPluginIcon(plugin),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
-        },
-        modifier = Modifier.clickable { onSelect() }
-    )
+            
+            // Plugin info
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = plugin.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = plugin.description.take(60) + if (plugin.description.length > 60) "..." else "",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                // Tags
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    plugin.tags.take(3).forEach { tag ->
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = tag,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // Quick add indicator
+            Icon(
+                imageVector = AppIcons.Navigation.forward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
 }

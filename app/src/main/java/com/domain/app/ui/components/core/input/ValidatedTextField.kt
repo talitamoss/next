@@ -1,4 +1,3 @@
-// app/src/main/java/com/domain/app/ui/components/core/input/ValidatedTextField.kt
 package com.domain.app.ui.components.core.input
 
 import androidx.compose.animation.*
@@ -199,8 +198,8 @@ fun ValidatedTextField(
             AnimatedContent(
                 targetState = when {
                     errorText != null -> errorText
-        val errorMessage = (validationResult as? ValidationResult.Error)?.message
-        val warningMessage = (validationResult as? ValidationResult.Warning)?.message
+                    validationResult is ValidationResult.Error -> validationResult.message
+                    validationResult is ValidationResult.Warning -> validationResult.message
                     helperText != null -> helperText
                     else -> ""
                 },
@@ -413,10 +412,3 @@ sealed class ValidationResult {
     data class Error(val message: String) : ValidationResult()
     data class Warning(val message: String) : ValidationResult()
 }
-
-// Note: Add this to AppIcons.kt if not already present:
-// object Communication {
-//     val email = Icons.Filled.Email
-//     val phone = Icons.Filled.Phone
-//     val message = Icons.Filled.Message
-// }

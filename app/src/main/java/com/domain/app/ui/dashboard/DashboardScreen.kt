@@ -1,323 +1,350 @@
-// app/src/main/java/com/domain/app/ui/dashboard/DashboardScreen.kt
 package com.domain.app.ui.dashboard
 
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavController
 import com.domain.app.core.plugin.Plugin
-import com.domain.app.core.plugin.PluginCapability
-import com.domain.app.ui.components.plugin.quickadd.UnifiedQuickAddDialog
 import com.domain.app.ui.theme.AppIcons
 import com.domain.app.ui.utils.getPluginIcon
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/**
- * Main dashboard screen for the app
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
-    navController: NavController,
+    onNavigateToPlugin: (Plugin) -> Unit,
+    onNavigateToSettings: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val selectedPlugin by viewModel.selectedPlugin.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     
+    var showQuickAddDialog by remember { mutableStateOf(false) }
+    var showPluginSelector by remember { mutableStateOf(false) }
+    var selectedPlugin by remember { mutableStateOf<Plugin?>(null) }
+    
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { 
-                    Text(
-                        text = "Dashboard",
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                ),
+                title = { Text("Behavioral Data") },
                 actions = {
-                    IconButton(onClick = { navController.navigate("data") }) {
-                        Icon(AppIcons.Data.analytics, contentDescription = "View All Data")
-                    }
-                    IconButton(onClick = { navController.navigate("settings") }) {
-                        Icon(AppIcons.Navigation.settings, contentDescription = "Settings")
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(
+                            imageVector = AppIcons.Navigation.settings,
+                            contentDescription = "Settings"
+                        )
                     }
                 }
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { navController.navigate("data") },
-                text = { Text("Add Data") },
-                icon = { Icon(AppIcons.Action.add, contentDescription = null) }
-            )
+            FloatingActionButton(
+                onClick = { showPluginSelector = true }
+            ) {
+                Icon(
+                    imageVector = AppIcons.Action.add,
+                    contentDescription = "Quick Add"
+                )
+            }
         }
     ) { paddingValues ->
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Adaptive(minSize = 160.dp),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
             contentPadding = PaddingValues(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Summary Cards Row
-            item(span = { GridItemSpan(2) }) {
+            // Summary cards spanning full width
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    text = "Today's Summary",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            item {
+                SummaryCard(
+                    title = "Data Points",
+                    value = uiState.todayDataCount.toString()
+                )
+            }
+            
+            item {
+                SummaryCard(
+                    title = "Active Plugins",
+                    value = uiState.activePlugins.size.toString()
+                )
+            }
+            
+            item {
+                SummaryCard(
+                    title = "Streak",
+                    value = "${uiState.currentStreak} days"
+                )
+            }
+            
+            // Plugins section
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    SummaryCard(
-                        title = "Today",
-                        value = uiState.todayEntryCount.toString(),
-                        modifier = Modifier.weight(1f)
+                    Text(
+                        text = "Your Plugins",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
                     )
-                    SummaryCard(
-                        title = "This Week",
-                        value = uiState.weekEntryCount.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-                    SummaryCard(
-                        title = "Active",
-                        value = uiState.activePluginCount.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
+                    TextButton(onClick = { /* Navigate to all plugins */ }) {
+                        Text("See All")
+                    }
                 }
             }
             
             // Plugin tiles
-            items(
-                items = uiState.dashboardPlugins,
-                key = { it.id }
-            ) { plugin ->
+            items(uiState.availablePlugins) { plugin ->
                 PluginTile(
                     plugin = plugin,
-                    isEnabled = uiState.pluginStates[plugin.id]?.isCollecting ?: false,
-                    hasPermission = uiState.pluginPermissions[plugin.id] ?: false,
-                    onClick = { 
-                        viewModel.onPluginTileClick(plugin)
-                    },
-                    onLongClick = {
-                        navController.navigate("plugin_detail/${plugin.id}")
+                    dataCount = uiState.pluginDataCounts[plugin.id] ?: 0,
+                    onClick = { onNavigateToPlugin(plugin) },
+                    onQuickAdd = {
+                        selectedPlugin = plugin
+                        showQuickAddDialog = true
                     }
                 )
             }
             
-            // Add plugin tile (if not at max)
-            if (uiState.dashboardPlugins.size < 8 && uiState.canAddMorePlugins) {
+            // Add plugin tile
+            item {
+                AddPluginTile(
+                    onClick = { /* Navigate to plugin store */ }
+                )
+            }
+            
+            // Empty tiles for layout balance
+            val remainingTiles = (4 - (uiState.availablePlugins.size + 1) % 4) % 4
+            repeat(remainingTiles) {
                 item {
-                    AddPluginTile(
-                        onClick = { viewModel.onAddPluginClick() }
-                    )
+                    EmptyPluginTile()
                 }
             }
-            
-            // Empty tiles to maintain grid
-            val emptyTiles = (8 - uiState.dashboardPlugins.size - 1).coerceAtLeast(0)
-            items(emptyTiles) {
-                EmptyPluginTile()
-            }
         }
     }
     
-    // Quick Add Dialog
-    selectedPlugin?.let { plugin ->
-        if (uiState.showQuickAdd) {
-            if (uiState.needsPermission) {
-                PluginPermissionDialog(
-                    plugin = plugin,
-                    onGrant = { viewModel.grantQuickAddPermission() },
-                    onDeny = { viewModel.dismissQuickAdd() }
-                )
-            } else {
-                UnifiedQuickAddDialog(
-                    plugin = plugin,
-                    onDismiss = { viewModel.dismissQuickAdd() },
-                    onSave = { data ->
-                        viewModel.onQuickAdd(plugin.id, data)
-                    }
-                )
-            }
-        }
-    }
-    
-    // Plugin selector bottom sheet
-    if (uiState.showPluginSelector) {
-        PluginSelectorBottomSheet(
-            availablePlugins = uiState.allPlugins.filter { plugin ->
-                !uiState.dashboardPlugins.any { it.id == plugin.id }
+    // Quick add dialog
+    if (showQuickAddDialog && selectedPlugin != null) {
+        MultiStageQuickAddDialog(
+            plugin = selectedPlugin!!,
+            onDismiss = {
+                showQuickAddDialog = false
+                selectedPlugin = null
             },
-            onDismiss = { viewModel.dismissPluginSelector() },
-            onPluginSelected = { plugin ->
-                viewModel.addPluginToDashboard(plugin.id)
-                viewModel.dismissPluginSelector()
+            onConfirm = { dataPoint ->
+                viewModel.quickAddData(selectedPlugin!!, dataPoint)
+                showQuickAddDialog = false
+                selectedPlugin = null
+                scope.launch {
+                    snackbarHostState.showSnackbar("Data added successfully")
+                }
             }
         )
     }
     
-    // Success feedback
-    if (uiState.showSuccessFeedback) {
-        LaunchedEffect(Unit) {
-            delay(2000)
-            viewModel.clearSuccessFeedback()
-        }
-    }
-    
-    // Error handling
-    uiState.error?.let { error ->
-        AlertDialog(
-            onDismissRequest = { viewModel.clearError() },
-            title = { Text("Error") },
-            text = { Text(error) },
-            confirmButton = {
-                TextButton(onClick = { viewModel.clearError() }) {
-                    Text("OK")
-                }
+    // Plugin selector bottom sheet
+    if (showPluginSelector) {
+        PluginSelectorBottomSheet(
+            plugins = uiState.availablePlugins,
+            onPluginSelected = { plugin ->
+                selectedPlugin = plugin
+                showPluginSelector = false
+                showQuickAddDialog = true
+            },
+            onDismiss = {
+                showPluginSelector = false
             }
         )
     }
 }
 
-/**
- * Plugin tile component
- */
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PluginTile(
+fun PluginTile(
     plugin: Plugin,
-    isEnabled: Boolean,
-    hasPermission: Boolean,
+    dataCount: Int,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onQuickAdd: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val haptics = LocalHapticFeedback.current
-    
     Card(
-        modifier = Modifier
+        onClick = onClick,
+        modifier = modifier
             .fillMaxWidth()
-            .aspectRatio(1f)
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onLongClick()
-                }
-            ),
+            .aspectRatio(1f),
         colors = CardDefaults.cardColors(
-            containerColor = if (isEnabled) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            }
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
         )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+        Box(
+            modifier = Modifier.fillMaxSize()
         ) {
-            Icon(
-                imageVector = getPluginIcon(plugin),
-                contentDescription = plugin.metadata.name,
-                modifier = Modifier.size(32.dp),
-                tint = if (isEnabled) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
+            // Background gradient
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(60.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                Color.Transparent
+                            )
+                        )
+                    )
             )
             
-            Column {
-                Text(
-                    text = plugin.metadata.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Icon and count
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = getPluginIcon(plugin),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    
+                    if (dataCount > 0) {
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                text = dataCount.toString(),
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
                 
-                if (!hasPermission) {
+                // Plugin info
+                Column {
                     Text(
-                        text = "Tap to enable",
+                        text = plugin.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = plugin.description.take(50) + if (plugin.description.length > 50) "..." else "",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                
+                // Quick add button
+                Button(
+                    onClick = onQuickAdd,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(vertical = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = AppIcons.Action.add,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Quick Add",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
             }
         }
     }
 }
 
-/**
- * Summary card component
- */
 @Composable
-private fun SummaryCard(
+fun SummaryCard(
     title: String,
     value: String,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier,
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
+            containerColor = MaterialTheme.colorScheme.primaryContainer
         )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = value,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
             )
         }
     }
 }
 
-/**
- * Add plugin tile
- */
 @Composable
-private fun AddPluginTile(
+fun AddPluginTile(
     onClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1f),
-        onClick = onClick,
+            .aspectRatio(1f)
+            .clickable { onClick() },
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
         border = CardDefaults.outlinedCardBorder()
     ) {
@@ -326,30 +353,27 @@ private fun AddPluginTile(
             contentAlignment = Alignment.Center
         ) {
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Add,
+                    imageVector = AppIcons.Action.add,
                     contentDescription = "Add Plugin",
                     modifier = Modifier.size(32.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "Add Plugin",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
 }
 
-/**
- * Empty plugin tile (placeholder)
- */
 @Composable
-private fun EmptyPluginTile() {
+fun EmptyPluginTile() {
     Spacer(
         modifier = Modifier
             .fillMaxWidth()
@@ -357,108 +381,96 @@ private fun EmptyPluginTile() {
     )
 }
 
-/**
- * Plugin permission dialog
- */
 @Composable
-private fun PluginPermissionDialog(
-    plugin: Plugin,
-    onGrant: () -> Unit,
-    onDeny: () -> Unit
+fun RecentActivityCard(
+    activities: List<RecentActivity>,
+    onViewAll: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    AlertDialog(
-        onDismissRequest = onDeny,
-        title = {
+    Card(
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = getPluginIcon(plugin),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                Text(
+                    text = "Recent Activity",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
-                Text(plugin.metadata.name)
+                TextButton(onClick = onViewAll) {
+                    Text("View All")
+                }
             }
-        },
-        text = {
-            Column {
-                Text("This plugin requires the following permissions:")
-                Spacer(modifier = Modifier.height(8.dp))
-                plugin.securityManifest.requestedCapabilities.forEach { capability ->
-                    Row(
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = capability.name.replace('_', ' ').lowercase()
-                                .replaceFirstChar { it.uppercase() },
-                            style = MaterialTheme.typography.bodySmall
-                        )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            if (activities.isEmpty()) {
+                Text(
+                    text = "No recent activity",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 16.dp),
+                    textAlign = TextAlign.Center
+                )
+            } else {
+                activities.take(5).forEach { activity ->
+                    ActivityItem(activity)
+                    if (activity != activities.last()) {
+                        Divider(modifier = Modifier.padding(vertical = 8.dp))
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onGrant) {
-                Text("Grant")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDeny) {
-                Text("Deny")
-            }
-        }
-    )
-}
-
-/**
- * Plugin selector bottom sheet
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PluginSelectorBottomSheet(
-    availablePlugins: List<Plugin>,
-    onDismiss: () -> Unit,
-    onPluginSelected: (Plugin) -> Unit
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Text(
-                text = "Add Plugin to Dashboard",
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-            
-            availablePlugins.forEach { plugin ->
-                ListItem(
-                    headlineContent = { Text(plugin.metadata.name) },
-                    leadingContent = {
-                        Icon(
-                            imageVector = getPluginIcon(plugin),
-                            contentDescription = null
-                        )
-                    },
-                    modifier = Modifier.clickable {
-                        onPluginSelected(plugin)
-                    }
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
+
+@Composable
+private fun ActivityItem(activity: RecentActivity) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = getPluginIcon(activity.plugin),
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = activity.title,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                text = activity.timeAgo,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        
+        Text(
+            text = activity.value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+// Data class for recent activity
+data class RecentActivity(
+    val plugin: Plugin,
+    val title: String,
+    val value: String,
+    val timeAgo: String
+)
