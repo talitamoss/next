@@ -1,5 +1,4 @@
 // app/src/main/java/com/domain/app/ui/components/core/lists/SwipeableListItem.kt
-import androidx.compose.material.icons.filled.Archive
 package com.domain.app.ui.components.core.lists
 
 import androidx.compose.animation.animateColorAsState
@@ -9,6 +8,8 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -125,7 +126,7 @@ fun SwipeableListItem(
                                 }
                             }
                             else -> {
-                                // Snap back
+                                // Spring back to center
                                 offsetX = 0f
                             }
                         }
@@ -149,181 +150,93 @@ private fun SwipeBackground(
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .clip(MaterialTheme.shapes.medium),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .background(
+                when {
+                    offsetX < 0 && swipeToStartAction != null -> 
+                        swipeToStartAction.backgroundColor.copy(alpha = progress)
+                    offsetX > 0 && swipeToEndAction != null -> 
+                        swipeToEndAction.backgroundColor.copy(alpha = progress)
+                    else -> Color.Transparent
+                }
+            ),
+        horizontalArrangement = when {
+            offsetX < 0 -> Arrangement.End
+            offsetX > 0 -> Arrangement.Start
+            else -> Arrangement.Center
+        },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left side (swipe to end action)
-        if (swipeToEndAction != null && offsetX > 0) {
-            val backgroundColor by animateColorAsState(
-                targetValue = if (progress > 0.3f) {
-                    swipeToEndAction.activeColor
-                } else {
-                    swipeToEndAction.backgroundColor
-                },
-                label = "end_bg_color"
-            )
-            
-            val iconScale by animateFloatAsState(
-                targetValue = if (progress > 0.3f) 1.2f else 1f,
-                label = "end_icon_scale"
-            )
-            
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .weight(1f)
-                    .background(backgroundColor),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Icon(
-                    imageVector = swipeToEndAction.icon,
-                    contentDescription = swipeToEndAction.label,
-                    tint = Color.White,
-                    modifier = Modifier
-                        .padding(horizontal = 24.dp)
-                        .scale(iconScale)
-                )
-            }
-        } else {
-            Spacer(modifier = Modifier.weight(1f))
-        }
+        val iconScale by animateFloatAsState(
+            targetValue = if (progress > 0.5f) 1.2f else 1f,
+            label = "icon_scale"
+        )
         
-        // Right side (swipe to start action)
-        if (swipeToStartAction != null && offsetX < 0) {
-            val backgroundColor by animateColorAsState(
-                targetValue = if (progress > 0.3f) {
-                    swipeToStartAction.activeColor
-                } else {
-                    swipeToStartAction.backgroundColor
-                },
-                label = "start_bg_color"
-            )
-            
-            val iconScale by animateFloatAsState(
-                targetValue = if (progress > 0.3f) 1.2f else 1f,
-                label = "start_icon_scale"
-            )
-            
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .weight(1f)
-                    .background(backgroundColor),
-                contentAlignment = Alignment.CenterEnd
-            ) {
+        when {
+            offsetX < 0 && swipeToStartAction != null -> {
                 Icon(
                     imageVector = swipeToStartAction.icon,
                     contentDescription = swipeToStartAction.label,
-                    tint = Color.White,
+                    tint = swipeToStartAction.iconColor,
                     modifier = Modifier
                         .padding(horizontal = 24.dp)
                         .scale(iconScale)
                 )
             }
-        } else {
-            Spacer(modifier = Modifier.weight(1f))
+            offsetX > 0 && swipeToEndAction != null -> {
+                Icon(
+                    imageVector = swipeToEndAction.icon,
+                    contentDescription = swipeToEndAction.label,
+                    tint = swipeToEndAction.iconColor,
+                    modifier = Modifier
+                        .padding(horizontal = 24.dp)
+                        .scale(iconScale)
+                )
+            }
         }
     }
 }
 
 /**
- * Predefined swipe actions
+ * Configuration for swipe actions
  */
 sealed class SwipeAction(
     val icon: ImageVector,
     val label: String,
     val backgroundColor: Color,
-    val activeColor: Color
+    val iconColor: Color
 ) {
     object Delete : SwipeAction(
-        icon = AppIcons.Action.delete,
+        icon = Icons.Default.Delete,
         label = "Delete",
-        backgroundColor = Color(0xFFFF6B6B),
-        activeColor = Color(0xFFFF3333)
+        backgroundColor = Color(0xFFFF5252),
+        iconColor = Color.White
     )
     
     object Archive : SwipeAction(
-        icon = AppIcons.Storage.Archive,
+        icon = AppIcons.Action.archive,
         label = "Archive",
-        backgroundColor = Color(0xFF4ECDC4),
-        activeColor = Color(0xFF2A9D8F)
+        backgroundColor = Color(0xFF9E9E9E),
+        iconColor = Color.White
     )
     
-    object Edit : SwipeAction(
-        icon = AppIcons.Action.edit,
-        label = "Edit",
-        backgroundColor = Color(0xFF95E1D3),
-        activeColor = Color(0xFF3FC1C9)
+    object Save : SwipeAction(
+        icon = AppIcons.Action.save,
+        label = "Save",
+        backgroundColor = Color(0xFF4CAF50),
+        iconColor = Color.White
     )
     
     object Share : SwipeAction(
         icon = AppIcons.Action.share,
         label = "Share",
-        backgroundColor = Color(0xFF6C5CE7),
-        activeColor = Color(0xFF5F3DC4)
+        backgroundColor = Color(0xFF2196F3),
+        iconColor = Color.White
     )
     
-    object Favorite : SwipeAction(
-        icon = AppIcons.Action.favorite,
-        label = "Favorite",
-        backgroundColor = Color(0xFFFFD93D),
-        activeColor = Color(0xFFFFC107)
-    )
-    
-    data class Custom(
-        val customIcon: ImageVector,
-        val customLabel: String,
-        val customBackgroundColor: Color,
-        val customActiveColor: Color
-    ) : SwipeAction(customIcon, customLabel, customBackgroundColor, customActiveColor)
+    class Custom(
+        icon: ImageVector,
+        label: String,
+        backgroundColor: Color = Color(0xFF607D8B),
+        iconColor: Color = Color.White
+    ) : SwipeAction(icon, label, backgroundColor, iconColor)
 }
-
-/**
- * Simple list item with swipe to delete
- */
-@Composable
-fun SwipeToDeleteListItem(
-    onDelete: () -> Unit,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
-) {
-    SwipeableListItem(
-        modifier = modifier,
-        onSwipeToStart = onDelete,
-        swipeToStartAction = SwipeAction.Delete,
-        enableSwipeToEnd = false,
-        content = content
-    )
-}
-
-/**
- * List item with both archive and delete actions
- */
-@Composable
-fun SwipeableDataListItem(
-    onDelete: () -> Unit,
-    onArchive: () -> Unit,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
-) {
-    SwipeableListItem(
-        modifier = modifier,
-        onSwipeToStart = onDelete,
-        onSwipeToEnd = onArchive,
-        swipeToStartAction = SwipeAction.Delete,
-        swipeToEndAction = SwipeAction.Archive,
-        content = content
-    )
-}
-
-// Note: Add these to AppIcons.kt if not already present:
-// object Storage {
-//     val folder = Icons.Filled.Folder
-//     val archive = Icons.Filled.Archive
-//     val cloud = Icons.Filled.Cloud
-//     val save = Icons.Filled.Save
-// }
-// object Action {
-//     val favorite = Icons.Filled.Favorite
-// }

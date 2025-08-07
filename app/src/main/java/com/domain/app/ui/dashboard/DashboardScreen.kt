@@ -1,12 +1,5 @@
 // app/src/main/java/com/domain/app/ui/dashboard/DashboardScreen.kt
-import com.domain.app.ui.utils.getPluginIcon
 package com.domain.app.ui.dashboard
-
-import com.domain.app.ui.utils.getPluginIcon
-// Import the components from DashboardComponents.kt
-import com.domain.app.ui.dashboard.SummaryCard
-import com.domain.app.ui.dashboard.AddPluginTile  
-import com.domain.app.ui.dashboard.EmptyPluginTile
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -31,6 +24,7 @@ import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginCapability
 import com.domain.app.ui.components.plugin.quickadd.UnifiedQuickAddDialog
 import com.domain.app.ui.theme.AppIcons
+import com.domain.app.ui.utils.getPluginIcon
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -53,128 +47,127 @@ fun DashboardScreen(
                 title = { 
                     Text(
                         text = "Dashboard",
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.headlineMedium
                     )
                 },
-                navigationIcon = {
-                    IconButton(onClick = { /* Handle navigation */ }) {
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = "Menu"
-                        )
-                    }
-                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                ),
                 actions = {
+                    IconButton(onClick = { navController.navigate("data") }) {
+                        Icon(AppIcons.Data.analytics, contentDescription = "View All Data")
+                    }
                     IconButton(onClick = { navController.navigate("settings") }) {
-                        Icon(
-                            imageVector = AppIcons.Navigation.settings,
-                            contentDescription = "Settings"
-                        )
+                        Icon(AppIcons.Navigation.settings, contentDescription = "Settings")
                     }
                 }
+            )
+        },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = { navController.navigate("data") },
+                text = { Text("Add Data") },
+                icon = { Icon(AppIcons.Action.add, contentDescription = null) }
             )
         }
     ) { paddingValues ->
-        Column(
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(paddingValues),
+            contentPadding = PaddingValues(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Summary Cards
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                SummaryCard(
-                    title = "Today",
-                    value = "${uiState.todayEntryCount}",
-                    modifier = Modifier.weight(1f)
-                )
-                SummaryCard(
-                    title = "This Week",
-                    value = "${uiState.weekEntryCount}",
-                    modifier = Modifier.weight(1f)
-                )
-                SummaryCard(
-                    title = "Active",
-                    value = "${uiState.activePluginCount}",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            // Dashboard Grid - Fixed 2x3 grid
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                // Show dashboard plugins
-                items(uiState.dashboardPlugins) { plugin ->
-                    DashboardPluginTile(
-                        plugin = plugin,
-                        isCollecting = uiState.pluginStates[plugin.id]?.isCollecting ?: false,
-                        hasPermissions = uiState.pluginPermissions[plugin.id] ?: false,
-                        onClick = {
-                            viewModel.onPluginTileClick(plugin)
-                        },
-                        onLongClick = {
-                            navController.navigate("plugin_security/${plugin.id}")
-                        }
+            // Summary Cards Row
+            item(span = { GridItemSpan(2) }) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SummaryCard(
+                        title = "Today",
+                        value = uiState.todayEntryCount.toString(),
+                        modifier = Modifier.weight(1f)
+                    )
+                    SummaryCard(
+                        title = "This Week",
+                        value = uiState.weekEntryCount.toString(),
+                        modifier = Modifier.weight(1f)
+                    )
+                    SummaryCard(
+                        title = "Active",
+                        value = uiState.activePluginCount.toString(),
+                        modifier = Modifier.weight(1f)
                     )
                 }
-                
-                // Add empty slots if less than 6 plugins
-                val emptySlots = 6 - uiState.dashboardPlugins.size
-                if (emptySlots > 0 && uiState.canAddMorePlugins) {
-                    item {
-                        AddPluginTile(
-                            onClick = { viewModel.onAddPluginClick() }
-                        )
+            }
+            
+            // Plugin tiles
+            items(
+                items = uiState.dashboardPlugins,
+                key = { it.id }
+            ) { plugin ->
+                PluginTile(
+                    plugin = plugin,
+                    isEnabled = uiState.pluginStates[plugin.id]?.isCollecting ?: false,
+                    hasPermission = uiState.pluginPermissions[plugin.id] ?: false,
+                    onClick = { 
+                        viewModel.onPluginTileClick(plugin)
+                    },
+                    onLongClick = {
+                        navController.navigate("plugin_detail/${plugin.id}")
                     }
-                    
-                    // Fill remaining slots with empty tiles
-                    repeat(emptySlots - 1) {
-                        item {
-                            EmptyPluginTile()
-                        }
-                    }
+                )
+            }
+            
+            // Add plugin tile (if not at max)
+            if (uiState.dashboardPlugins.size < 8 && uiState.canAddMorePlugins) {
+                item {
+                    AddPluginTile(
+                        onClick = { viewModel.onAddPluginClick() }
+                    )
                 }
             }
-        }
-    }
-
-    // Quick Add Dialog
-    val currentPlugin = selectedPlugin
-    if (uiState.showQuickAdd && currentPlugin != null) {
-        if (uiState.needsPermission) {
-            PluginPermissionQuickDialog(
-                plugin = currentPlugin,
-                onGrant = { viewModel.grantQuickAddPermission() },
-                onDeny = { viewModel.dismissQuickAdd() }
-            )
-        } else {
-            UnifiedQuickAddDialog(
-                plugin = currentPlugin,
-                onDismiss = { viewModel.dismissQuickAdd() },
-                onConfirm = { data ->
-                    viewModel.onQuickAdd(currentPlugin, data)
-                }
-            )
+            
+            // Empty tiles to maintain grid
+            val emptyTiles = (8 - uiState.dashboardPlugins.size - 1).coerceAtLeast(0)
+            items(emptyTiles) {
+                EmptyPluginTile()
+            }
         }
     }
     
-    // Plugin Selector Bottom Sheet
+    // Quick Add Dialog
+    selectedPlugin?.let { plugin ->
+        if (uiState.showQuickAdd) {
+            if (uiState.needsPermission) {
+                PluginPermissionDialog(
+                    plugin = plugin,
+                    onGrant = { viewModel.grantQuickAddPermission() },
+                    onDeny = { viewModel.dismissQuickAdd() }
+                )
+            } else {
+                UnifiedQuickAddDialog(
+                    plugin = plugin,
+                    onDismiss = { viewModel.dismissQuickAdd() },
+                    onSave = { data ->
+                        viewModel.onQuickAdd(plugin.id, data)
+                    }
+                )
+            }
+        }
+    }
+    
+    // Plugin selector bottom sheet
     if (uiState.showPluginSelector) {
         PluginSelectorBottomSheet(
             availablePlugins = uiState.allPlugins.filter { plugin ->
                 !uiState.dashboardPlugins.any { it.id == plugin.id }
             },
             onDismiss = { viewModel.dismissPluginSelector() },
-            onSelect = { plugin ->
+            onPluginSelected = { plugin ->
                 viewModel.addPluginToDashboard(plugin.id)
                 viewModel.dismissPluginSelector()
             }
@@ -191,101 +184,160 @@ fun DashboardScreen(
     
     // Error handling
     uiState.error?.let { error ->
-        LaunchedEffect(error) {
-            scope.launch {
-                delay(3000)
-                viewModel.clearError()
+        AlertDialog(
+            onDismissRequest = { viewModel.clearError() },
+            title = { Text("Error") },
+            text = { Text(error) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearError() }) {
+                    Text("OK")
+                }
             }
-        }
+        )
     }
 }
 
 /**
- * Plugin tile component for the dashboard grid
+ * Plugin tile component
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun DashboardPluginTile(
+private fun PluginTile(
     plugin: Plugin,
-    isCollecting: Boolean,
-    hasPermissions: Boolean,
+    isEnabled: Boolean,
+    hasPermission: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
-    val haptic = LocalHapticFeedback.current
+    val haptics = LocalHapticFeedback.current
     
     Card(
         modifier = Modifier
+            .fillMaxWidth()
             .aspectRatio(1f)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     onLongClick()
                 }
             ),
         colors = CardDefaults.cardColors(
-            containerColor = if (isCollecting) {
+            containerColor = if (isEnabled) {
                 MaterialTheme.colorScheme.primaryContainer
             } else {
-                MaterialTheme.colorScheme.surface
+                MaterialTheme.colorScheme.surfaceVariant
             }
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isCollecting) 8.dp else 2.dp
         )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Plugin Icon - Using AppIcons helper
             Icon(
-                imageVector = AppIcons.getPluginIcon(plugin.id),
+                imageVector = getPluginIcon(plugin),
                 contentDescription = plugin.metadata.name,
-                modifier = Modifier.size(48.dp),
-                tint = if (isCollecting) {
+                modifier = Modifier.size(32.dp),
+                tint = if (isEnabled) {
                     MaterialTheme.colorScheme.primary
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 }
             )
             
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // Plugin Name
-            Text(
-                text = plugin.metadata.name,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = if (isCollecting) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                }
-            )
-            
-            // Permission Status
-            if (!hasPermissions) {
-                Spacer(modifier = Modifier.height(4.dp))
+            Column {
                 Text(
-                    text = "Tap to enable",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
+                    text = plugin.metadata.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+                
+                if (!hasPermission) {
+                    Text(
+                        text = "Tap to enable",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-            
-            // Collection Status
-            if (isCollecting) {
-                Spacer(modifier = Modifier.height(4.dp))
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp),
+        }
+    }
+}
+
+/**
+ * Summary card component
+ */
+@Composable
+private fun SummaryCard(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+            )
+        }
+    }
+}
+
+/**
+ * Add plugin tile
+ */
+@Composable
+private fun AddPluginTile(
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f),
+        onClick = onClick,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = CardDefaults.outlinedCardBorder()
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add Plugin",
+                    modifier = Modifier.size(32.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Add Plugin",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
@@ -294,11 +346,22 @@ fun DashboardPluginTile(
 }
 
 /**
+ * Empty plugin tile (placeholder)
+ */
+@Composable
+private fun EmptyPluginTile() {
+    Spacer(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+    )
+}
+
+/**
  * Plugin permission dialog
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PluginPermissionQuickDialog(
+private fun PluginPermissionDialog(
     plugin: Plugin,
     onGrant: () -> Unit,
     onDeny: () -> Unit
@@ -306,13 +369,22 @@ fun PluginPermissionQuickDialog(
     AlertDialog(
         onDismissRequest = onDeny,
         title = {
-            Text("Enable ${plugin.metadata.name}?")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = getPluginIcon(plugin),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(plugin.metadata.name)
+            }
         },
         text = {
             Column {
                 Text("This plugin requires the following permissions:")
                 Spacer(modifier = Modifier.height(8.dp))
-                // Using the correct property path
                 plugin.securityManifest.requestedCapabilities.forEach { capability ->
                     Row(
                         modifier = Modifier.padding(vertical = 4.dp),
@@ -349,18 +421,16 @@ fun PluginPermissionQuickDialog(
 
 /**
  * Plugin selector bottom sheet
- * FIX: Added ExperimentalFoundationApi annotation for combinedClickable usage
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PluginSelectorBottomSheet(
+private fun PluginSelectorBottomSheet(
     availablePlugins: List<Plugin>,
     onDismiss: () -> Unit,
-    onSelect: (Plugin) -> Unit
+    onPluginSelected: (Plugin) -> Unit
 ) {
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface
+        onDismissRequest = onDismiss
     ) {
         Column(
             modifier = Modifier
@@ -370,60 +440,25 @@ fun PluginSelectorBottomSheet(
             Text(
                 text = "Add Plugin to Dashboard",
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
             
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.height(300.dp)
-            ) {
-                items(availablePlugins) { plugin ->
-                    Card(
-                        modifier = Modifier
-                            .aspectRatio(1f)
-                            .combinedClickable(
-                                onClick = { onSelect(plugin) }
-                            ),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+            availablePlugins.forEach { plugin ->
+                ListItem(
+                    headlineContent = { Text(plugin.metadata.name) },
+                    leadingContent = {
+                        Icon(
+                            imageVector = getPluginIcon(plugin),
+                            contentDescription = null
                         )
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = AppIcons.getPluginIcon(plugin.id),
-                                contentDescription = plugin.metadata.name,
-                                modifier = Modifier.size(32.dp),
-                                tint = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = plugin.metadata.name,
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                    },
+                    modifier = Modifier.clickable {
+                        onPluginSelected(plugin)
                     }
-                }
+                )
             }
             
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            OutlinedButton(
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Cancel")
-            }
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }

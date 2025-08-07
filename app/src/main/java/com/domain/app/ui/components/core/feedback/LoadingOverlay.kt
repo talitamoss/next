@@ -1,5 +1,4 @@
 // app/src/main/java/com/domain/app/ui/components/core/feedback/LoadingOverlay.kt
-import androidx.compose.ui.draw.scale
 package com.domain.app.ui.components.core.feedback
 
 import androidx.compose.animation.*
@@ -193,14 +192,12 @@ private fun LinearLoadingIndicator(progress: Float?) {
             modifier = Modifier
                 .width(200.dp)
                 .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
         )
     } else {
         LinearProgressIndicator(
             modifier = Modifier
                 .width(200.dp)
                 .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
         )
     }
 }
@@ -214,13 +211,11 @@ private fun DotsLoadingIndicator() {
         verticalAlignment = Alignment.CenterVertically
     ) {
         repeat(3) { index ->
-            val animationDelay = index * 150
-            
             val scale by infiniteTransition.animateFloat(
                 initialValue = 0.5f,
                 targetValue = 1f,
                 animationSpec = infiniteRepeatable(
-                    animation = tween(600, delayMillis = animationDelay),
+                    animation = tween(600, delayMillis = index * 100),
                     repeatMode = RepeatMode.Reverse
                 ),
                 label = "dot_scale_$index"
@@ -354,11 +349,9 @@ fun LoadingContainer(
     loadingMessage: String? = null,
     errorMessage: String? = null,
     onRetry: (() -> Unit)? = null,
-    emptyMessage: String = "No data available",
-    isEmpty: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier) {
         when {
             isLoading -> {
                 LoadingOverlay(
@@ -368,54 +361,16 @@ fun LoadingContainer(
                 )
             }
             errorMessage != null -> {
-                ErrorEmptyState(
-                    message = errorMessage,
-                    onRetry = onRetry
-                )
-            }
-            isEmpty -> {
-                NoDataEmptyState(
-                    message = emptyMessage
+                EmptyState(
+                    title = "Error",
+                    subtitle = errorMessage,
+                    actionLabel = if (onRetry != null) "Retry" else null,
+                    onAction = onRetry
                 )
             }
             else -> {
                 content()
             }
-        }
-    }
-}
-
-/**
- * Simple loading button that shows loading state
- */
-@Composable
-fun LoadingButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    isLoading: Boolean = false,
-    enabled: Boolean = true,
-    text: String,
-    loadingText: String = "Loading..."
-) {
-    Button(
-        onClick = onClick,
-        modifier = modifier,
-        enabled = enabled && !isLoading
-    ) {
-        if (isLoading) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-                Text(loadingText)
-            }
-        } else {
-            Text(text)
         }
     }
 }
