@@ -1,7 +1,6 @@
 package com.domain.app.ui.dashboard
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -85,14 +84,14 @@ fun DashboardScreen(
             item {
                 SummaryCard(
                     title = "Data Points",
-                    value = uiState.todayDataCount.toString()
+                    value = uiState.todayEntryCount.toString()
                 )
             }
             
             item {
                 SummaryCard(
                     title = "Active Plugins",
-                    value = uiState.activePlugins.size.toString()
+                    value = uiState.activePluginCount.toString()
                 )
             }
             
@@ -122,7 +121,7 @@ fun DashboardScreen(
             }
             
             // Plugin tiles
-            items(uiState.availablePlugins) { plugin ->
+            items(uiState.dashboardPlugins) { plugin ->
                 PluginTile(
                     plugin = plugin,
                     dataCount = uiState.pluginDataCounts[plugin.id] ?: 0,
@@ -137,12 +136,13 @@ fun DashboardScreen(
             // Add plugin tile
             item {
                 AddPluginTile(
-                    onClick = { /* Navigate to plugin store */ }
+                    onClick = { showPluginSelector = true }
                 )
             }
             
             // Empty tiles for layout balance
-            val remainingTiles = (4 - (uiState.availablePlugins.size + 1) % 4) % 4
+            val pluginCount = uiState.dashboardPlugins.size
+            val remainingTiles = (4 - (pluginCount + 1) % 4) % 4
             repeat(remainingTiles) {
                 item {
                     EmptyPluginTile()
@@ -160,9 +160,7 @@ fun DashboardScreen(
                 selectedPlugin = null
             },
             onConfirm = { dataPoint ->
-                // MultiStageQuickAddDialog returns a DataPoint, but quickAddData expects Map<String, Any>
-                // Extract the value map from the DataPoint
-                viewModel.quickAddData(selectedPlugin!!, dataPoint.value)
+                viewModel.onQuickAdd(selectedPlugin!!, dataPoint.value)
                 showQuickAddDialog = false
                 selectedPlugin = null
             }
@@ -172,11 +170,10 @@ fun DashboardScreen(
     // Plugin selector bottom sheet
     if (showPluginSelector) {
         PluginSelectorBottomSheet(
-            plugins = uiState.availablePlugins,
+            plugins = uiState.allPlugins,
             onPluginSelected = { plugin ->
-                selectedPlugin = plugin
+                viewModel.addPluginToDashboard(plugin.id)
                 showPluginSelector = false
-                showQuickAddDialog = true
             },
             onDismiss = {
                 showPluginSelector = false
@@ -223,108 +220,60 @@ fun PluginTile(
                     Icon(
                         imageVector = getPluginIcon(plugin),
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
                 
+                // Data count badge
                 if (dataCount > 0) {
-                    Text(
-                        text = dataCount.toString(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            
-            // Plugin name
-            Text(
-                text = plugin.metadata.name,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2
-            )
-            
-            // Quick add button
-            Button(
-                onClick = onQuickAdd,
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(vertical = 4.dp)
-            ) {
-                Icon(
-                    imageVector = AppIcons.Action.add,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "Quick Add",
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun RecentActivityCard(
-    activities: List<RecentActivity>,
-    onViewAll: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Recent Activity",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                TextButton(onClick = onViewAll) {
-                    Text("View All")
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            if (activities.isEmpty()) {
-                Text(
-                    text = "No recent activity",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                activities.take(3).forEach { activity ->
-                    Row(
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .background(
+                                MaterialTheme.colorScheme.tertiaryContainer,
+                                CircleShape
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = activity.description,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Text(
-                            text = activity.timeAgo,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = dataCount.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
                         )
                     }
                 }
             }
+            
+            // Plugin name and quick add button
+            Column {
+                Text(
+                    text = plugin.metadata.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Quick add button
+                FilledTonalButton(
+                    onClick = onQuickAdd,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(8.dp)
+                ) {
+                    Icon(
+                        imageVector = AppIcons.Action.add,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Quick Add",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+            }
         }
     }
 }
-
-data class RecentActivity(
-    val description: String,
-    val timeAgo: String
-)
