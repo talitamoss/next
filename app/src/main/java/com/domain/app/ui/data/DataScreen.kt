@@ -1,9 +1,11 @@
 package com.domain.app.ui.data
 
-import com.domain.app.core.data.DataPoint
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -11,11 +13,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.domain.app.ui.components.core.lists.SwipeableDataItem
+import com.domain.app.core.data.DataPoint
+import com.domain.app.core.export.ExportFormat
 import com.domain.app.ui.theme.AppIcons
-import kotlinx.coroutines.launch
-import java.time.Instant
-import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -26,41 +26,45 @@ fun DataScreen(
     viewModel: DataViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    
-    var selectedFilters by remember { mutableStateOf(emptySet<String>()) }
     var showFilterDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
+    var expandedDataPointId by remember { mutableStateOf<String?>(null) }
     
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = { Text("Data Management") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = AppIcons.Navigation.back,
-                            contentDescription = "Back"
-                        )
+            if (uiState.isInSelectionMode) {
+                SelectionModeTopBar(
+                    selectedCount = uiState.selectedDataPoints.size,
+                    onCancelSelection = { viewModel.exitSelectionMode() },
+                    onDeleteSelected = { viewModel.deleteSelectedDataPoints() }
+                )
+            } else {
+                TopAppBar(
+                    title = { Text("Data") },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                imageVector = AppIcons.Navigation.back,
+                                contentDescription = "Back"
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { showFilterDialog = true }) {
+                            Icon(
+                                imageVector = AppIcons.Action.filter,
+                                contentDescription = "Filter"
+                            )
+                        }
+                        IconButton(onClick = { showExportDialog = true }) {
+                            Icon(
+                                imageVector = AppIcons.Data.upload,
+                                contentDescription = "Export"
+                            )
+                        }
                     }
-                },
-                actions = {
-                    IconButton(onClick = { showFilterDialog = true }) {
-                        Icon(
-                            imageVector = AppIcons.Action.filter,
-                            contentDescription = "Filter"
-                        )
-                    }
-                    IconButton(onClick = { showExportDialog = true }) {
-                        Icon(
-                            imageVector = AppIcons.Data.upload,
-                            contentDescription = "Export"
-                        )
-                    }
-                }
-            )
+                )
+            }
         }
     ) { paddingValues ->
         Column(
@@ -68,120 +72,79 @@ fun DataScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Summary card
-            Card(
+            // Summary cards
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    DataSummaryItem(
-                        label = "Total Points",
-                        value = uiState.totalDataPoints.toString()
-                    )
-                    DataSummaryItem(
-                        label = "Plugins",
-                        value = uiState.activePluginCount.toString()
-                    )
-                    DataSummaryItem(
-                        label = "This Week",
-                        value = uiState.weeklyDataPoints.toString()
-                    )
-                }
-            }
-            
-            // Filter chips
-            if (selectedFilters.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    selectedFilters.forEach { filter ->
-                        FilterChip(
-                            selected = true,
-                            onClick = {
-                                selectedFilters = selectedFilters - filter
-                                viewModel.updateFilters(selectedFilters.toList())
-                            },
-                            label = { Text(filter) },
-                            trailingIcon = {
-                                Icon(
-                                    imageVector = AppIcons.Navigation.close,
-                                    contentDescription = "Remove filter",
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        )
-                    }
-                }
+                SummaryCard(
+                    title = "Total",
+                    value = uiState.dataPoints.size.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                SummaryCard(
+                    title = "Plugins",
+                    value = uiState.plugins.size.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                SummaryCard(
+                    title = "This Week",
+                    value = uiState.weeklyDataPoints.toString(),
+                    modifier = Modifier.weight(1f)
+                )
             }
             
             // Data list
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(
-                    items = uiState.dataPoints,
-                    key = { it.id }
-                ) { dataPoint ->
-                    SwipeableDataItem(
-                        title = dataPoint.pluginId,
-                        subtitle = formatTimestamp(dataPoint.timestamp),
-                        value = dataPoint.value,
-                        icon = AppIcons.Plugin.custom,
-                        onDelete = {
-                            viewModel.deleteDataPoint(dataPoint)
-                            scope.launch {
-                                val result = snackbarHostState.showSnackbar(
-                                    message = "Data point deleted",
-                                    actionLabel = "Undo",
-                                    duration = SnackbarDuration.Short
-                                )
-                                if (result == SnackbarResult.ActionPerformed) {
-                                    viewModel.restoreDataPoint(dataPoint)
-                                }
-                            }
-                        },
-                        onEdit = {
-                            // Navigate to edit screen
-                        }
+            if (uiState.isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else if (uiState.dataPoints.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No data points yet",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                
-                if (uiState.dataPoints.isEmpty()) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = AppIcons.Storage.database,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(48.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "No data points yet",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(
+                        items = uiState.dataPoints,
+                        key = { it.id }
+                    ) { dataPoint ->
+                        DataPointCard(
+                            dataPoint = dataPoint,
+                            pluginName = uiState.pluginNames[dataPoint.pluginId] ?: dataPoint.pluginId,
+                            isExpanded = expandedDataPointId == dataPoint.id,
+                            isSelected = uiState.selectedDataPoints.contains(dataPoint.id),
+                            isInSelectionMode = uiState.isInSelectionMode,
+                            onToggleExpanded = {
+                                expandedDataPointId = if (expandedDataPointId == dataPoint.id) null else dataPoint.id
+                            },
+                            onToggleSelection = {
+                                viewModel.toggleDataPointSelection(dataPoint.id)
+                            },
+                            onDelete = {
+                                viewModel.deleteDataPoint(dataPoint.id)
+                            },
+                            onLongPress = {
+                                viewModel.enterSelectionMode()
+                                viewModel.toggleDataPointSelection(dataPoint.id)
                             }
-                        }
+                        )
                     }
                 }
             }
@@ -191,11 +154,13 @@ fun DataScreen(
     // Filter dialog
     if (showFilterDialog) {
         FilterDialog(
-            availableFilters = uiState.availablePlugins,
-            selectedFilters = selectedFilters,
-            onFiltersSelected = { filters ->
-                selectedFilters = filters
-                viewModel.updateFilters(filters.toList())
+            plugins = uiState.plugins,
+            currentFilter = FilterState(
+                selectedPlugin = uiState.selectedPluginFilter,
+                searchQuery = uiState.searchQuery
+            ),
+            onApply = { filterState ->
+                viewModel.updateFilters(filterState)
                 showFilterDialog = false
             },
             onDismiss = { showFilterDialog = false }
@@ -208,82 +173,228 @@ fun DataScreen(
             onExport = { format ->
                 viewModel.exportData(format)
                 showExportDialog = false
-                scope.launch {
-                    snackbarHostState.showSnackbar("Data exported successfully")
-                }
             },
             onDismiss = { showExportDialog = false }
         )
     }
-}
-
-@Composable
-private fun DataSummaryItem(
-    label: String,
-    value: String
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+    
+    // Show snackbar for messages
+    uiState.message?.let { message ->
+        LaunchedEffect(message) {
+            // Show snackbar
+            viewModel.clearMessage()
+        }
+    }
+    
+    // Show error dialog
+    uiState.error?.let { error ->
+        AlertDialog(
+            onDismissRequest = { viewModel.clearError() },
+            title = { Text("Error") },
+            text = { Text(error) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearError() }) {
+                    Text("OK")
+                }
+            }
         )
     }
 }
 
 @Composable
+private fun DataPointCard(
+    dataPoint: DataPoint,
+    pluginName: String,
+    isExpanded: Boolean,
+    isSelected: Boolean,
+    isInSelectionMode: Boolean,
+    onToggleExpanded: () -> Unit,
+    onToggleSelection: () -> Unit,
+    onDelete: () -> Unit,
+    onLongPress: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = if (isSelected) {
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            )
+        } else {
+            CardDefaults.cardColors()
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = pluginName,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm")
+                            .withZone(ZoneId.systemDefault())
+                            .format(dataPoint.timestamp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                if (isInSelectionMode) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { onToggleSelection() }
+                    )
+                } else {
+                    IconButton(onClick = onToggleExpanded) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "More options"
+                        )
+                    }
+                }
+            }
+            
+            if (isExpanded) {
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Show data values
+                dataPoint.value.forEach { (key, value) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = key,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = value.toString(),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+                
+                // Action buttons
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDelete) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Delete")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SummaryCard(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SelectionModeTopBar(
+    selectedCount: Int,
+    onCancelSelection: () -> Unit,
+    onDeleteSelected: () -> Unit
+) {
+    TopAppBar(
+        title = { Text("$selectedCount selected") },
+        navigationIcon = {
+            IconButton(onClick = onCancelSelection) {
+                Icon(
+                    imageVector = AppIcons.Navigation.close,
+                    contentDescription = "Cancel selection"
+                )
+            }
+        },
+        actions = {
+            IconButton(onClick = onDeleteSelected) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete selected"
+                )
+            }
+        }
+    )
+}
+
+@Composable
 private fun FilterDialog(
-    availableFilters: List<String>,
-    selectedFilters: Set<String>,
-    onFiltersSelected: (Set<String>) -> Unit,
+    plugins: List<com.domain.app.core.plugin.Plugin>,
+    currentFilter: FilterState,
+    onApply: (FilterState) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var tempSelection by remember { mutableStateOf(selectedFilters) }
+    var selectedPlugin by remember { mutableStateOf(currentFilter.selectedPlugin) }
+    var searchQuery by remember { mutableStateOf(currentFilter.searchQuery) }
     
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Filter Data") },
         text = {
-            Column {
-                Text(
-                    text = "Select plugins to filter",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-                
-                availableFilters.forEach { filter ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = filter in tempSelection,
-                            onCheckedChange = { checked ->
-                                tempSelection = if (checked) {
-                                    tempSelection + filter
-                                } else {
-                                    tempSelection - filter
-                                }
-                            }
-                        )
-                        Text(
-                            text = filter,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-                    }
-                }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Plugin filter
+                // Simple dropdown or list of plugins
+                Text("Filter by plugin:")
+                // Add plugin selection UI here
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onFiltersSelected(tempSelection) }
+                onClick = {
+                    onApply(FilterState(selectedPlugin, null, searchQuery))
+                }
             ) {
                 Text("Apply")
             }
@@ -301,62 +412,41 @@ private fun ExportDialog(
     onExport: (ExportFormat) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var selectedFormat by remember { mutableStateOf(ExportFormat.JSON) }
-    
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Export Data") },
         text = {
             Column {
-                Text(
-                    text = "Select export format",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
+                Text("Select export format:")
+                Spacer(modifier = Modifier.height(16.dp))
                 
-                ExportFormat.values().forEach { format ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = format == selectedFormat,
-                            onClick = { selectedFormat = format }
-                        )
-                        Text(
-                            text = format.displayName,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-                    }
+                TextButton(
+                    onClick = { onExport(ExportFormat.CSV) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("CSV")
+                }
+                
+                TextButton(
+                    onClick = { onExport(ExportFormat.JSON) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("JSON")
+                }
+                
+                TextButton(
+                    onClick = { onExport(ExportFormat.XML) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("XML")
                 }
             }
         },
-        confirmButton = {
-            Button(
-                onClick = { onExport(selectedFormat) }
-            ) {
-                Text("Export")
-            }
-        },
+        confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Cancel")
             }
         }
     )
-}
-
-enum class ExportFormat(val displayName: String) {
-    JSON("JSON"),
-    CSV("CSV"),
-    XML("XML")
-}
-
-private fun formatTimestamp(timestamp: Long): String {
-    val instant = Instant.ofEpochMilli(timestamp)
-    val dateTime = LocalDateTime.ofInstant(instant, ZoneId.systemDefault())
-    val formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy HH:mm")
-    return dateTime.format(formatter)
 }

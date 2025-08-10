@@ -1,4 +1,5 @@
 package com.domain.app.ui.dashboard
+import com.domain.app.ui.components.core.input.ValidationResult
 
 import com.domain.app.core.data.DataPoint
 import androidx.compose.foundation.layout.*
@@ -188,8 +189,3 @@ fun MultiStageQuickAddDialog(
 }
 
 // ValidationResult class for the ValidatedTextField
-sealed class ValidationResult {
-    object Valid : ValidationResult()
-    data class Error(val message: String) : ValidationResult()
-    data class Warning(val message: String) : ValidationResult()
-}

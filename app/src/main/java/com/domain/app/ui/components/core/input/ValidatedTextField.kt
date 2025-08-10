@@ -9,41 +9,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.unit.dp
 import com.domain.app.ui.theme.AppIcons
-import kotlinx.coroutines.delay
 
 /**
  * A text field with built-in validation, error handling, and formatting.
  * Replaces all the duplicate text field implementations across forms.
- * 
- * @param value Current text value
- * @param onValueChange Callback when text changes
- * @param label Label for the field
- * @param modifier Modifier for the field
- * @param placeholder Placeholder text
- * @param helperText Helper text shown below the field
- * @param errorText Error text (overrides helper text when not null)
- * @param leadingIcon Optional leading icon
- * @param trailingIcon Optional trailing icon
- * @param keyboardOptions Keyboard configuration
- * @param keyboardActions Keyboard actions
- * @param singleLine Whether field is single line
- * @param maxLines Maximum lines for multiline fields
- * @param enabled Whether field is enabled
- * @param readOnly Whether field is read-only
- * @param validator Optional validation function
- * @param formatter Optional formatter function
- * @param visualTransformation Visual transformation for the field
- * @param maxLength Maximum character length
- * @param showCharacterCount Whether to show character count
- * @param required Whether field is required
- * @param validateOnFocusLost Whether to validate when focus is lost
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -195,14 +169,23 @@ fun ValidatedTextField(
                 .padding(horizontal = 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            // FIX: Smart cast issue - extract values before using
+            val currentText = when {
+                errorText != null -> errorText
+                validationResult is ValidationResult.Error -> {
+                    val error = validationResult as ValidationResult.Error
+                    error.message
+                }
+                validationResult is ValidationResult.Warning -> {
+                    val warning = validationResult as ValidationResult.Warning
+                    warning.message
+                }
+                helperText != null -> helperText
+                else -> ""
+            }
+            
             AnimatedContent(
-                targetState = when {
-                    errorText != null -> errorText
-                    validationResult is ValidationResult.Error -> validationResult.message
-                    validationResult is ValidationResult.Warning -> validationResult.message
-                    helperText != null -> helperText
-                    else -> ""
-                },
+                targetState = currentText,
                 transitionSpec = {
                     fadeIn() togetherWith fadeOut()
                 },
