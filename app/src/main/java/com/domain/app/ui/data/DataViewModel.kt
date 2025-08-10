@@ -1,21 +1,26 @@
-// app/src/main/java/com/domain/app/ui/data/DataViewModel.kt
 package com.domain.app.ui.data
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.data.DataPoint
 import com.domain.app.core.data.DataRepository
+import com.domain.app.core.export.ExportManager
+import com.domain.app.core.export.ExportResult
+import com.domain.app.core.plugin.ExportFormat
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
 @HiltViewModel
 class DataViewModel @Inject constructor(
     private val dataRepository: DataRepository,
-    private val pluginManager: PluginManager
+    private val pluginManager: PluginManager,
+    private val exportManager: ExportManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(DataUiState())
@@ -23,10 +28,12 @@ class DataViewModel @Inject constructor(
     
     private val selectedPluginFilter = MutableStateFlow<String?>(null)
     private val refreshTrigger = MutableStateFlow(0)
+    private val searchQuery = MutableStateFlow("")
     
     init {
         loadPluginInfo()
         observeDataPoints()
+        loadWeeklyDataPoints()
     }
     
     private fun loadPluginInfo() {
@@ -48,12 +55,16 @@ class DataViewModel @Inject constructor(
     private fun observeDataPoints() {
         combine(
             selectedPluginFilter,
+            searchQuery,
             refreshTrigger
-        ) { filter, _ -> filter }
-            .flatMapLatest { pluginId ->
-                when (pluginId) {
-                    null -> dataRepository.getLatestDataPoints(100)
-                    else -> dataRepository.getPluginData(pluginId)
+        ) { filter, query, _ -> 
+            Pair(filter, query)
+        }
+            .flatMapLatest { (pluginId, query) ->
+                when {
+                    query.isNotEmpty() -> dataRepository.searchDataPoints(query)
+                    pluginId != null -> dataRepository.getPluginData(pluginId)
+                    else -> dataRepository.getLatestDataPoints(100)
                 }
             }
             .onEach { dataPoints ->
@@ -76,9 +87,29 @@ class DataViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
     
+    private fun loadWeeklyDataPoints() {
+        viewModelScope.launch {
+            val weekStart = Instant.now().minus(7, ChronoUnit.DAYS)
+            dataRepository.getRecentData(24 * 7)
+                .map { dataPoints ->
+                    dataPoints.filter { it.timestamp.isAfter(weekStart) }
+                }
+                .collect { weeklyData ->
+                    _uiState.update {
+                        it.copy(weeklyDataPoints = weeklyData)
+                    }
+                }
+        }
+    }
+    
     fun filterByPlugin(pluginId: String?) {
         selectedPluginFilter.value = pluginId
         _uiState.update { it.copy(selectedPluginFilter = pluginId) }
+    }
+    
+    fun searchDataPoints(query: String) {
+        searchQuery.value = query
+        _uiState.update { it.copy(searchQuery = query) }
     }
     
     fun refreshData() {
@@ -176,75 +207,124 @@ class DataViewModel @Inject constructor(
     }
     
     fun clearSelection() {
-        _uiState.update { 
-            it.copy(
+        _uiState.update { state ->
+            state.copy(
                 selectedDataPoints = emptySet(),
                 isInSelectionMode = false
             )
         }
     }
     
-    fun searchDataPoints(query: String) {
+    // NEW METHODS THAT WERE MISSING:
+    
+    fun enterSelectionMode() {
+        _uiState.update { it.copy(isInSelectionMode = true) }
+    }
+    
+    fun exitSelectionMode() {
+        _uiState.update { 
+            it.copy(
+                isInSelectionMode = false, 
+                selectedDataPoints = emptySet()
+            )
+        }
+    }
+    
+    fun deleteSelectedDataPoints() {
         viewModelScope.launch {
-            _uiState.update { it.copy(searchQuery = query, isLoading = true) }
-            
-            if (query.isBlank()) {
-                refreshData()
-                return@launch
+            val ids = _uiState.value.selectedDataPoints.toList()
+            if (ids.isNotEmpty()) {
+                deleteMultipleDataPoints(ids)
             }
+        }
+    }
+    
+    fun updateFilters(filterState: FilterState) {
+        _uiState.update {
+            it.copy(
+                selectedPluginFilter = filterState.selectedPlugin?.id,
+                searchQuery = filterState.searchQuery
+            )
+        }
+        
+        // Apply the filters
+        filterState.selectedPlugin?.let { 
+            filterByPlugin(it.id) 
+        } ?: filterByPlugin(null)
+        
+        if (filterState.searchQuery.isNotEmpty()) {
+            searchDataPoints(filterState.searchQuery)
+        } else {
+            searchDataPoints("")
+        }
+    }
+    
+    fun exportData(format: ExportFormat) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, message = "Preparing export...") }
             
-            dataRepository.searchDataPoints(query)
-                .catch { exception ->
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            error = "Search failed: ${exception.message}"
-                        )
+            try {
+                val context = android.app.Application() // This will need to be injected properly
+                val result = when (format) {
+                    ExportFormat.CSV -> exportManager.exportAllDataToCsv(context)
+                    ExportFormat.JSON -> ExportResult.Error("JSON export not yet implemented")
+                    ExportFormat.XML -> ExportResult.Error("XML export not yet implemented")
+                    ExportFormat.CUSTOM -> ExportResult.Error("Custom export not available")
+                }
+                
+                when (result) {
+                    is ExportResult.Success -> {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                message = "Export successful: ${result.fileName}"
+                            )
+                        }
+                    }
+                    is ExportResult.Error -> {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                error = result.message
+                            )
+                        }
                     }
                 }
-                .collect { results ->
-                    _uiState.update {
-                        it.copy(
-                            dataPoints = results,
-                            isLoading = false
-                        )
-                    }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = "Export failed: ${e.message}"
+                    )
                 }
+            }
         }
     }
     
     fun clearMessage() {
         _uiState.update { it.copy(message = null) }
     }
-    
-    fun clearError() {
-        _uiState.update { it.copy(error = null) }
-    }
 }
 
-/**
- * UI state for the Data screen
- */
 data class DataUiState(
-    // Data
     val dataPoints: List<DataPoint> = emptyList(),
+    val weeklyDataPoints: List<DataPoint> = emptyList(), // Added missing property
     val plugins: List<Plugin> = emptyList(),
     val pluginNames: Map<String, String> = emptyMap(),
-    val pluginSummaries: List<Pair<String, String>> = emptyList(), // For dropdowns
-    
-    // Filters and search
+    val pluginSummaries: List<Pair<String, String>> = emptyList(),
     val selectedPluginFilter: String? = null,
-    val searchQuery: String = "",
-    
-    // Selection mode
-    val isInSelectionMode: Boolean = false,
     val selectedDataPoints: Set<String> = emptySet(),
-    
-    // Loading states
-    val isLoading: Boolean = true,
+    val searchQuery: String = "",
+    val isLoading: Boolean = false,
     val isDeleting: Boolean = false,
-    
-    // Messages
+    val isInSelectionMode: Boolean = false,
     val error: String? = null,
     val message: String? = null
+)
+
+// FilterState data class that was missing
+data class FilterState(
+    val selectedPlugin: Plugin? = null,
+    val dateRange: Pair<Long, Long>? = null,
+    val searchQuery: String = ""
 )

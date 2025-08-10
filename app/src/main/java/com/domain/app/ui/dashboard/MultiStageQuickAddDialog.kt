@@ -1,7 +1,5 @@
 package com.domain.app.ui.dashboard
-import com.domain.app.ui.components.core.input.ValidationResult
 
-import com.domain.app.core.data.DataPoint
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -11,13 +9,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.domain.app.core.data.DataPoint
+import com.domain.app.core.plugin.InputType
 import com.domain.app.core.plugin.Plugin
+import com.domain.app.core.plugin.ValidationResult
 import com.domain.app.ui.components.core.feedback.LoadingButton
 import com.domain.app.ui.components.core.input.ValidatedTextField
 import com.domain.app.ui.theme.AppIcons
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,22 +87,69 @@ fun MultiStageQuickAddDialog(
                         ValidatedTextField(
                             value = inputValue,
                             onValueChange = { inputValue = it },
-                            label = plugin.metadata.inputType.displayName,
-                            placeholder = "Enter ${plugin.metadata.inputType.displayName.lowercase()}",
+                            label = plugin.metadata.inputType.name.lowercase().replace('_', ' '),
+                            placeholder = "Enter ${plugin.metadata.inputType.name.lowercase().replace('_', ' ')}",
                             validator = { value ->
                                 when (plugin.metadata.inputType) {
-                                    Plugin.DataType.NUMERIC -> {
+                                    InputType.NUMBER -> {
                                         if (value.toDoubleOrNull() == null) {
                                             ValidationResult.Error("Please enter a valid number")
                                         } else {
-                                            ValidationResult.Valid
+                                            ValidationResult.Success
                                         }
                                     }
-                                    else -> {
+                                    InputType.TEXT -> {
                                         if (value.isEmpty()) {
                                             ValidationResult.Error("This field is required")
                                         } else {
-                                            ValidationResult.Valid
+                                            ValidationResult.Success
+                                        }
+                                    }
+                                    InputType.SCALE -> {
+                                        val number = value.toIntOrNull()
+                                        if (number == null) {
+                                            ValidationResult.Error("Please enter a number")
+                                        } else if (number !in 1..10) {
+                                            ValidationResult.Error("Please enter a value between 1 and 10")
+                                        } else {
+                                            ValidationResult.Success
+                                        }
+                                    }
+                                    InputType.CHOICE -> {
+                                        if (value.isEmpty()) {
+                                            ValidationResult.Error("Please select an option")
+                                        } else {
+                                            ValidationResult.Success
+                                        }
+                                    }
+                                    InputType.SLIDER -> {
+                                        val number = value.toDoubleOrNull()
+                                        if (number == null) {
+                                            ValidationResult.Error("Please enter a valid number")
+                                        } else {
+                                            ValidationResult.Success
+                                        }
+                                    }
+                                    InputType.DURATION -> {
+                                        val duration = value.toLongOrNull()
+                                        if (duration == null || duration < 0) {
+                                            ValidationResult.Error("Please enter a valid duration")
+                                        } else {
+                                            ValidationResult.Success
+                                        }
+                                    }
+                                    InputType.TIME_PICKER -> {
+                                        if (value.isEmpty()) {
+                                            ValidationResult.Error("Please select a time")
+                                        } else {
+                                            ValidationResult.Success
+                                        }
+                                    }
+                                    InputType.DATE_PICKER -> {
+                                        if (value.isEmpty()) {
+                                            ValidationResult.Error("Please select a date")
+                                        } else {
+                                            ValidationResult.Success
                                         }
                                     }
                                 }
@@ -109,7 +158,7 @@ fun MultiStageQuickAddDialog(
                     }
                     
                     1 -> {
-                        // Notes stage
+                        // Notes input stage
                         Text(
                             text = "Add notes (optional)",
                             style = MaterialTheme.typography.bodyLarge
@@ -120,9 +169,10 @@ fun MultiStageQuickAddDialog(
                             onValueChange = { notes = it },
                             label = { Text("Notes") },
                             placeholder = { Text("Any additional context...") },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 3,
-                            maxLines = 5
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp),
+                            maxLines = 4
                         )
                     }
                 }
@@ -133,7 +183,7 @@ fun MultiStageQuickAddDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (currentStage > 0) {
-                        OutlinedButton(
+                        TextButton(
                             onClick = { currentStage-- },
                             modifier = Modifier.weight(1f),
                             enabled = !isLoading
@@ -141,7 +191,7 @@ fun MultiStageQuickAddDialog(
                             Text("Back")
                         }
                     } else {
-                        OutlinedButton(
+                        TextButton(
                             onClick = onDismiss,
                             modifier = Modifier.weight(1f),
                             enabled = !isLoading
@@ -153,20 +203,28 @@ fun MultiStageQuickAddDialog(
                     LoadingButton(
                         onClick = {
                             if (currentStage < 1) {
-                                currentStage++
+                                // Validate before moving to next stage
+                                if (inputValue.isNotEmpty()) {
+                                    currentStage++
+                                }
                             } else {
                                 scope.launch {
                                     isLoading = true
-                                    // Create data point
+                                    
+                                    // Create data point with proper structure
                                     val dataPoint = DataPoint(
+                                        id = UUID.randomUUID().toString(),
                                         pluginId = plugin.id,
-                                        value = inputValue,
-                                        timestamp = Instant.now().toEpochMilli(),
-                                        metadata = if (notes.isNotEmpty()) {
-                                            mapOf("notes" to notes)
-                                        } else {
-                                            emptyMap()
-                                        }
+                                        timestamp = Instant.now(),
+                                        type = "manual",
+                                        value = buildMap {
+                                            put("value", inputValue)
+                                            if (notes.isNotEmpty()) {
+                                                put("notes", notes)
+                                            }
+                                        },
+                                        metadata = emptyMap(),
+                                        source = "manual_entry"
                                     )
                                     
                                     // Simulate processing
@@ -187,5 +245,3 @@ fun MultiStageQuickAddDialog(
         }
     }
 }
-
-// ValidationResult class for the ValidatedTextField
