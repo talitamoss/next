@@ -1,6 +1,6 @@
 package com.domain.app.ui.dashboard
-import com.domain.app.core.validation.ValidationResult
 
+import com.domain.app.core.validation.ValidationResult
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*

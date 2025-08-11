@@ -14,6 +14,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.unit.dp
 import com.domain.app.ui.theme.AppIcons
+import com.domain.app.core.validation.ValidationResult
+import com.domain.app.core.validation.Validator
 
 /**
  * A text field with built-in validation, error handling, and formatting.
@@ -46,7 +48,7 @@ fun ValidatedTextField(
     validateOnFocusLost: Boolean = true
 ) {
     var internalValue by remember(value) { mutableStateOf(value) }
-    var validationResult by remember { mutableStateOf<ValidationResult>(ValidationResult.Valid) }
+    var validationResult by remember { mutableStateOf<ValidationResult>(ValidationResult.Success) }
     var hasFocus by remember { mutableStateOf(false) }
     var hasBeenFocused by remember { mutableStateOf(false) }
     
@@ -106,7 +108,7 @@ fun ValidatedTextField(
                         exit = fadeOut() + scaleOut()
                     ) {
                         when (validationResult) {
-                            is ValidationResult.Valid -> {
+                            is ValidationResult.Success -> {
                                 if (value.isNotEmpty()) {
                                     Icon(
                                         imageVector = AppIcons.Status.success,
@@ -254,7 +256,7 @@ fun EmailTextField(
                 email.isEmpty() && required -> ValidationResult.Error("Email is required")
                 email.isNotEmpty() && !email.matches(Regex("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}")) ->
                     ValidationResult.Error("Invalid email format")
-                else -> ValidationResult.Valid
+                else -> ValidationResult.Success
             }
         },
         enabled = enabled,
@@ -309,7 +311,7 @@ fun PasswordTextField(
                 password.length < 8 -> ValidationResult.Error("Password must be at least 8 characters")
                 !password.any { it.isDigit() } -> ValidationResult.Warning("Add numbers for stronger password")
                 !password.any { it.isUpperCase() } -> ValidationResult.Warning("Add uppercase for stronger password")
-                else -> ValidationResult.Valid
+                else -> ValidationResult.Success
             }
         } else null,
         enabled = enabled,
@@ -378,20 +380,11 @@ fun NumberTextField(
                     ValidationResult.Error("Minimum value is $min")
                 max != null && number != null && number > max -> 
                     ValidationResult.Error("Maximum value is $max")
-                else -> ValidationResult.Valid
+                else -> ValidationResult.Success
             }
         },
         enabled = enabled,
         required = required,
         modifier = modifier
     )
-}
-
-/**
- * Validation result sealed class
- */
-sealed class ValidationResult {
-    object Valid : ValidationResult()
-    data class Error(val message: String) : ValidationResult()
-    data class Warning(val message: String) : ValidationResult()
 }
