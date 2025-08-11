@@ -4,6 +4,7 @@ import android.content.Context
 import com.domain.app.core.data.DataPoint
 import com.domain.app.core.plugin.security.PluginSecurityManifest
 import com.domain.app.core.plugin.security.PluginTrustLevel
+import com.domain.app.core.validation.ValidationResult
 
 /**
  * Core plugin interface defining the contract for all behavioral data collection plugins.
@@ -182,11 +183,6 @@ data class QuickAddStage(
 /**
  * Validation results
  */
-sealed class ValidationResult {
-    object Success : ValidationResult()
-    data class Error(val message: String) : ValidationResult()
-    data class Warning(val message: String) : ValidationResult()
-}
 
 /**
  * Risk warning for permissions
