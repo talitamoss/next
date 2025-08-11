@@ -48,6 +48,7 @@ class ExportManager @Inject constructor(
             val plugins = pluginManager.getAllActivePlugins()
             Log.d(TAG, "Found ${plugins.size} active plugins")
             
+            // Collect the Flow to get List<DataPoint>
             val allData = dataRepository.getRecentData(24 * 365).first()
             Log.d(TAG, "Retrieved ${allData.size} total data points")
             

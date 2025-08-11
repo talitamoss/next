@@ -1,5 +1,6 @@
 package com.domain.app.ui.data
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.data.DataPoint
@@ -10,6 +11,7 @@ import com.domain.app.core.plugin.ExportFormat
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -20,7 +22,8 @@ import javax.inject.Inject
 class DataViewModel @Inject constructor(
     private val dataRepository: DataRepository,
     private val pluginManager: PluginManager,
-    private val exportManager: ExportManager
+    private val exportManager: ExportManager,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(DataUiState())
@@ -215,8 +218,6 @@ class DataViewModel @Inject constructor(
         }
     }
     
-    // NEW METHODS THAT WERE MISSING:
-    
     fun enterSelectionMode() {
         _uiState.update { it.copy(isInSelectionMode = true) }
     }
@@ -264,7 +265,6 @@ class DataViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, message = "Preparing export...") }
             
             try {
-                val context = android.app.Application() // This will need to be injected properly
                 val result = when (format) {
                     ExportFormat.CSV -> exportManager.exportAllDataToCsv(context)
                     ExportFormat.JSON -> ExportResult.Error("JSON export not yet implemented")
@@ -304,11 +304,15 @@ class DataViewModel @Inject constructor(
     fun clearMessage() {
         _uiState.update { it.copy(message = null) }
     }
+    
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
+    }
 }
 
 data class DataUiState(
     val dataPoints: List<DataPoint> = emptyList(),
-    val weeklyDataPoints: List<DataPoint> = emptyList(), // Added missing property
+    val weeklyDataPoints: List<DataPoint> = emptyList(),
     val plugins: List<Plugin> = emptyList(),
     val pluginNames: Map<String, String> = emptyMap(),
     val pluginSummaries: List<Pair<String, String>> = emptyList(),
@@ -322,7 +326,6 @@ data class DataUiState(
     val message: String? = null
 )
 
-// FilterState data class that was missing
 data class FilterState(
     val selectedPlugin: Plugin? = null,
     val dateRange: Pair<Long, Long>? = null,

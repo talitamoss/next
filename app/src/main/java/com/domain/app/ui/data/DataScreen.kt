@@ -1,5 +1,7 @@
 package com.domain.app.ui.data
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,8 +16,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.domain.app.core.data.DataPoint
-import com.domain.app.core.export.ExportFormat
+import com.domain.app.core.plugin.ExportFormat
 import com.domain.app.ui.theme.AppIcons
+import kotlinx.coroutines.launch
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -91,7 +94,7 @@ fun DataScreen(
                 )
                 SummaryCard(
                     title = "This Week",
-                    value = uiState.weeklyDataPoints.toString(),
+                    value = uiState.weeklyDataPoints.size.toString(),  // Fixed - use .size not .toString()
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -156,7 +159,7 @@ fun DataScreen(
         FilterDialog(
             plugins = uiState.plugins,
             currentFilter = FilterState(
-                selectedPlugin = uiState.selectedPluginFilter,
+                selectedPlugin = uiState.plugins.find { it.id == uiState.selectedPluginFilter },  // Fixed - convert String? to Plugin?
                 searchQuery = uiState.searchQuery
             ),
             onApply = { filterState ->
@@ -201,6 +204,7 @@ fun DataScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DataPointCard(
     dataPoint: DataPoint,
@@ -215,7 +219,17 @@ private fun DataPointCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier,
+        modifier = modifier
+            .combinedClickable(
+                onClick = {
+                    if (isInSelectionMode) {
+                        onToggleSelection()
+                    } else {
+                        onToggleExpanded()
+                    }
+                },
+                onLongClick = onLongPress
+            ),
         colors = if (isSelected) {
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -385,9 +399,47 @@ private fun FilterDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Plugin filter
-                // Simple dropdown or list of plugins
                 Text("Filter by plugin:")
-                // Add plugin selection UI here
+                
+                // Plugin selection
+                plugins.forEach { plugin ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedPlugin?.id == plugin.id,
+                            onClick = { selectedPlugin = plugin }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(plugin.metadata.name)
+                    }
+                }
+                
+                // Clear filter option
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = selectedPlugin == null,
+                        onClick = { selectedPlugin = null }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("All plugins")
+                }
+                
+                // Search query
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Search") },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
