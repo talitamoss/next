@@ -26,4 +26,9 @@ sealed class FeedContent {
         val chartData: String? = null,
         val timeRange: String
     ) : FeedContent()
+
+    // 🌸 ADD THIS:
+    data class Text(
+        val value: String
+    ) : FeedContent()
 }

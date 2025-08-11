@@ -30,7 +30,9 @@ android {
             )
         }
     }
+
     compileOptions {
+        // Keep 11 for now (safe with your environment). We can move to 17 later.
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
         isCoreLibraryDesugaringEnabled = true
@@ -38,11 +40,14 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
-    buildFeatures {
-        compose = true
-    }
-    packagingOptions {
-        doNotStrip.add("**/*.so") // prevents stripping of native .so libraries
+
+    buildFeatures { compose = true }
+
+    // Replace deprecated packagingOptions/doNotStrip with new DSL
+    packaging {
+        jniLibs {
+            keepDebugSymbols += setOf("**/*.so")
+        }
     }
 }
 
@@ -50,11 +55,11 @@ dependencies {
     // Core library desugaring
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 
-    // Accompanist for swipe-to-refresh support
-    implementation("com.google.accompanist:accompanist-swiperefresh:0.33.2-alpha")
+    // Accompanist (Material 3 placeholder + swipe refresh) — aligned versions
+    implementation("com.google.accompanist:accompanist-swiperefresh:0.34.0")
+    implementation("com.google.accompanist:accompanist-placeholder-material3:0.34.0")
 
-
-    // Compose
+    // Compose (BOM controls versions)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -63,50 +68,46 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
-    
-    // Material Icons Extended
-    implementation("androidx.compose.material:material-icons-extended:1.5.4")
-    
+
+    // Material Icons Extended — let BOM manage the version
+    implementation("androidx.compose.material:material-icons-extended")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    
+
     // Room
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     kapt("androidx.room:room-compiler:2.6.1")
-    
-    // SQLCipher for database encryption
+
+    // SQLCipher + SQLite KTX
     implementation("net.zetetic:android-database-sqlcipher:4.5.4")
     implementation("androidx.sqlite:sqlite-ktx:2.4.0")
-    
+
     // Security
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
-    
-    // DataStore for preferences
+
+    // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
-    
+
     // Navigation
     implementation("androidx.navigation:navigation-fragment-ktx:2.7.6")
     implementation("androidx.navigation:navigation-ui-ktx:2.7.6")
     implementation("androidx.navigation:navigation-compose:2.7.6")
-    
+
     // Lifecycle
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
-    
+
     // Preferences
     implementation("androidx.preference:preference-ktx:1.2.1")
-    
-    // Dependency Injection
+
+    // Hilt
     implementation("com.google.dagger:hilt-android:2.48")
     kapt("com.google.dagger:hilt-compiler:2.48")
-    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
-    
-    // TODO: Briar dependencies (will be added when implementing real backend)
-    // implementation("org.briarproject:briar-api:1.4.0")
-    // implementation("org.briarproject:briar-core:1.4.0")
-    
-    // Testing
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+
+    // Tests / tooling
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -116,6 +117,4 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 }
 
-kapt {
-    correctErrorTypes = true
-}
+kapt { correctErrorTypes = true }

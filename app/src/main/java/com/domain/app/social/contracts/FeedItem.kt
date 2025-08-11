@@ -11,5 +11,6 @@ data class FeedItem(
     val timestamp: Instant,
     val isRead: Boolean = false,
     val canReshare: Boolean = false,
-    val expiresAt: Instant? = null
+    val expiresAt: Instant? = null,
+    val tags: List<String> = emptyList()
 )

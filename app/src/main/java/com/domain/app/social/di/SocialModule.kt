@@ -1,51 +1,46 @@
 package com.domain.app.social.di
 
-import android.content.Context
-import com.domain.app.social.contracts.MockSocialRepository
-import com.domain.app.social.contracts.SocialRepository
+import com.domain.app.social.contracts.*
+import com.domain.app.social.data.MockSocialFeedRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
-/**
- * Dependency injection module for social features
- * Switches between mock and real implementations based on feature flag
- */
 @Module
 @InstallIn(SingletonComponent::class)
 object SocialModule {
 
-    /**
-     * Feature flag to control which implementation to use
-     * Set to true for UI development with mocks
-     * Set to false for real Briar implementation
-     */
-    private const val USE_MOCK_SOCIAL = true
-
     @Provides
     @Singleton
-    fun provideSocialRepository(
-        @ApplicationContext context: Context,
-        mockRepository: MockSocialRepository
-        // TODO: Add real implementation parameters when ready
-        // realBriarManager: BriarManager,
-        // dataRepository: DataRepository,
-        // encryptionManager: EncryptionManager
-    ): SocialRepository {
-        return if (USE_MOCK_SOCIAL) {
-            mockRepository
-        } else {
-            // TODO: Return real implementation when backend is ready
-            throw NotImplementedError("Real social repository not yet implemented. Set USE_MOCK_SOCIAL = true")
-        }
+    fun provideSocialRepository(): SocialRepository {
+        val mockContacts = listOf(
+            SocialContact(
+                id = "1",
+                displayName = "Cashka",
+                isOnline = true,
+                trustLevel = TrustLevel.CLOSE_FRIEND
+            ),
+            SocialContact(
+                id = "2",
+                displayName = "Jordan",
+                isOnline = false,
+                trustLevel = TrustLevel.FRIEND
+            ),
+            SocialContact(
+                id = "3",
+                displayName = "Sam",
+                isOnline = true,
+                trustLevel = TrustLevel.FAMILY
+            )
+        )
+        return MockSocialRepository(mockContacts)
     }
 
     @Provides
     @Singleton
-    fun provideMockSocialRepository(): MockSocialRepository {
-        return MockSocialRepository()
+    fun provideSocialFeedRepository(): SocialFeedRepository {
+        return MockSocialFeedRepository()
     }
 }
