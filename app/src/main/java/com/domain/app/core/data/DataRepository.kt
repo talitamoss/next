@@ -253,7 +253,7 @@ class DataRepository @Inject constructor(
      * Delete multiple data points by IDs
      * Required by: DataViewModel
      */
-    suspend fun deleteDataPoints(ids: List<String>) {
+    suspend fun deleteDataPointsByIds(ids: List<String>) {
         dataPointDao.deleteByIds(ids)
     }
     

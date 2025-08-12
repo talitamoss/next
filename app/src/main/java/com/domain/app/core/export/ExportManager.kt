@@ -100,7 +100,7 @@ class ExportManager @Inject constructor(
             }
             
             val data: List<DataPoint> = if (startDate != null && endDate != null) {
-                dataRepository.getPluginDataInRange(pluginId, startDate, endDate)
+                dataRepository.getPluginDataInRange(pluginId, startDate, endDate).first()
             } else {
                 dataRepository.getPluginData(pluginId).first()
             }

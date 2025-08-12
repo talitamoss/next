@@ -158,7 +158,7 @@ class DataViewModel @Inject constructor(
             _uiState.update { it.copy(isDeleting = true, error = null) }
             
             try {
-                dataRepository.deleteDataPoints(ids)
+                dataRepository.deleteDataPointsByIds(ids)
                 
                 // Remove from UI immediately
                 _uiState.update { state ->

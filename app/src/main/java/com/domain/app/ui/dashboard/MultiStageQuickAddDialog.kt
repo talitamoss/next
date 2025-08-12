@@ -13,7 +13,6 @@ import androidx.compose.ui.window.DialogProperties
 import com.domain.app.core.data.DataPoint
 import com.domain.app.core.plugin.InputType
 import com.domain.app.core.plugin.Plugin
-import com.domain.app.core.plugin.ValidationResult
 import com.domain.app.ui.components.core.feedback.LoadingButton
 import com.domain.app.ui.components.core.input.ValidatedTextField
 import com.domain.app.ui.theme.AppIcons
