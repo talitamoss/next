@@ -75,12 +75,4 @@ sealed class ValidationResult {
      */
     fun hasWarning(): Boolean = this is Warning
     
-    /**
-     * Get the message if any (error or warning)
-     */
-    fun getMessage(): String? = when (this) {
-        is Success -> null
-        is Error -> message
-        is Warning -> message
-    }
 }
