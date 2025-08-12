@@ -6,86 +6,95 @@ import com.domain.app.core.plugin.RiskLevel
 
 /**
  * Extension functions for PluginCapability
- * This file centralizes all capability-related extensions to avoid duplication
+ * This file provides additional utility extensions that complement the core definitions
+ * Note: Core getDescription() and getRiskLevel() are defined in PluginCapability.kt
  */
-
-/**
- * Get human-readable description for a capability
- */
-fun PluginCapability.getDescription(): String = when (this) {
-    PluginCapability.READ_DATA -> "Read and view your data"
-    PluginCapability.WRITE_DATA -> "Create and modify data entries"
-    PluginCapability.DELETE_DATA -> "Delete existing data"
-    PluginCapability.NETWORK_ACCESS -> "Access network and internet"
-    PluginCapability.CAMERA_ACCESS -> "Use device camera"
-    PluginCapability.LOCATION_ACCESS -> "Access location services"
-    PluginCapability.NOTIFICATION_ACCESS -> "Send notifications"
-    PluginCapability.STORAGE_ACCESS -> "Access device storage"
-    PluginCapability.SENSOR_ACCESS -> "Access device sensors"
-    PluginCapability.EXPORT_DATA -> "Export data to files"
-    PluginCapability.IMPORT_DATA -> "Import data from files"
-    PluginCapability.SHARE_DATA -> "Share data with other apps"
-    PluginCapability.SYNC_DATA -> "Sync data across devices"
-    PluginCapability.ANALYTICS -> "Perform data analytics"
-    PluginCapability.BACKGROUND_EXECUTION -> "Run in background"
-}
-
-/**
- * Get risk level for a capability
- */
-fun PluginCapability.getRiskLevel(): RiskLevel = when (this) {
-    PluginCapability.READ_DATA -> RiskLevel.LOW
-    PluginCapability.WRITE_DATA -> RiskLevel.MEDIUM
-    PluginCapability.DELETE_DATA -> RiskLevel.HIGH
-    PluginCapability.NETWORK_ACCESS -> RiskLevel.MEDIUM
-    PluginCapability.CAMERA_ACCESS -> RiskLevel.HIGH
-    PluginCapability.LOCATION_ACCESS -> RiskLevel.HIGH
-    PluginCapability.NOTIFICATION_ACCESS -> RiskLevel.LOW
-    PluginCapability.STORAGE_ACCESS -> RiskLevel.MEDIUM
-    PluginCapability.SENSOR_ACCESS -> RiskLevel.LOW
-    PluginCapability.EXPORT_DATA -> RiskLevel.LOW
-    PluginCapability.IMPORT_DATA -> RiskLevel.MEDIUM
-    PluginCapability.SHARE_DATA -> RiskLevel.MEDIUM
-    PluginCapability.SYNC_DATA -> RiskLevel.MEDIUM
-    PluginCapability.ANALYTICS -> RiskLevel.LOW
-    PluginCapability.BACKGROUND_EXECUTION -> RiskLevel.MEDIUM
-}
 
 /**
  * Get icon for a capability (using Material Icons references)
+ * This is specific to the security module's UI needs
  */
 fun PluginCapability.getIcon(): String = when (this) {
-    PluginCapability.READ_DATA -> "visibility"
-    PluginCapability.WRITE_DATA -> "edit"
+    PluginCapability.READ_OWN_DATA -> "visibility"
+    PluginCapability.READ_ALL_DATA -> "visibility_off"
+    PluginCapability.MODIFY_DATA -> "edit"
     PluginCapability.DELETE_DATA -> "delete"
+    PluginCapability.COLLECT_DATA -> "add_circle"
+    
     PluginCapability.NETWORK_ACCESS -> "wifi"
     PluginCapability.CAMERA_ACCESS -> "camera_alt"
-    PluginCapability.LOCATION_ACCESS -> "location_on"
-    PluginCapability.NOTIFICATION_ACCESS -> "notifications"
-    PluginCapability.STORAGE_ACCESS -> "storage"
-    PluginCapability.SENSOR_ACCESS -> "sensors"
+    PluginCapability.MICROPHONE_ACCESS -> "mic"
+    PluginCapability.ACCESS_LOCATION -> "location_on"
+    PluginCapability.ACCESS_SENSORS -> "sensors"
+    PluginCapability.ACCESS_BIOMETRIC -> "fingerprint"
+    
+    PluginCapability.SHOW_NOTIFICATIONS -> "notifications"
+    PluginCapability.SYSTEM_NOTIFICATIONS -> "notification_important"
+    PluginCapability.SCHEDULE_NOTIFICATIONS -> "schedule"
+    PluginCapability.PUSH_NOTIFICATIONS -> "notifications_active"
+    
+    PluginCapability.LOCAL_STORAGE -> "storage"
+    PluginCapability.EXTERNAL_STORAGE -> "sd_storage"
+    PluginCapability.CLOUD_STORAGE -> "cloud"
+    PluginCapability.CLOUD_SYNC -> "sync"
+    PluginCapability.CACHE_DATA -> "cached"
+    
     PluginCapability.EXPORT_DATA -> "file_download"
     PluginCapability.IMPORT_DATA -> "file_upload"
     PluginCapability.SHARE_DATA -> "share"
-    PluginCapability.SYNC_DATA -> "sync"
-    PluginCapability.ANALYTICS -> "analytics"
-    PluginCapability.BACKGROUND_EXECUTION -> "schedule"
+    PluginCapability.INTEGRATE_SERVICES -> "hub"
+    
+    PluginCapability.ANALYTICS_BASIC -> "analytics"
+    PluginCapability.ANALYTICS_DETAILED -> "query_stats"
+    
+    PluginCapability.BACKGROUND_SYNC -> "sync"
+    PluginCapability.BACKGROUND_PROCESS -> "schedule"
+    PluginCapability.BACKGROUND_PROCESSING -> "schedule"
+    
+    PluginCapability.CUSTOM_UI -> "dashboard_customize"
+    PluginCapability.MODIFY_THEME -> "palette"
+    PluginCapability.ADD_MENU_ITEMS -> "menu"
+    PluginCapability.FULLSCREEN_UI -> "fullscreen"
+    
+    PluginCapability.MODIFY_SETTINGS -> "settings"
+    PluginCapability.INSTALL_PLUGINS -> "extension"
+    
+    PluginCapability.SEND_EMAILS -> "email"
+    PluginCapability.SEND_SMS -> "sms"
+    
+    PluginCapability.FILE_ACCESS -> "folder_open"
 }
 
 /**
- * Check if capability requires user consent
+ * Check if capability requires explicit user consent
+ * These are capabilities that access sensitive resources
  */
 fun PluginCapability.requiresConsent(): Boolean = when (this) {
     PluginCapability.CAMERA_ACCESS,
-    PluginCapability.LOCATION_ACCESS,
+    PluginCapability.MICROPHONE_ACCESS,
+    PluginCapability.ACCESS_LOCATION,
+    PluginCapability.ACCESS_BIOMETRIC,
+    PluginCapability.ACCESS_SENSORS,
     PluginCapability.DELETE_DATA,
+    PluginCapability.MODIFY_DATA,
+    PluginCapability.READ_ALL_DATA,
     PluginCapability.NETWORK_ACCESS,
-    PluginCapability.STORAGE_ACCESS -> true
+    PluginCapability.EXTERNAL_STORAGE,
+    PluginCapability.CLOUD_STORAGE,
+    PluginCapability.CLOUD_SYNC,
+    PluginCapability.FILE_ACCESS,
+    PluginCapability.SEND_EMAILS,
+    PluginCapability.SEND_SMS,
+    PluginCapability.SYSTEM_NOTIFICATIONS,
+    PluginCapability.PUSH_NOTIFICATIONS,
+    PluginCapability.MODIFY_SETTINGS,
+    PluginCapability.INSTALL_PLUGINS -> true
     else -> false
 }
 
 /**
  * Get color for risk level (as hex string for compatibility)
+ * This extends the RiskLevel enum with UI-specific color coding
  */
 fun RiskLevel.getColor(): String = when (this) {
     RiskLevel.LOW -> "#4CAF50"      // Green
@@ -97,6 +106,7 @@ fun RiskLevel.getColor(): String = when (this) {
 
 /**
  * Get display name for risk level
+ * Provides user-friendly names for risk levels
  */
 fun RiskLevel.getDisplayName(): String = when (this) {
     RiskLevel.LOW -> "Low Risk"
@@ -104,4 +114,61 @@ fun RiskLevel.getDisplayName(): String = when (this) {
     RiskLevel.HIGH -> "High Risk"
     RiskLevel.CRITICAL -> "Critical Risk"
     RiskLevel.UNKNOWN -> "Unknown Risk"
+}
+
+/**
+ * Check if capability is related to data operations
+ */
+fun PluginCapability.isDataOperation(): Boolean = when (this) {
+    PluginCapability.COLLECT_DATA,
+    PluginCapability.READ_OWN_DATA,
+    PluginCapability.READ_ALL_DATA,
+    PluginCapability.MODIFY_DATA,
+    PluginCapability.DELETE_DATA,
+    PluginCapability.EXPORT_DATA,
+    PluginCapability.IMPORT_DATA,
+    PluginCapability.SHARE_DATA -> true
+    else -> false
+}
+
+/**
+ * Check if capability involves background execution
+ */
+fun PluginCapability.isBackgroundCapability(): Boolean = when (this) {
+    PluginCapability.BACKGROUND_SYNC,
+    PluginCapability.BACKGROUND_PROCESS,
+    PluginCapability.BACKGROUND_PROCESSING -> true
+    else -> false
+}
+
+/**
+ * Check if capability involves external communication
+ */
+fun PluginCapability.isExternalCommunication(): Boolean = when (this) {
+    PluginCapability.NETWORK_ACCESS,
+    PluginCapability.SEND_EMAILS,
+    PluginCapability.SEND_SMS,
+    PluginCapability.PUSH_NOTIFICATIONS,
+    PluginCapability.CLOUD_STORAGE,
+    PluginCapability.CLOUD_SYNC,
+    PluginCapability.INTEGRATE_SERVICES -> true
+    else -> false
+}
+
+/**
+ * Get a short warning message for high-risk capabilities
+ */
+fun PluginCapability.getWarningMessage(): String? = when (this) {
+    PluginCapability.DELETE_DATA -> "This plugin can permanently delete your data"
+    PluginCapability.READ_ALL_DATA -> "This plugin can access all your app data"
+    PluginCapability.MODIFY_SETTINGS -> "This plugin can change your app settings"
+    PluginCapability.INSTALL_PLUGINS -> "This plugin can install other plugins"
+    PluginCapability.ACCESS_LOCATION -> "This plugin can track your location"
+    PluginCapability.ACCESS_BIOMETRIC -> "This plugin can access biometric data"
+    PluginCapability.CAMERA_ACCESS -> "This plugin can use your camera"
+    PluginCapability.MICROPHONE_ACCESS -> "This plugin can use your microphone"
+    PluginCapability.SEND_EMAILS -> "This plugin can send emails on your behalf"
+    PluginCapability.SEND_SMS -> "This plugin can send SMS messages"
+    PluginCapability.FILE_ACCESS -> "This plugin can access your files"
+    else -> null
 }

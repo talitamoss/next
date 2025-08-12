@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginManager
-import com.domain.app.core.plugin.PluginTrustLevel
+import com.domain.app.core.plugin.security.PluginTrustLevel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
