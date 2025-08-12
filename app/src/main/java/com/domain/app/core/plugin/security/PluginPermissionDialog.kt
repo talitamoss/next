@@ -16,7 +16,7 @@ import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginCapability
 import com.domain.app.core.plugin.RiskLevel
 import com.domain.app.core.plugin.RiskWarning
-import com.domain.app.ui.components.AppIcons
+import com.domain.app.ui.theme.AppIcons
 
 /**
  * Dialog for requesting plugin permissions with detailed explanations

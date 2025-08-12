@@ -43,7 +43,7 @@ object AppIcons {
         val filter = Icons.Filled.FilterList
         val sort = Icons.Filled.Sort
         val refresh = Icons.Filled.Refresh
-	val archive = Icons.Filled.Archive
+        val archive = Icons.Filled.Archive
         val more = Icons.Filled.MoreVert
         val moreHoriz = Icons.Filled.MoreHoriz
         val check = Icons.Filled.Check
@@ -58,6 +58,10 @@ object AppIcons {
         val cut = Icons.Filled.ContentCut
         val undo = Icons.Filled.Undo
         val redo = Icons.Filled.Redo
+        val palette = Icons.Filled.Palette
+        val dashboard = Icons.Filled.Dashboard
+        val fullscreen = Icons.Filled.Fullscreen
+        val exitFullscreen = Icons.Filled.FullscreenExit
     }
     
     // Data & Time Icons
@@ -129,6 +133,11 @@ object AppIcons {
         val syncProblem = Icons.Filled.SyncProblem
         val done = Icons.Filled.Done
         val doneAll = Icons.Filled.DoneAll
+        val check = Icons.Filled.Check
+        val verified = Icons.Filled.VerifiedUser
+        val pause = Icons.Filled.Pause
+        val play = Icons.Filled.PlayArrow
+        val stop = Icons.Filled.Stop
     }
     
     // Storage Icons
@@ -167,6 +176,41 @@ object AppIcons {
         val markEmailRead = Icons.Filled.MarkEmailRead
         val markEmailUnread = Icons.Filled.MarkEmailUnread
         val cloud = Icons.Filled.Cloud
+        val share = Icons.Filled.Share
+        val link = Icons.Filled.Link
+        val linkOff = Icons.Filled.LinkOff
+        val phone = Icons.Filled.Phone
+        val sms = Icons.Filled.Sms
+    }
+    
+    // Device Icons (NEW - was missing)
+    object Device {
+        val camera = Icons.Filled.CameraAlt
+        val cameraFront = Icons.Filled.CameraFront
+        val cameraRear = Icons.Filled.CameraRear
+        val mic = Icons.Filled.Mic
+        val micOff = Icons.Filled.MicOff
+        val microphone = Icons.Filled.Mic
+        val sensors = Icons.Filled.Sensors
+        val sensorsOff = Icons.Filled.SensorsOff
+        val fingerprint = Icons.Filled.Fingerprint
+        val bluetooth = Icons.Filled.Bluetooth
+        val bluetoothDisabled = Icons.Filled.BluetoothDisabled
+        val wifi = Icons.Filled.Wifi
+        val wifiOff = Icons.Filled.WifiOff
+        val battery = Icons.Filled.Battery0Bar
+        val batteryFull = Icons.Filled.BatteryFull
+        val batteryCharging = Icons.Filled.BatteryChargingFull
+        val brightness = Icons.Filled.Brightness6
+        val volume = Icons.Filled.VolumeUp
+        val volumeOff = Icons.Filled.VolumeOff
+        val vibration = Icons.Filled.Vibration
+        val flashOn = Icons.Filled.FlashOn
+        val flashOff = Icons.Filled.FlashOff
+        val gps = Icons.Filled.GpsFixed
+        val gpsOff = Icons.Filled.GpsOff
+        val locationOn = Icons.Filled.LocationOn
+        val locationOff = Icons.Filled.LocationOff
     }
     
     // UI Control Icons
@@ -177,36 +221,14 @@ object AppIcons {
         val chevronLeft = Icons.Filled.ChevronLeft
         val arrowUp = Icons.Filled.KeyboardArrowUp
         val arrowDown = Icons.Filled.KeyboardArrowDown
-        val arrowLeft = Icons.Filled.KeyboardArrowLeft
-        val arrowRight = Icons.Filled.KeyboardArrowRight
         val arrowForward = Icons.Filled.ArrowForward
         val arrowBack = Icons.Filled.ArrowBack
         val firstPage = Icons.Filled.FirstPage
         val lastPage = Icons.Filled.LastPage
         val navigateNext = Icons.Filled.NavigateNext
         val navigateBefore = Icons.Filled.NavigateBefore
-    }
-    
-    // Media Icons
-    object Media {
-        val play = Icons.Filled.PlayArrow
-        val pause = Icons.Filled.Pause
-        val stop = Icons.Filled.Stop
-        val skipNext = Icons.Filled.SkipNext
-        val skipPrevious = Icons.Filled.SkipPrevious
-        val fastForward = Icons.Filled.FastForward
-        val fastRewind = Icons.Filled.FastRewind
-        val volumeUp = Icons.Filled.VolumeUp
-        val volumeDown = Icons.Filled.VolumeDown
-        val volumeMute = Icons.Filled.VolumeMute
-        val volumeOff = Icons.Filled.VolumeOff
-        val mic = Icons.Filled.Mic
-        val micOff = Icons.Filled.MicOff
-        val camera = Icons.Filled.Camera
-        val image = Icons.Filled.Image
-        val video = Icons.Filled.Videocam
-        val photo = Icons.Filled.Photo
-        val photoCamera = Icons.Filled.PhotoCamera
+        val subdirectoryArrowRight = Icons.Filled.SubdirectoryArrowRight
+        val subdirectoryArrowLeft = Icons.Filled.SubdirectoryArrowLeft
     }
     
     // User & Account Icons
@@ -214,71 +236,30 @@ object AppIcons {
         val person = Icons.Filled.Person
         val personAdd = Icons.Filled.PersonAdd
         val personRemove = Icons.Filled.PersonRemove
+        val people = Icons.Filled.People
         val group = Icons.Filled.Group
         val groupAdd = Icons.Filled.GroupAdd
         val account = Icons.Filled.AccountCircle
-        val profile = Icons.Filled.AccountBox
-        val logout = Icons.Filled.Logout
-        val login = Icons.Filled.Login
+        val accountBox = Icons.Filled.AccountBox
         val contacts = Icons.Filled.Contacts
         val badge = Icons.Filled.Badge
         val manage = Icons.Filled.ManageAccounts
+        val supervisor = Icons.Filled.SupervisorAccount
     }
     
-    // Utility functions for dynamic icon selection
-    object Utils {
-        /**
-         * Get mood icon based on mood value
-         */
-        fun getMoodIcon(mood: Int): ImageVector {
-            return when (mood) {
-                1 -> Icons.Filled.SentimentVeryDissatisfied
-                2 -> Icons.Filled.SentimentDissatisfied
-                3 -> Icons.Filled.SentimentNeutral
-                4 -> Icons.Filled.SentimentSatisfied
-                5 -> Icons.Filled.SentimentVerySatisfied
-                else -> Icons.Filled.EmojiEmotions
-            }
-        }
-        
-        /**
-         * Get energy level icon
-         */
-        fun getEnergyIcon(level: Int): ImageVector {
-            return when {
-                level <= 2 -> Icons.Filled.BatteryAlert
-                level <= 4 -> Icons.Filled.Battery4Bar
-                level <= 6 -> Icons.Filled.Battery6Bar
-                else -> Icons.Filled.BatteryFull
-            }
-        }
-        
-        /**
-         * Get weather icon (placeholder - customize as needed)
-         */
-        fun getWeatherIcon(condition: String): ImageVector {
-            return when (condition.lowercase()) {
-                "sunny", "clear" -> Icons.Filled.WbSunny
-                "cloudy", "overcast" -> Icons.Filled.Cloud
-                "rainy", "rain" -> Icons.Filled.Umbrella
-                "stormy", "thunder" -> Icons.Filled.Thunderstorm
-                "snowy", "snow" -> Icons.Filled.AcUnit
-                "foggy", "fog" -> Icons.Filled.CloudQueue
-                else -> Icons.Filled.WbCloudy
-            }
-        }
-        
-        /**
-         * Get sync status icon
-         */
-        fun getSyncIcon(status: String): ImageVector {
-            return when (status.lowercase()) {
-                "synced", "complete" -> Icons.Filled.CloudDone
-                "syncing", "pending" -> Icons.Filled.Sync
-                "error", "failed" -> Icons.Filled.SyncProblem
-                "disabled", "off" -> Icons.Filled.SyncDisabled
-                else -> Icons.Filled.CloudSync
-            }
-        }
+    // Alert & Feedback Icons
+    object Alert {
+        val error = Icons.Filled.Error
+        val errorOutline = Icons.Filled.ErrorOutline
+        val warning = Icons.Filled.Warning
+        val info = Icons.Filled.Info
+        val help = Icons.Filled.Help
+        val helpOutline = Icons.Filled.HelpOutline
+        val reportProblem = Icons.Filled.ReportProblem
+        val feedback = Icons.Filled.Feedback
+        val announcement = Icons.Filled.Announcement
+        val notificationImportant = Icons.Filled.NotificationImportant
+        val newReleases = Icons.Filled.NewReleases
+        val campaign = Icons.Filled.Campaign
     }
 }

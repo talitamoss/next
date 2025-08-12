@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.dp
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginCapability
 import com.domain.app.core.plugin.RiskLevel
-import com.domain.app.ui.components.AppIcons
+import com.domain.app.ui.theme.AppIcons
 
 /**
  * Main security screen for managing plugin permissions
