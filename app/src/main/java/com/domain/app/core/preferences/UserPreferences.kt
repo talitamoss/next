@@ -1,0 +1,316 @@
+package com.domain.app.core.preferences
+
+import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import javax.inject.Inject
+import javax.inject.Singleton
+
+// Extension property to get DataStore instance
+private val Context.userPreferencesDataStore by preferencesDataStore(
+    name = "user_preferences"
+)
+
+/**
+ * User preferences management class that provides a clean interface
+ * for ViewModels to access and modify user settings.
+ * 
+ * This class acts as a bridge between the SettingsViewModel and the
+ * underlying preference storage mechanisms (DataStore and PreferencesManager).
+ */
+@Singleton
+class UserPreferences @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val preferencesManager: PreferencesManager
+) {
+    
+    // DataStore instance for user-specific preferences
+    private val dataStore = context.userPreferencesDataStore
+    
+    // Preference keys
+    companion object {
+        private val KEY_DARK_MODE = booleanPreferencesKey("dark_mode_enabled")
+        private val KEY_USER_NAME = stringPreferencesKey("user_name")
+        private val KEY_NOTIFICATIONS = booleanPreferencesKey("notifications_enabled")
+        private val KEY_ANALYTICS = booleanPreferencesKey("analytics_enabled")
+        private val KEY_CRASH_REPORTING = booleanPreferencesKey("crash_reporting_enabled")
+        private val KEY_BIOMETRIC_AUTH = booleanPreferencesKey("biometric_auth_enabled")
+        private val KEY_AUTO_BACKUP = booleanPreferencesKey("auto_backup_enabled")
+        private val KEY_BACKUP_FREQUENCY = stringPreferencesKey("backup_frequency")
+        private val KEY_LANGUAGE = stringPreferencesKey("app_language")
+        private val KEY_THEME_MODE = stringPreferencesKey("theme_mode") // "light", "dark", "system"
+    }
+    
+    // ========== USER INTERFACE PREFERENCES ==========
+    
+    /**
+     * Flow that emits the current dark mode state
+     */
+    val isDarkMode: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_DARK_MODE] ?: false
+        }
+    
+    /**
+     * Flow that emits the current theme mode (light/dark/system)
+     */
+    val themeMode: Flow<String> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_THEME_MODE] ?: "system"
+        }
+    
+    /**
+     * Flow that emits the current app language
+     */
+    val appLanguage: Flow<String> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_LANGUAGE] ?: "en"
+        }
+    
+    /**
+     * Set the dark mode preference
+     */
+    suspend fun setDarkMode(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_DARK_MODE] = enabled
+            // If explicitly setting dark mode, update theme mode too
+            preferences[KEY_THEME_MODE] = if (enabled) "dark" else "light"
+        }
+    }
+    
+    /**
+     * Set the theme mode (light/dark/system)
+     */
+    suspend fun setThemeMode(mode: String) {
+        dataStore.edit { preferences ->
+            preferences[KEY_THEME_MODE] = mode
+            // Update dark mode flag based on theme mode
+            when (mode) {
+                "dark" -> preferences[KEY_DARK_MODE] = true
+                "light" -> preferences[KEY_DARK_MODE] = false
+                // "system" - let the system decide, don't change dark mode flag
+            }
+        }
+    }
+    
+    /**
+     * Set the app language
+     */
+    suspend fun setAppLanguage(languageCode: String) {
+        dataStore.edit { preferences ->
+            preferences[KEY_LANGUAGE] = languageCode
+        }
+    }
+    
+    // ========== USER PROFILE PREFERENCES ==========
+    
+    /**
+     * Flow that emits the current user name
+     */
+    val userName: Flow<String?> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_USER_NAME]
+        }
+    
+    /**
+     * Set the user name
+     */
+    suspend fun setUserName(name: String?) {
+        dataStore.edit { preferences ->
+            if (name != null) {
+                preferences[KEY_USER_NAME] = name
+            } else {
+                preferences.remove(KEY_USER_NAME)
+            }
+        }
+    }
+    
+    // ========== NOTIFICATION PREFERENCES ==========
+    
+    /**
+     * Flow that emits the current notifications enabled state
+     */
+    val notificationsEnabled: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_NOTIFICATIONS] ?: true
+        }
+    
+    /**
+     * Set the notifications enabled preference
+     */
+    suspend fun setNotificationsEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_NOTIFICATIONS] = enabled
+        }
+    }
+    
+    // ========== PRIVACY & SECURITY PREFERENCES ==========
+    
+    /**
+     * Flow that emits the current analytics enabled state
+     */
+    val analyticsEnabled: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_ANALYTICS] ?: false
+        }
+    
+    /**
+     * Flow that emits the current crash reporting enabled state
+     */
+    val crashReportingEnabled: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_CRASH_REPORTING] ?: true
+        }
+    
+    /**
+     * Flow that emits the current biometric authentication enabled state
+     */
+    val biometricAuthEnabled: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_BIOMETRIC_AUTH] ?: false
+        }
+    
+    /**
+     * Set the analytics enabled preference
+     */
+    suspend fun setAnalyticsEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_ANALYTICS] = enabled
+        }
+    }
+    
+    /**
+     * Set the crash reporting enabled preference
+     */
+    suspend fun setCrashReportingEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_CRASH_REPORTING] = enabled
+        }
+    }
+    
+    /**
+     * Set the biometric authentication enabled preference
+     */
+    suspend fun setBiometricAuthEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_BIOMETRIC_AUTH] = enabled
+        }
+    }
+    
+    // ========== BACKUP PREFERENCES ==========
+    
+    /**
+     * Flow that emits the current auto backup enabled state
+     */
+    val autoBackupEnabled: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_AUTO_BACKUP] ?: false
+        }
+    
+    /**
+     * Flow that emits the current backup frequency
+     */
+    val backupFrequency: Flow<String> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_BACKUP_FREQUENCY] ?: "weekly"
+        }
+    
+    /**
+     * Set the auto backup enabled preference
+     */
+    suspend fun setAutoBackupEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_AUTO_BACKUP] = enabled
+        }
+    }
+    
+    /**
+     * Set the backup frequency (daily/weekly/monthly)
+     */
+    suspend fun setBackupFrequency(frequency: String) {
+        dataStore.edit { preferences ->
+            preferences[KEY_BACKUP_FREQUENCY] = frequency
+        }
+    }
+    
+    // ========== DASHBOARD PREFERENCES (delegated to PreferencesManager) ==========
+    
+    /**
+     * Flow that emits the list of plugin IDs shown on the dashboard
+     */
+    val dashboardPlugins: Flow<List<String>> = preferencesManager.dashboardPlugins
+    
+    /**
+     * Update the dashboard plugins
+     */
+    suspend fun updateDashboardPlugins(pluginIds: List<String>) {
+        preferencesManager.updateDashboardPlugins(pluginIds)
+    }
+    
+    /**
+     * Add a plugin to the dashboard
+     */
+    suspend fun addPluginToDashboard(pluginId: String) {
+        preferencesManager.addToDashboard(pluginId)
+    }
+    
+    /**
+     * Remove a plugin from the dashboard
+     */
+    suspend fun removePluginFromDashboard(pluginId: String) {
+        preferencesManager.removeFromDashboard(pluginId)
+    }
+    
+    /**
+     * Check if a plugin is on the dashboard
+     */
+    fun isPluginOnDashboard(pluginId: String): Flow<Boolean> {
+        return preferencesManager.isOnDashboard(pluginId)
+    }
+    
+    /**
+     * Get the number of plugins on dashboard
+     */
+    fun getDashboardPluginCount(): Flow<Int> {
+        return preferencesManager.getDashboardPluginCount()
+    }
+    
+    // ========== UTILITY FUNCTIONS ==========
+    
+    /**
+     * Clear all user preferences (useful for logout/reset)
+     */
+    suspend fun clearAllPreferences() {
+        dataStore.edit { preferences ->
+            preferences.clear()
+        }
+        // Also clear dashboard plugins
+        updateDashboardPlugins(emptyList())
+    }
+    
+    /**
+     * Check if this is the first time the app is launched
+     */
+    val isFirstLaunch: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            !preferences.contains(KEY_USER_NAME) && 
+            !preferences.contains(KEY_DARK_MODE)
+        }
+    
+    /**
+     * Mark that the initial setup has been completed
+     */
+    suspend fun markSetupComplete() {
+        dataStore.edit { preferences ->
+            // Just ensure at least one preference is set
+            if (!preferences.contains(KEY_NOTIFICATIONS)) {
+                preferences[KEY_NOTIFICATIONS] = true
+            }
+        }
+    }
+}

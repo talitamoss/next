@@ -48,6 +48,7 @@ class ExportManager @Inject constructor(
             val plugins = pluginManager.getAllActivePlugins()
             Log.d(TAG, "Found ${plugins.size} active plugins")
             
+            // Collect the Flow to get List<DataPoint>
             val allData = dataRepository.getRecentData(24 * 365).first()
             Log.d(TAG, "Retrieved ${allData.size} total data points")
             
@@ -98,8 +99,8 @@ class ExportManager @Inject constructor(
                 return@withContext ExportResult.Error("Plugin not found: $pluginId")
             }
             
-            val data = if (startDate != null && endDate != null) {
-                dataRepository.getPluginDataInRange(pluginId, startDate, endDate)
+            val data: List<DataPoint> = if (startDate != null && endDate != null) {
+                dataRepository.getPluginDataInRange(pluginId, startDate, endDate).first()
             } else {
                 dataRepository.getPluginData(pluginId).first()
             }

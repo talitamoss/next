@@ -1,4 +1,5 @@
 package com.domain.app.plugins
+import com.domain.app.core.validation.ValidationResult
 
 import android.content.Context
 import com.domain.app.core.data.DataPoint

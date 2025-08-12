@@ -1,209 +1,247 @@
 package com.domain.app.ui.dashboard
 
+import com.domain.app.core.validation.ValidationResult
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.domain.app.core.plugin.*
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.domain.app.core.data.DataPoint
+import com.domain.app.core.plugin.InputType
+import com.domain.app.core.plugin.Plugin
+import com.domain.app.ui.components.core.feedback.LoadingButton
+import com.domain.app.ui.components.core.input.ValidatedTextField
+import com.domain.app.ui.theme.AppIcons
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.time.Instant
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MultiStageQuickAddDialog(
     plugin: Plugin,
-    stages: List<QuickAddStage>,
     onDismiss: () -> Unit,
-    onComplete: (Map<String, Any>) -> Unit
+    onConfirm: (DataPoint) -> Unit
 ) {
-    var currentStageIndex by remember { mutableStateOf(0) }
-    val collectedData = remember { mutableStateMapOf<String, Any>() }
-    val currentStage = stages.getOrNull(currentStageIndex)
+    var currentStage by remember { mutableStateOf(0) }
+    var inputValue by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     
-    if (currentStage == null) {
-        onComplete(collectedData.toMap())
-        return
-    }
-    
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { 
-            Text("${plugin.metadata.name} - Step ${currentStageIndex + 1} of ${stages.size}")
-        },
-        text = {
+        properties = DialogProperties(
+            dismissOnBackPress = !isLoading,
+            dismissOnClickOutside = !isLoading
+        )
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(currentStage.title)
+                // Header
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = AppIcons.Action.add,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Quick Add: ${plugin.metadata.name}",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 
-                when (currentStage.inputType) {
-                    InputType.TEXT -> {
-                        var textValue by remember(currentStageIndex) { 
-                            mutableStateOf(currentStage.defaultValue as? String ?: "") 
-                        }
-                        OutlinedTextField(
-                            value = textValue,
-                            onValueChange = { textValue = it },
-                            label = { Text(currentStage.hint ?: "Enter value") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = false,
-                            maxLines = 3
+                // Progress indicator
+                LinearProgressIndicator(
+                    progress = { (currentStage + 1) / 2f },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                // Content based on stage
+                when (currentStage) {
+                    0 -> {
+                        // Value input stage
+                        Text(
+                            text = "Enter value",
+                            style = MaterialTheme.typography.bodyLarge
                         )
-                        LaunchedEffect(textValue) {
-                            if (textValue.isNotBlank() || !currentStage.required) {
-                                collectedData[currentStage.id] = textValue
-                            } else {
-                                collectedData.remove(currentStage.id)
-                            }
-                        }
-                    }
-                    
-                    InputType.NUMBER -> {
-                        var numberValue by remember(currentStageIndex) { 
-                            mutableStateOf(currentStage.defaultValue?.toString() ?: "") 
-                        }
-                        OutlinedTextField(
-                            value = numberValue,
-                            onValueChange = { value ->
-                                if (value.all { it.isDigit() || it == '.' }) {
-                                    numberValue = value
-                                }
-                            },
-                            label = { Text(currentStage.hint ?: "Enter number") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
-                        LaunchedEffect(numberValue) {
-                            numberValue.toDoubleOrNull()?.let {
-                                collectedData[currentStage.id] = it
-                            }
-                        }
-                    }
-                    
-                    InputType.DURATION -> {
-                        var hours by remember(currentStageIndex) { mutableStateOf("") }
-                        var minutes by remember(currentStageIndex) { mutableStateOf("") }
                         
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = hours,
-                                onValueChange = { if (it.all { char -> char.isDigit() }) hours = it },
-                                label = { Text("Hours") },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                            OutlinedTextField(
-                                value = minutes,
-                                onValueChange = { if (it.all { char -> char.isDigit() }) minutes = it },
-                                label = { Text("Minutes") },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                        }
-                        
-                        LaunchedEffect(hours, minutes) {
-                            val totalMinutes = (hours.toIntOrNull() ?: 0) * 60 + (minutes.toIntOrNull() ?: 0)
-                            if (totalMinutes > 0) {
-                                collectedData[currentStage.id] = totalMinutes
-                            }
-                        }
-                    }
-                    
-                    InputType.CHOICE -> {
-                        var selectedOption by remember(currentStageIndex) { 
-                            mutableStateOf(currentStage.options?.firstOrNull()) 
-                        }
-                        
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            currentStage.options?.forEach { option ->
-                                FilterChip(
-                                    selected = selectedOption == option,
-                                    onClick = { 
-                                        selectedOption = option
-                                        collectedData[currentStage.id] = option.value
-                                    },
-                                    label = { Text(option.label) },
-                                    leadingIcon = {
-                                        option.icon?.let { Text(it) }
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-                    }
-                    
-                    InputType.SCALE -> {
-                        var scaleValue by remember(currentStageIndex) { 
-                            mutableStateOf(currentStage.defaultValue as? Int ?: 3) 
-                        }
-                        
-                        Column {
-                            Slider(
-                                value = scaleValue.toFloat(),
-                                onValueChange = { 
-                                    scaleValue = it.toInt()
-                                    collectedData[currentStage.id] = scaleValue
-                                },
-                                valueRange = 1f..5f,
-                                steps = 3,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                currentStage.options?.forEach { option ->
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(option.icon ?: "")
-                                        Text(
-                                            option.label,
-                                            style = MaterialTheme.typography.labelSmall
-                                        )
+                        ValidatedTextField(
+                            value = inputValue,
+                            onValueChange = { inputValue = it },
+                            label = plugin.metadata.inputType.name.lowercase().replace('_', ' '),
+                            placeholder = "Enter ${plugin.metadata.inputType.name.lowercase().replace('_', ' ')}",
+                            validator = { value ->
+                                when (plugin.metadata.inputType) {
+                                    InputType.NUMBER -> {
+                                        if (value.toDoubleOrNull() == null) {
+                                            ValidationResult.Error("Please enter a valid number")
+                                        } else {
+                                            ValidationResult.Success
+                                        }
+                                    }
+                                    InputType.TEXT -> {
+                                        if (value.isEmpty()) {
+                                            ValidationResult.Error("This field is required")
+                                        } else {
+                                            ValidationResult.Success
+                                        }
+                                    }
+                                    InputType.SCALE -> {
+                                        val number = value.toIntOrNull()
+                                        if (number == null) {
+                                            ValidationResult.Error("Please enter a number")
+                                        } else if (number !in 1..10) {
+                                            ValidationResult.Error("Please enter a value between 1 and 10")
+                                        } else {
+                                            ValidationResult.Success
+                                        }
+                                    }
+                                    InputType.CHOICE -> {
+                                        if (value.isEmpty()) {
+                                            ValidationResult.Error("Please select an option")
+                                        } else {
+                                            ValidationResult.Success
+                                        }
+                                    }
+                                    InputType.SLIDER -> {
+                                        val number = value.toDoubleOrNull()
+                                        if (number == null) {
+                                            ValidationResult.Error("Please enter a valid number")
+                                        } else {
+                                            ValidationResult.Success
+                                        }
+                                    }
+                                    InputType.DURATION -> {
+                                        val duration = value.toLongOrNull()
+                                        if (duration == null || duration < 0) {
+                                            ValidationResult.Error("Please enter a valid duration")
+                                        } else {
+                                            ValidationResult.Success
+                                        }
+                                    }
+                                    InputType.TIME_PICKER -> {
+                                        if (value.isEmpty()) {
+                                            ValidationResult.Error("Please select a time")
+                                        } else {
+                                            ValidationResult.Success
+                                        }
+                                    }
+                                    InputType.DATE_PICKER -> {
+                                        if (value.isEmpty()) {
+                                            ValidationResult.Error("Please select a date")
+                                        } else {
+                                            ValidationResult.Success
+                                        }
                                     }
                                 }
                             }
+                        )
+                    }
+                    
+                    1 -> {
+                        // Notes input stage
+                        Text(
+                            text = "Add notes (optional)",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        
+                        OutlinedTextField(
+                            value = notes,
+                            onValueChange = { notes = it },
+                            label = { Text("Notes") },
+                            placeholder = { Text("Any additional context...") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp),
+                            maxLines = 4
+                        )
+                    }
+                }
+                
+                // Action buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (currentStage > 0) {
+                        TextButton(
+                            onClick = { currentStage-- },
+                            modifier = Modifier.weight(1f),
+                            enabled = !isLoading
+                        ) {
+                            Text("Back")
+                        }
+                    } else {
+                        TextButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(1f),
+                            enabled = !isLoading
+                        ) {
+                            Text("Cancel")
                         }
                     }
                     
-                    else -> {
-                        Text("Unsupported input type: ${currentStage.inputType}")
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            val isLastStage = currentStageIndex == stages.size - 1
-            val canProceed = !currentStage.required || collectedData.containsKey(currentStage.id)
-            
-            TextButton(
-                onClick = {
-                    if (isLastStage) {
-                        onComplete(collectedData.toMap())
-                    } else {
-                        currentStageIndex++
-                    }
-                },
-                enabled = canProceed
-            ) {
-                Text(if (isLastStage) "Save" else "Next")
-            }
-        },
-        dismissButton = {
-            Row {
-                if (currentStageIndex > 0) {
-                    TextButton(onClick = { currentStageIndex-- }) {
-                        Text("Back")
-                    }
-                }
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel")
+                    LoadingButton(
+                        onClick = {
+                            if (currentStage < 1) {
+                                // Validate before moving to next stage
+                                if (inputValue.isNotEmpty()) {
+                                    currentStage++
+                                }
+                            } else {
+                                scope.launch {
+                                    isLoading = true
+                                    
+                                    // Create data point with proper structure
+                                    val dataPoint = DataPoint(
+                                        id = UUID.randomUUID().toString(),
+                                        pluginId = plugin.id,
+                                        timestamp = Instant.now(),
+                                        type = "manual",
+                                        value = buildMap {
+                                            put("value", inputValue)
+                                            if (notes.isNotEmpty()) {
+                                                put("notes", notes)
+                                            }
+                                        },
+                                        metadata = emptyMap(),
+                                        source = "manual_entry"
+                                    )
+                                    
+                                    // Simulate processing
+                                    delay(500)
+                                    
+                                    onConfirm(dataPoint)
+                                    isLoading = false
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        loading = isLoading,
+                        text = if (currentStage < 1) "Next" else "Save",
+                        loadingText = "Saving..."
+                    )
                 }
             }
         }
-    )
+    }
 }
