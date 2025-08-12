@@ -1,6 +1,8 @@
 // app/src/main/java/com/domain/app/core/plugin/security/PluginSecurityScreen.kt
 package com.domain.app.core.plugin.security
 
+import com.domain.app.core.plugin.getRiskLevel
+import com.domain.app.core.plugin.getDescription
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -72,7 +74,7 @@ private fun PluginSecurityCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = plugin.manifest.name,
+                        text = plugin.metadata.name,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium
                     )
@@ -153,6 +155,7 @@ private fun PermissionItem(
                     RiskLevel.HIGH -> "High"
                     RiskLevel.CRITICAL -> "Critical"
                     RiskLevel.UNKNOWN -> "Unknown"
+        else -> ""
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = when (capability.getRiskLevel()) {

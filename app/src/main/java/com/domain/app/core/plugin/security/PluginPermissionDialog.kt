@@ -1,6 +1,8 @@
 // app/src/main/java/com/domain/app/core/plugin/security/PluginPermissionDialog.kt
 package com.domain.app.core.plugin.security
 
+import com.domain.app.core.plugin.getRiskLevel
+import com.domain.app.core.plugin.getDescription
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -70,12 +72,12 @@ fun PluginPermissionDialog(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = plugin.manifest.name,
+                            text = plugin.metadata.name,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = "Version ${plugin.manifest.version}",
+                            text = "Version ${plugin.metadata.version}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

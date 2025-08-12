@@ -43,11 +43,10 @@ class SettingsViewModel @Inject constructor(
         }
         
         viewModelScope.launch {
-            pluginManager.getEnabledPlugins().collect { plugins ->
-                _uiState.value = _uiState.value.copy(enabledPluginCount = plugins.size)
-            }
+        viewModelScope.launch {
+            val plugins = pluginManager.getAllActivePlugins()
+            _uiState.value = _uiState.value.copy(enabledPluginCount = plugins.size)
         }
-    }
     
     fun toggleDarkMode() {
         viewModelScope.launch {

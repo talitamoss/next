@@ -99,7 +99,7 @@ class ExportManager @Inject constructor(
                 return@withContext ExportResult.Error("Plugin not found: $pluginId")
             }
             
-            val data = if (startDate != null && endDate != null) {
+            val data: List<DataPoint> = if (startDate != null && endDate != null) {
                 dataRepository.getPluginDataInRange(pluginId, startDate, endDate)
             } else {
                 dataRepository.getPluginData(pluginId).first()

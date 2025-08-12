@@ -1,5 +1,6 @@
 package com.domain.app.ui.settings
 
+import com.domain.app.core.plugin.PluginRegistry
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.plugin.Plugin
@@ -28,7 +29,8 @@ data class PluginsUiState(
  */
 @HiltViewModel
 class PluginsViewModel @Inject constructor(
-    private val pluginManager: PluginManager
+    private val pluginManager: PluginManager,
+    private val pluginRegistry: PluginRegistry
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(PluginsUiState())
@@ -46,8 +48,8 @@ class PluginsViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             
             try {
-                val allPlugins = pluginManager.getAllPlugins()
-                val enabledPlugins = pluginManager.getEnabledPlugins()
+                val allPlugins = pluginRegistry.getAllPlugins()
+                val enabledPlugins = pluginManager.getAllActivePlugins()
                 val enabledIds = enabledPlugins.map { it.id }.toSet()
                 
                 _uiState.update { state ->
