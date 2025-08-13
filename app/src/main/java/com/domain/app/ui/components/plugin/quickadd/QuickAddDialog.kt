@@ -13,95 +13,259 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.domain.app.core.plugin.*
 import com.domain.app.ui.components.core.sliders.HorizontalSlider
+import com.domain.app.ui.components.core.sliders.HorizontalSliderDefaults
 import com.domain.app.ui.components.core.sliders.VerticalSlider
+import com.domain.app.ui.components.core.sliders.VerticalSliderDefaults
+import com.domain.app.ui.components.core.sliders.SliderDescriptions
 import kotlin.math.roundToInt
 
 /**
  * Unified quick-add dialog that adapts to any plugin configuration.
  * This replaces all individual quick-add dialogs with a single, configurable component.
- * 
- * Usage:
- * ```kotlin
- * UnifiedQuickAddDialog(
- *     plugin = waterPlugin,
- *     onDismiss = { },
- *     onConfirm = { data -> saveData(data) }
- * )
- * ```
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UnifiedQuickAddDialog(
     plugin: Plugin,
     onDismiss: () -> Unit,
-    onConfirm: (Map<String, Any>) -> Unit,
-    modifier: Modifier = Modifier
+    onConfirm: (Map<String, Any>) -> Unit
 ) {
     val config = plugin.getQuickAddConfig()
-    val stages = plugin.getQuickAddStages()
     
     when {
-        // Multi-stage takes priority
-        stages != null && stages.isNotEmpty() -> {
-            MultiStageQuickAddContent(
-                plugin = plugin,
-                stages = stages,
-                onDismiss = onDismiss,
-                onConfirm = onConfirm
-            )
+        plugin.metadata.supportsMultiStage -> {
+            config?.stages?.let { stages ->
+                MultiStageQuickAddContent(
+                    plugin = plugin,
+                    stages = stages,
+                    onDismiss = onDismiss,
+                    onConfirm = onConfirm
+                )
+            } ?: GenericQuickAddContent(plugin, onDismiss, onConfirm)
         }
-        // Then check for single-stage config
+        
         config != null -> {
             when (config.inputType) {
-                InputType.SLIDER -> SliderQuickAddContent(
-                    plugin = plugin,
-                    config = config,
-                    onDismiss = onDismiss,
-                    onConfirm = onConfirm
-                )
-                InputType.CHOICE -> ChoiceQuickAddContent(
-                    plugin = plugin,
-                    config = config,
-                    onDismiss = onDismiss,
-                    onConfirm = onConfirm
-                )
-                InputType.SCALE -> ScaleQuickAddContent(
-                    plugin = plugin,
-                    config = config,
-                    onDismiss = onDismiss,
-                    onConfirm = onConfirm
-                )
-                else -> GenericQuickAddContent(
-                    plugin = plugin,
-                    onDismiss = onDismiss,
-                    onConfirm = onConfirm
-                )
+                InputType.TEXT -> TextQuickAddContent(plugin, config, onDismiss, onConfirm)
+                InputType.NUMBER -> NumberQuickAddContent(plugin, config, onDismiss, onConfirm)
+                InputType.SLIDER -> SliderQuickAddContent(plugin, config, onDismiss, onConfirm) // Backward compatibility
+                InputType.VERTICAL_SLIDER -> VerticalSliderQuickAddContent(plugin, config, onDismiss, onConfirm)
+                InputType.HORIZONTAL_SLIDER -> HorizontalSliderQuickAddContent(plugin, config, onDismiss, onConfirm)
+                InputType.CHOICE -> ChoiceQuickAddContent(plugin, config, onDismiss, onConfirm)
+                InputType.BOOLEAN -> BooleanQuickAddContent(plugin, config, onDismiss, onConfirm)
+                InputType.DATE -> DateQuickAddContent(plugin, config, onDismiss, onConfirm)
+                InputType.TIME -> TimeQuickAddContent(plugin, config, onDismiss, onConfirm)
+                else -> GenericQuickAddContent(plugin, onDismiss, onConfirm)
             }
         }
-        // Fallback to generic
-        else -> {
-            GenericQuickAddContent(
-                plugin = plugin,
-                onDismiss = onDismiss,
-                onConfirm = onConfirm
-            )
-        }
+        
+        else -> GenericQuickAddContent(plugin, onDismiss, onConfirm)
     }
 }
 
 /**
- * Slider-based quick add (e.g., Water intake)
- * Uses our new HorizontalSlider component
+ * Text input quick add
  */
 @Composable
-private fun SliderQuickAddContent(
+private fun TextQuickAddContent(
+    plugin: Plugin,
+    config: QuickAddConfig,
+    onDismiss: () -> Unit,
+    onConfirm: (Map<String, Any>) -> Unit
+) {
+    var text by remember { mutableStateOf(config.defaultValue as? String ?: "") }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(config.title)
+        },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text(config.placeholder ?: "Enter value") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = false,
+                maxLines = 3
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(mapOf(config.id to text))
+                },
+                enabled = text.isNotBlank()
+            ) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * Number input quick add
+ */
+@Composable
+private fun NumberQuickAddContent(
+    plugin: Plugin,
+    config: QuickAddConfig,
+    onDismiss: () -> Unit,
+    onConfirm: (Map<String, Any>) -> Unit
+) {
+    var number by remember { mutableStateOf(config.defaultValue?.toString() ?: "") }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(config.title)
+        },
+        text = {
+            OutlinedTextField(
+                value = number,
+                onValueChange = { newValue ->
+                    if (newValue.isEmpty() || newValue.toDoubleOrNull() != null) {
+                        number = newValue
+                    }
+                },
+                label = { Text(config.placeholder ?: "Enter number") },
+                suffix = { config.unit?.let { Text(it) } },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    number.toDoubleOrNull()?.let {
+                        onConfirm(mapOf(config.id to it))
+                    }
+                },
+                enabled = number.toDoubleOrNull() != null
+            ) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * Vertical slider quick add (for ratings, mood, satisfaction, etc.)
+ */
+@Composable
+private fun VerticalSliderQuickAddContent(
     plugin: Plugin,
     config: QuickAddConfig,
     onDismiss: () -> Unit,
     onConfirm: (Map<String, Any>) -> Unit
 ) {
     var value by remember { 
-        mutableStateOf(config.defaultValue as? Float ?: 0f) 
+        mutableStateOf((config.defaultValue as? Number)?.toFloat() ?: 3f)
+    }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(config.title)
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Optional emoji/icon display based on value
+                config.options?.find { (it.value as? Number)?.toInt() == value.roundToInt() }?.let { option ->
+                    option.icon?.let { icon ->
+                        Text(
+                            text = icon,
+                            style = MaterialTheme.typography.displaySmall
+                        )
+                    }
+                }
+                
+                // Vertical slider
+                VerticalSlider(
+                    value = value,
+                    onValueChange = { value = it },
+                    valueRange = ((config.min as? Number)?.toFloat() ?: 1f)..((config.max as? Number)?.toFloat() ?: 5f),
+                    steps = ((config.max as? Number)?.toFloat()?.minus((config.min as? Number)?.toFloat() ?: 1f))?.toInt()?.minus(1) ?: 3,
+                    height = 200.dp,
+                    showLabel = true,
+                    showTicks = true,
+                    colors = when(plugin.id) {
+                        "mood" -> VerticalSliderDefaults.moodColors()
+                        "energy" -> VerticalSliderDefaults.energyColors()
+                        "stress" -> VerticalSliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.error,
+                            activeTrackColor = MaterialTheme.colorScheme.error
+                        )
+                        "sleep" -> VerticalSliderDefaults.sleepColors()
+                        else -> VerticalSliderDefaults.colors()
+                    },
+                    labelFormatter = when(plugin.id) {
+                        "mood" -> SliderDescriptions.mood
+                        "energy" -> SliderDescriptions.energy
+                        "stress" -> SliderDescriptions.stress
+                        "sleep" -> SliderDescriptions.sleep
+                        else -> { v -> 
+                            config.options?.find { (it.value as? Number)?.toFloat() == v }?.label 
+                                ?: v.roundToInt().toString()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                // Optional description text
+                config.options?.find { (it.value as? Number)?.toInt() == value.roundToInt() }?.let { option ->
+                    Text(
+                        text = option.label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(mapOf(config.id to value.roundToInt()))
+                }
+            ) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * Horizontal slider quick add (for quantities, amounts, durations, etc.)
+ */
+@Composable
+private fun HorizontalSliderQuickAddContent(
+    plugin: Plugin,
+    config: QuickAddConfig,
+    onDismiss: () -> Unit,
+    onConfirm: (Map<String, Any>) -> Unit
+) {
+    var value by remember { 
+        mutableStateOf((config.defaultValue as? Number)?.toFloat() ?: 0f)
     }
     
     AlertDialog(
@@ -114,29 +278,23 @@ private fun SliderQuickAddContent(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Use slider parameters from config if available
-                val range = when {
-                    config.options?.isNotEmpty() == true -> {
-                        val minVal = config.options.minOfOrNull { (it.value as? Number)?.toFloat() ?: 0f } ?: 0f
-                        val maxVal = config.options.maxOfOrNull { (it.value as? Number)?.toFloat() ?: 100f } ?: 100f
-                        minVal..maxVal
-                    }
-                    config.min != null && config.max != null -> {
-                        (config.min as Number).toFloat()..(config.max as Number).toFloat()
-                    }
-                    else -> 0f..100f
-                }
-                
-                val steps = (config.step as? Number)?.toInt() ?: config.options?.size?.minus(1) ?: 0
-                
+                // Use horizontal slider for quantities
                 HorizontalSlider(
                     value = value,
                     onValueChange = { value = it },
-                    valueRange = range,
-                    steps = steps,
+                    valueRange = ((config.min as? Number)?.toFloat() ?: 0f)..((config.max as? Number)?.toFloat() ?: 100f),
+                    steps = if (config.step != null) {
+                        ((config.max as? Number)?.toFloat()?.minus((config.min as? Number)?.toFloat() ?: 0f))?.div((config.step as Number).toFloat())?.toInt() ?: 0
+                    } else 0,
+                    showLabel = true,
+                    showTicks = config.step != null,
+                    labelFormatter = { v -> 
+                        "${v.roundToInt()}${config.unit?.let { " $it" } ?: ""}"
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
                 
+                // Preset buttons if available
                 config.presets?.let { presets ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -168,6 +326,21 @@ private fun SliderQuickAddContent(
             }
         }
     )
+}
+
+/**
+ * Generic slider quick add (backward compatibility for plugins still using InputType.SLIDER)
+ * Defaults to horizontal slider behavior
+ */
+@Composable
+private fun SliderQuickAddContent(
+    plugin: Plugin,
+    config: QuickAddConfig,
+    onDismiss: () -> Unit,
+    onConfirm: (Map<String, Any>) -> Unit
+) {
+    // For backward compatibility, use horizontal slider as default
+    HorizontalSliderQuickAddContent(plugin, config, onDismiss, onConfirm)
 }
 
 /**
@@ -225,18 +398,16 @@ private fun ChoiceQuickAddContent(
 }
 
 /**
- * Scale-based quick add (1-5 rating)
+ * Boolean quick add (toggle/checkbox)
  */
 @Composable
-private fun ScaleQuickAddContent(
+private fun BooleanQuickAddContent(
     plugin: Plugin,
     config: QuickAddConfig,
     onDismiss: () -> Unit,
     onConfirm: (Map<String, Any>) -> Unit
 ) {
-    var value by remember { 
-        mutableStateOf(config.defaultValue as? Float ?: 3f) 
-    }
+    var checked by remember { mutableStateOf(config.defaultValue as? Boolean ?: false) }
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -244,38 +415,22 @@ private fun ScaleQuickAddContent(
             Text(config.title)
         },
         text = {
-            Column(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                val minValue = (config.min as? Number)?.toFloat() ?: 1f
-                val maxValue = (config.max as? Number)?.toFloat() ?: 5f
-                
-                VerticalSlider(
-                    value = value,
-                    onValueChange = { value = it },
-                    valueRange = minValue..maxValue,
-                    steps = ((maxValue - minValue).toInt()),
-                    height = 200.dp,
-                    showTicks = true,
-                    labelFormatter = { 
-                        when(it.roundToInt()) {
-                            1 -> "Exhausted"
-                            2 -> "Tired"
-                            3 -> "Normal"
-                            4 -> "Energetic"
-                            5 -> "Very Energetic"
-                            else -> it.roundToInt().toString()
-                        }
-                    }
+                Text(config.placeholder ?: "Enable")
+                Switch(
+                    checked = checked,
+                    onCheckedChange = { checked = it }
                 )
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
-                    onConfirm(mapOf(config.id to value.roundToInt()))
+                    onConfirm(mapOf(config.id to checked))
                 }
             ) {
                 Text("Add")
@@ -287,6 +442,36 @@ private fun ScaleQuickAddContent(
             }
         }
     )
+}
+
+/**
+ * Date quick add
+ */
+@Composable
+private fun DateQuickAddContent(
+    plugin: Plugin,
+    config: QuickAddConfig,
+    onDismiss: () -> Unit,
+    onConfirm: (Map<String, Any>) -> Unit
+) {
+    // TODO: Implement date picker
+    // For now, fallback to generic
+    GenericQuickAddContent(plugin, onDismiss, onConfirm)
+}
+
+/**
+ * Time quick add
+ */
+@Composable
+private fun TimeQuickAddContent(
+    plugin: Plugin,
+    config: QuickAddConfig,
+    onDismiss: () -> Unit,
+    onConfirm: (Map<String, Any>) -> Unit
+) {
+    // TODO: Implement time picker
+    // For now, fallback to generic
+    GenericQuickAddContent(plugin, onDismiss, onConfirm)
 }
 
 /**
@@ -382,42 +567,65 @@ private fun QuickAddStageContent(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = stage.title,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium
-        )
-        
-        stage.hint?.let { hint ->
+        stage.title?.let {
             Text(
-                text = hint,
-                style = MaterialTheme.typography.bodySmall,
+                text = it,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        
+        stage.description?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         
         when (stage.inputType) {
-            InputType.TEXT, InputType.NUMBER -> {
-                var textValue by remember(stage.id) { 
-                    mutableStateOf(stage.defaultValue?.toString() ?: "") 
+            InputType.TEXT -> {
+                var text by remember(stage.id) { 
+                    mutableStateOf(stage.defaultValue as? String ?: "") 
+                }
+                
+                LaunchedEffect(text) {
+                    onValueChange(text.ifEmpty { null })
                 }
                 
                 OutlinedTextField(
-                    value = textValue,
-                    onValueChange = { 
-                        textValue = it
-                        onValueChange(if (it.isNotBlank()) it else null)
-                    },
-                    label = { Text(stage.hint ?: "Enter value") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = stage.inputType == InputType.NUMBER,
-                    isError = stage.required && textValue.isBlank()
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text(stage.placeholder ?: "Enter value") },
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
             
-            InputType.SLIDER -> {
+            InputType.NUMBER -> {
+                var number by remember(stage.id) { 
+                    mutableStateOf(stage.defaultValue?.toString() ?: "") 
+                }
+                
+                LaunchedEffect(number) {
+                    onValueChange(number.toDoubleOrNull())
+                }
+                
+                OutlinedTextField(
+                    value = number,
+                    onValueChange = { newValue ->
+                        if (newValue.isEmpty() || newValue.toDoubleOrNull() != null) {
+                            number = newValue
+                        }
+                    },
+                    label = { Text(stage.placeholder ?: "Enter number") },
+                    suffix = { stage.unit?.let { Text(it) } },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            
+            InputType.SLIDER, InputType.HORIZONTAL_SLIDER -> {
                 var sliderValue by remember(stage.id) { 
                     mutableStateOf(stage.defaultValue as? Float ?: 50f) 
                 }
@@ -443,8 +651,34 @@ private fun QuickAddStageContent(
                 )
                 
                 Text(
-                    text = sliderValue.roundToInt().toString(),
+                    text = "${sliderValue.roundToInt()}${stage.unit?.let { " $it" } ?: ""}",
                     style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            
+            InputType.VERTICAL_SLIDER -> {
+                var sliderValue by remember(stage.id) { 
+                    mutableStateOf(stage.defaultValue as? Float ?: 3f) 
+                }
+                
+                val range = when {
+                    stage.min != null && stage.max != null -> {
+                        (stage.min as Number).toFloat()..(stage.max as Number).toFloat()
+                    }
+                    else -> 1f..5f
+                }
+                
+                VerticalSlider(
+                    value = sliderValue,
+                    onValueChange = { 
+                        sliderValue = it
+                        onValueChange(it)
+                    },
+                    valueRange = range,
+                    steps = range.endInclusive.toInt() - range.start.toInt() - 1,
+                    height = 150.dp,
+                    showLabel = true,
                     modifier = Modifier.fillMaxWidth()
                 )
             }

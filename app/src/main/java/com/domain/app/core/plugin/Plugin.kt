@@ -1,70 +1,66 @@
+// app/src/main/java/com/domain/app/core/plugin/Plugin.kt
 package com.domain.app.core.plugin
 
 import android.content.Context
 import com.domain.app.core.data.DataPoint
-import com.domain.app.core.plugin.security.PluginSecurityManifest
-import com.domain.app.core.plugin.security.PluginTrustLevel
+import com.domain.app.core.plugin.security.*
 import com.domain.app.core.validation.ValidationResult
 
 /**
- * Core plugin interface defining the contract for all behavioral data collection plugins.
- * Designed for extensibility while maintaining security and privacy.
+ * Core plugin interface that all plugins must implement
  */
 interface Plugin {
     val id: String
     val metadata: PluginMetadata
-    
-    // Security manifest - required for all plugins
     val securityManifest: PluginSecurityManifest
-    
-    // Trust level - determined by system
     val trustLevel: PluginTrustLevel
-        get() = PluginTrustLevel.COMMUNITY
     
-    // Core functionality
+    // Core lifecycle methods
     suspend fun initialize(context: Context)
+    suspend fun onEnable(context: Context) {}
+    suspend fun onDisable(context: Context) {}
+    
+    // Cleanup method - REQUIRED by PluginManager
+    suspend fun cleanup() {}
+    
+    // Data validation
+    fun validateDataPoint(data: Map<String, Any>): ValidationResult
+    
+    // Manual entry support
     fun supportsManualEntry(): Boolean = false
     suspend fun createManualEntry(data: Map<String, Any>): DataPoint? = null
-    fun getQuickAddConfig(): QuickAddConfig? = null
     
-    // Multi-stage input support
+    // Quick add configuration
+    fun getQuickAddConfig(): QuickAddConfig? = null
     fun getQuickAddStages(): List<QuickAddStage>? = null
     
-    // Validation
-    fun validateDataPoint(data: Map<String, Any>): ValidationResult = ValidationResult.Success
-    
-    // Export/Import
-    fun exportHeaders(): List<String> = listOf("timestamp", "value")
-    fun formatForExport(dataPoint: DataPoint): Map<String, String> = mapOf(
-        "timestamp" to dataPoint.timestamp.toString(),
-        "value" to dataPoint.value.toString()
-    )
+    // Export functionality
+    fun exportHeaders(): List<String> = listOf("Date", "Time", "Value")
+    fun formatForExport(dataPoint: DataPoint): Map<String, String>
     
     // Permission rationale
     fun getPermissionRationale(): Map<PluginCapability, String> = emptyMap()
-    
-    // Cleanup
-    suspend fun cleanup() {}
 }
 
 /**
- * Plugin metadata containing descriptive and behavioral information
+ * Plugin metadata
  */
 data class PluginMetadata(
     val name: String,
     val description: String,
     val version: String,
     val author: String,
-    val category: PluginCategory = PluginCategory.OTHER,
+    val category: PluginCategory,
     val tags: List<String> = emptyList(),
-    val dataPattern: DataPattern = DataPattern.SINGLE_VALUE,
-    val inputType: InputType = InputType.NUMBER,
+    val dataPattern: DataPattern,
+    val inputType: InputType,
     val supportsMultiStage: Boolean = false,
     val relatedPlugins: List<String> = emptyList(),
     val exportFormat: ExportFormat = ExportFormat.CSV,
     val dataSensitivity: DataSensitivity = DataSensitivity.NORMAL,
     val naturalLanguageAliases: List<String> = emptyList(),
-    val iconResource: Int? = null,
+    val minVersion: Int = 1,
+    val maxDataPointsPerDay: Int? = null,
     val permissions: List<String> = emptyList(),
     val contextualTriggers: List<ContextTrigger> = emptyList()
 )
@@ -96,23 +92,44 @@ enum class DataPattern {
 
 /**
  * Input types for data collection
+ * Each type maps directly to a specific UI component in the component repository
  */
 enum class InputType {
-    NUMBER,
-    TEXT,
-    CHOICE,
-    SLIDER,
-    DURATION,
-    SCALE,
-    TIME_PICKER,
-    DATE_PICKER
+    // Original input types
+    NUMBER,                    // Numeric input field
+    TEXT,                      // Text input field
+    CHOICE,                    // Single choice from options
+    @Deprecated("Use VERTICAL_SLIDER or HORIZONTAL_SLIDER for specific orientation")
+    SLIDER,                    // Generic slider (kept for backward compatibility)
+    DURATION,                  // Duration picker
+    SCALE,                     // Rating scale
+    TIME_PICKER,               // Time picker (original)
+    DATE_PICKER,               // Date picker (original)
+    
+    // New slider types for better control
+    VERTICAL_SLIDER,           // Vertical slider for ratings/scales (NEW)
+    HORIZONTAL_SLIDER,         // Horizontal slider for quantities/amounts (NEW)
+    
+    // Additional types needed by QuickAddDialog
+    BOOLEAN,                   // Toggle/checkbox (NEW - needed by dialog)
+    DATE,                      // Date selection (NEW - needed by dialog) 
+    TIME,                      // Time selection (NEW - needed by dialog)
+    
+    // Future input types for extensibility
+    COLOR_PICKER,              // Color selection (future)
+    LOCATION_PICKER,           // Location selection (future)
+    IMAGE_PICKER,              // Image selection (future)
+    MULTI_CHOICE               // Multiple choice selection (future)
 }
 
 /**
  * Export format options
  */
 enum class ExportFormat {
-    CSV, JSON, XML, CUSTOM
+    CSV, 
+    JSON, 
+    XML, 
+    CUSTOM
 }
 
 /**
@@ -151,7 +168,9 @@ data class QuickAddConfig(
     val max: Number? = null,
     val step: Number? = null,
     val stages: List<QuickAddStage>? = null,
-    val presets: List<QuickOption>? = null
+    val presets: List<QuickOption>? = null,
+    val placeholder: String? = null
+    // NOTE: No validation field here - PluginGenerator has its own ValidationRule
 )
 
 /**
@@ -174,18 +193,28 @@ data class QuickAddStage(
     val options: List<QuickOption>? = null,
     val validation: ((Any?) -> ValidationResult)? = null,
     val hint: String? = null,
+    val description: String? = null,
+    val placeholder: String? = null,
     val defaultValue: Any? = null,
     val min: Number? = null,
     val max: Number? = null,
-    val step: Number? = null
+    val step: Number? = null,
+    val unit: String? = null
 )
 
-/**
- * Validation results
- */
+// NOTE: ValidationRule and ValidationRuleType are NOT defined here
+// They exist in PluginGenerator.kt with a different structure:
+// data class ValidationRule(
+//     val type: String,  // Not an enum
+//     val field: String,
+//     val message: String,
+//     val min: Int = 0,
+//     val max: Int = 100
+// )
 
 /**
  * Risk warning for permissions
+ * RiskLevel enum is defined in PluginCapability.kt
  */
 data class RiskWarning(
     val severity: RiskLevel,

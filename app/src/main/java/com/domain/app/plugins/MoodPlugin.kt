@@ -1,3 +1,4 @@
+// app/src/main/java/com/domain/app/plugins/MoodPlugin.kt
 package com.domain.app.plugins
 
 import android.content.Context
@@ -5,6 +6,7 @@ import com.domain.app.core.data.DataPoint
 import com.domain.app.core.plugin.*
 import com.domain.app.core.plugin.security.*
 import com.domain.app.core.validation.ValidationResult
+import java.time.LocalTime
 
 /**
  * Mood tracking plugin with vertical slider support
@@ -21,7 +23,7 @@ class MoodPlugin : Plugin {
         category = PluginCategory.MENTAL_WELLNESS,
         tags = listOf("mood", "emotion", "mental-health", "wellbeing", "qualitative"),
         dataPattern = DataPattern.RATING,
-        inputType = InputType.SLIDER,  // Existing enum value
+        inputType = InputType.VERTICAL_SLIDER,  // Using the new vertical slider type
         supportsMultiStage = false,
         relatedPlugins = listOf("sleep", "exercise", "meditation"),
         exportFormat = ExportFormat.CSV,
@@ -67,12 +69,13 @@ class MoodPlugin : Plugin {
     override fun supportsManualEntry() = true
     
     override fun getQuickAddConfig() = QuickAddConfig(
+        id = "mood",
         title = "How are you feeling?",
         defaultValue = 3,  // Middle of 1-5 scale
-        inputType = InputType.SLIDER,
-        min = 1,  // Existing property in QuickAddConfig
-        max = 5,  // Existing property in QuickAddConfig
-        step = 1, // Existing property in QuickAddConfig
+        inputType = InputType.VERTICAL_SLIDER,  // Changed from SLIDER to VERTICAL_SLIDER
+        min = 1,  // Minimum mood value
+        max = 5,  // Maximum mood value
+        step = 1, // Integer steps
         unit = "",
         options = listOf(
             QuickOption("😔 Very Bad", 1, "😔"),
@@ -143,8 +146,11 @@ class MoodPlugin : Plugin {
         )
     }
     
-    private fun getMoodLabel(mood: Int): String {
-        return when (mood) {
+    /**
+     * Helper function to get mood label from numeric value
+     */
+    private fun getMoodLabel(value: Int): String {
+        return when (value) {
             1 -> "Very Bad"
             2 -> "Bad"
             3 -> "Neutral"
@@ -154,13 +160,15 @@ class MoodPlugin : Plugin {
         }
     }
     
+    /**
+     * Helper function to get time of day category
+     */
     private fun getTimeOfDay(): String {
-        // EXACT pattern from WaterPlugin, CoffeePlugin - verified working
-        val hour = java.time.LocalTime.now().hour
-        return when (hour) {
-            in 5..11 -> "morning"
-            in 12..16 -> "afternoon"
-            in 17..20 -> "evening"
+        val hour = LocalTime.now().hour
+        return when {
+            hour in 5..11 -> "morning"
+            hour in 12..16 -> "afternoon"
+            hour in 17..20 -> "evening"
             else -> "night"
         }
     }
