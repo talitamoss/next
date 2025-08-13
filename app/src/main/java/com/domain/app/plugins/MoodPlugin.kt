@@ -77,6 +77,10 @@ class MoodPlugin : Plugin {
         max = 5,  // Maximum mood value
         step = 1, // Integer steps
         unit = "",
+        // NEW FIELDS ADDED HERE:
+        topLabel = "Yeah",        // Top label instead of "5"
+        bottomLabel = "Nah",       // Bottom label instead of "1"
+        showValue = false,         // Hide numeric value display
         options = listOf(
             QuickOption("😔 Very Bad", 1, "😔"),
             QuickOption("😕 Bad", 2, "😕"),
@@ -85,6 +89,11 @@ class MoodPlugin : Plugin {
             QuickOption("😊 Very Good", 5, "😊")
         )
     )
+    
+    override suspend fun collectData(): DataPoint? {
+        // Automatic collection not supported for mood
+        return null
+    }
     
     override suspend fun createManualEntry(data: Map<String, Any>): DataPoint? {
         // Pattern verified from WaterPlugin, CoffeePlugin

@@ -8,6 +8,7 @@ import com.domain.app.core.validation.ValidationResult
 
 /**
  * Core plugin interface that all plugins must implement
+ * Defines the contract for behavioral data collection plugins
  */
 interface Plugin {
     val id: String
@@ -15,35 +16,20 @@ interface Plugin {
     val securityManifest: PluginSecurityManifest
     val trustLevel: PluginTrustLevel
     
-    // Core lifecycle methods
     suspend fun initialize(context: Context)
-    suspend fun onEnable(context: Context) {}
-    suspend fun onDisable(context: Context) {}
-    
-    // Cleanup method - REQUIRED by PluginManager
-    suspend fun cleanup() {}
-    
-    // Data validation
+    suspend fun collectData(): DataPoint? = null  // Default implementation - returns null
+    suspend fun createManualEntry(data: Map<String, Any>): DataPoint?
     fun validateDataPoint(data: Map<String, Any>): ValidationResult
-    
-    // Manual entry support
-    fun supportsManualEntry(): Boolean = false
-    suspend fun createManualEntry(data: Map<String, Any>): DataPoint? = null
-    
-    // Quick add configuration
+    fun supportsManualEntry(): Boolean
+    fun supportsAutomaticCollection(): Boolean = false
     fun getQuickAddConfig(): QuickAddConfig? = null
-    fun getQuickAddStages(): List<QuickAddStage>? = null
-    
-    // Export functionality
-    fun exportHeaders(): List<String> = listOf("Date", "Time", "Value")
+    fun getPermissionRationale(): Map<PluginCapability, String>
+    fun exportHeaders(): List<String>
     fun formatForExport(dataPoint: DataPoint): Map<String, String>
-    
-    // Permission rationale
-    fun getPermissionRationale(): Map<PluginCapability, String> = emptyMap()
 }
 
 /**
- * Plugin metadata
+ * Plugin metadata for discovery and categorization
  */
 data class PluginMetadata(
     val name: String,
@@ -52,15 +38,15 @@ data class PluginMetadata(
     val author: String,
     val category: PluginCategory,
     val tags: List<String> = emptyList(),
-    val dataPattern: DataPattern,
-    val inputType: InputType,
+    val iconResId: Int? = null,
+    val bannerResId: Int? = null,
+    val dataPattern: DataPattern = DataPattern.SINGLE_VALUE,
+    val inputType: InputType = InputType.NUMBER,
     val supportsMultiStage: Boolean = false,
-    val relatedPlugins: List<String> = emptyList(),
     val exportFormat: ExportFormat = ExportFormat.CSV,
     val dataSensitivity: DataSensitivity = DataSensitivity.NORMAL,
     val naturalLanguageAliases: List<String> = emptyList(),
-    val minVersion: Int = 1,
-    val maxDataPointsPerDay: Int? = null,
+    val relatedPlugins: List<String> = emptyList(),
     val permissions: List<String> = emptyList(),
     val contextualTriggers: List<ContextTrigger> = emptyList()
 )
@@ -169,12 +155,15 @@ data class QuickAddConfig(
     val step: Number? = null,
     val stages: List<QuickAddStage>? = null,
     val presets: List<QuickOption>? = null,
-    val placeholder: String? = null
-    // NOTE: No validation field here - PluginGenerator has its own ValidationRule
+    val placeholder: String? = null,
+    // NEW FIELDS ADDED HERE:
+    val topLabel: String? = null,      // Label for top of vertical slider (e.g., "Yeah")
+    val bottomLabel: String? = null,   // Label for bottom of vertical slider (e.g., "Nah")
+    val showValue: Boolean = true      // Whether to show numeric value (false hides it)
 )
 
 /**
- * Quick add option
+ * Option for choice-based input
  */
 data class QuickOption(
     val label: String,
@@ -183,41 +172,18 @@ data class QuickOption(
 )
 
 /**
- * Multi-stage quick add support
+ * Stage for multi-stage quick add
  */
 data class QuickAddStage(
     val id: String,
     val title: String,
     val inputType: InputType,
-    val required: Boolean = true,
-    val options: List<QuickOption>? = null,
-    val validation: ((Any?) -> ValidationResult)? = null,
-    val hint: String? = null,
-    val description: String? = null,
-    val placeholder: String? = null,
     val defaultValue: Any? = null,
     val min: Number? = null,
     val max: Number? = null,
     val step: Number? = null,
-    val unit: String? = null
-)
-
-// NOTE: ValidationRule and ValidationRuleType are NOT defined here
-// They exist in PluginGenerator.kt with a different structure:
-// data class ValidationRule(
-//     val type: String,  // Not an enum
-//     val field: String,
-//     val message: String,
-//     val min: Int = 0,
-//     val max: Int = 100
-// )
-
-/**
- * Risk warning for permissions
- * RiskLevel enum is defined in PluginCapability.kt
- */
-data class RiskWarning(
-    val severity: RiskLevel,
-    val message: String,
-    val capability: PluginCapability
+    val unit: String? = null,
+    val options: List<QuickOption>? = null,
+    val placeholder: String? = null,
+    val required: Boolean = true
 )

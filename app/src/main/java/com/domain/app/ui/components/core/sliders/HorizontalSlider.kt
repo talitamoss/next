@@ -2,6 +2,7 @@
 package com.domain.app.ui.components.core.sliders
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
@@ -11,13 +12,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.center
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -27,26 +27,64 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * A customizable horizontal slider component for consistent UI across the app.
- * This replaces all horizontal slider implementations in quick-add dialogs.
- * 
- * @param value Current value of the slider
- * @param onValueChange Callback when value changes
- * @param modifier Modifier for the slider container
- * @param valueRange Range of values (default 0f..100f)
- * @param steps Number of discrete steps (0 for continuous)
- * @param enabled Whether the slider is interactive
- * @param showLabel Whether to show the current value label
- * @param showTicks Whether to show tick marks for steps
- * @param showValueMarkers Whether to show value markers below the slider
- * @param height Height of the slider track
- * @param colors Custom colors for the slider
- * @param hapticFeedback Whether to provide haptic feedback
- * @param labelFormatter Custom formatter for the value label
- * @param markerLabels Optional labels for specific values
+ * Colors configuration for HorizontalSlider
+ */
+data class HorizontalSliderColors(
+    val thumbColor: Color = Color(0xFF667EEA),
+    val thumbBorderColor: Color = Color.White,
+    val trackColor: Color = Color.Gray.copy(alpha = 0.3f),
+    val activeTrackColor: Brush = Brush.horizontalGradient(
+        listOf(Color(0xFF667EEA), Color(0xFF764BA2))
+    ),
+    val labelBackground: Color = Color.Gray.copy(alpha = 0.2f),
+    val labelText: Color = Color.White,
+    val tickColor: Color = Color.Gray.copy(alpha = 0.5f),
+    val markerText: Color = Color.Gray
+)
+
+/**
+ * Default colors provider
+ */
+object HorizontalSliderDefaults {
+    @Composable
+    fun colors(
+        thumbColor: Color = MaterialTheme.colorScheme.primary,
+        thumbBorderColor: Color = Color.White,
+        trackColor: Color = MaterialTheme.colorScheme.surfaceVariant,
+        activeTrackColor: Brush = Brush.horizontalGradient(
+            listOf(Color(0xFF667EEA), Color(0xFF764BA2))
+        ),
+        labelBackground: Color = MaterialTheme.colorScheme.surface,
+        labelText: Color = MaterialTheme.colorScheme.onSurface,
+        tickColor: Color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+        markerText: Color = MaterialTheme.colorScheme.onSurfaceVariant
+    ) = HorizontalSliderColors(
+        thumbColor = thumbColor,
+        thumbBorderColor = thumbBorderColor,
+        trackColor = trackColor,
+        activeTrackColor = activeTrackColor,
+        labelBackground = labelBackground,
+        labelText = labelText,
+        tickColor = tickColor,
+        markerText = markerText
+    )
+}
+
+/**
+ * Quick option for preset values
+ */
+data class QuickOption(
+    val label: String,
+    val value: Any,
+    val icon: String? = null
+)
+
+/**
+ * A customizable horizontal slider component for consistent UI across the app
  */
 @Composable
 fun HorizontalSlider(
@@ -60,25 +98,30 @@ fun HorizontalSlider(
     showTicks: Boolean = false,
     showValueMarkers: Boolean = false,
     height: Dp = 48.dp,
+    trackHeight: Dp = 6.dp,
+    thumbSize: Dp = 20.dp,
     colors: HorizontalSliderColors = HorizontalSliderDefaults.colors(),
     hapticFeedback: Boolean = true,
     labelFormatter: (Float) -> String = { it.roundToInt().toString() },
-    markerLabels: Map<Float, String>? = null
+    markerLabels: Map<Float, String>? = null,
+    onValueChangeFinished: (() -> Unit)? = null
 ) {
     val haptics = LocalHapticFeedback.current
     
     var sliderWidth by remember { mutableStateOf(0) }
     var isDragging by remember { mutableStateOf(false) }
+    var lastHapticValue by remember { mutableStateOf(value) }
     
     // Animated value for smooth transitions
     val animatedValue by animateFloatAsState(
         targetValue = value,
+        animationSpec = spring(dampingRatio = 0.8f),
         label = "slider_value"
     )
     
     // Calculate normalized position (0 to 1)
-    val normalizedValue = ((value - valueRange.start) / (valueRange.endInclusive - valueRange.start))
-        .coerceIn(0f, 1f)
+    val normalizedValue = ((animatedValue - valueRange.start) / 
+                          (valueRange.endInclusive - valueRange.start)).coerceIn(0f, 1f)
     
     Column(
         modifier = modifier,
@@ -92,7 +135,7 @@ fun HorizontalSlider(
             ) {
                 Card(
                     modifier = Modifier
-                        .alpha(if (isDragging) 1f else 0.8f),
+                        .alpha(if (isDragging) 1f else 0.9f),
                     shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = colors.labelBackground
@@ -102,8 +145,8 @@ fun HorizontalSlider(
                     )
                 ) {
                     Text(
-                        text = labelFormatter(value),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        text = labelFormatter(animatedValue),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         color = colors.labelText
@@ -120,115 +163,150 @@ fun HorizontalSlider(
                 .onSizeChanged { size ->
                     sliderWidth = size.width
                 }
-                .pointerInput(enabled, valueRange) {
-                    if (!enabled) return@pointerInput
-                    
-                    detectHorizontalDragGestures(
-                        onDragStart = { offset ->
-                            isDragging = true
-                            if (hapticFeedback) {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            }
-                            updateValue(offset.x, sliderWidth, valueRange, steps, onValueChange, haptics, hapticFeedback)
-                        },
-                        onDragEnd = {
-                            isDragging = false
-                        }
-                    ) { _, dragAmount ->
-                        val currentX = sliderWidth * normalizedValue
-                        val newX = (currentX + dragAmount).coerceIn(0f, sliderWidth.toFloat())
-                        updateValue(newX, sliderWidth, valueRange, steps, onValueChange, haptics, hapticFeedback)
-                    }
-                },
-            contentAlignment = Alignment.CenterStart
         ) {
             Canvas(
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(enabled, valueRange) {
+                        if (!enabled) return@pointerInput
+                        
+                        detectHorizontalDragGestures(
+                            onDragStart = { offset ->
+                                isDragging = true
+                                if (hapticFeedback) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                }
+                                val newNormalized = (offset.x / size.width).coerceIn(0f, 1f)
+                                val newValue = valueRange.start + 
+                                    (newNormalized * (valueRange.endInclusive - valueRange.start))
+                                val snappedValue = snapToStep(newValue, valueRange, steps)
+                                onValueChange(snappedValue)
+                            },
+                            onDragEnd = {
+                                isDragging = false
+                                onValueChangeFinished?.invoke()
+                            }
+                        ) { _, dragAmount ->
+                            val currentX = size.width * normalizedValue
+                            val newX = (currentX + dragAmount).coerceIn(0f, size.width.toFloat())
+                            val newNormalized = newX / size.width
+                            val newValue = valueRange.start + 
+                                (newNormalized * (valueRange.endInclusive - valueRange.start))
+                            val snappedValue = snapToStep(newValue, valueRange, steps)
+                            
+                            // Haptic feedback on step changes
+                            if (hapticFeedback && steps > 0) {
+                                val stepSize = (valueRange.endInclusive - valueRange.start) / (steps + 1)
+                                if (abs(snappedValue - lastHapticValue) >= stepSize * 0.9f) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    lastHapticValue = snappedValue
+                                }
+                            }
+                            
+                            onValueChange(snappedValue)
+                        }
+                    }
             ) {
-                val trackHeight = height.toPx() * 0.15f
                 val centerY = size.center.y
-                val startPadding = trackHeight
-                val endPadding = size.width - trackHeight
-                val trackLength = endPadding - startPadding
+                val thumbX = size.width * normalizedValue
+                val trackHeightPx = trackHeight.toPx()
+                val thumbRadius = thumbSize.toPx() / 2
                 
                 // Draw track background
                 drawLine(
                     color = colors.trackColor,
-                    start = Offset(startPadding, centerY),
-                    end = Offset(endPadding, centerY),
-                    strokeWidth = trackHeight,
+                    start = Offset(thumbRadius, centerY),
+                    end = Offset(size.width - thumbRadius, centerY),
+                    strokeWidth = trackHeightPx,
                     cap = StrokeCap.Round
                 )
                 
-                // Draw active track
-                val progressX = startPadding + (normalizedValue * trackLength)
+                // Draw active track with gradient
                 drawLine(
-                    color = colors.activeTrackColor,
-                    start = Offset(startPadding, centerY),
-                    end = Offset(progressX, centerY),
-                    strokeWidth = trackHeight,
+                    brush = colors.activeTrackColor,
+                    start = Offset(thumbRadius, centerY),
+                    end = Offset(thumbX, centerY),
+                    strokeWidth = trackHeightPx,
                     cap = StrokeCap.Round
                 )
                 
                 // Draw ticks if enabled
                 if (showTicks && steps > 0) {
-                    drawTicks(
-                        steps = steps,
-                        startX = startPadding,
-                        endX = endPadding,
-                        centerY = centerY,
-                        trackHeight = trackHeight,
-                        color = colors.tickColor
-                    )
+                    val stepWidth = (size.width - 2 * thumbRadius) / (steps + 1)
+                    for (i in 0..steps + 1) {
+                        val x = thumbRadius + (i * stepWidth)
+                        drawLine(
+                            color = colors.tickColor,
+                            start = Offset(x, centerY - trackHeightPx),
+                            end = Offset(x, centerY + trackHeightPx),
+                            strokeWidth = 2.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                    }
                 }
                 
-                // Draw thumb
-                val thumbX = startPadding + (normalizedValue * trackLength)
+                // Draw thumb shadow
                 drawCircle(
-                    color = colors.thumbColor,
-                    radius = if (isDragging) trackHeight * 1.2f else trackHeight,
+                    color = Color.Black.copy(alpha = 0.2f),
+                    radius = if (isDragging) thumbRadius + 4 else thumbRadius + 2,
+                    center = Offset(thumbX + 2, centerY + 2)
+                )
+                
+                // Draw thumb outer circle (white border)
+                drawCircle(
+                    color = colors.thumbBorderColor,
+                    radius = if (isDragging) thumbRadius + 2 else thumbRadius,
                     center = Offset(thumbX, centerY)
                 )
                 
-                // Draw thumb border
+                // Draw thumb inner circle
                 drawCircle(
-                    color = colors.thumbBorderColor,
-                    radius = if (isDragging) trackHeight * 1.2f else trackHeight,
-                    center = Offset(thumbX, centerY),
-                    style = Stroke(width = 2.dp.toPx())
+                    color = colors.thumbColor,
+                    radius = if (isDragging) thumbRadius - 2 else thumbRadius - 3,
+                    center = Offset(thumbX, centerY)
                 )
-                
-                // Thumb glow when dragging
-                if (isDragging) {
-                    drawCircle(
-                        color = colors.thumbBorderColor.copy(alpha = 0.3f),
-                        radius = trackHeight * 1.5f,
-                        center = Offset(thumbX, centerY)
-                    )
-                }
             }
         }
         
-        // Value markers below slider
-        if (showValueMarkers && markerLabels != null) {
+        // Value markers
+        if (showValueMarkers) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                markerLabels.forEach { (markerValue, label) ->
-                    Text(
-                        text = label,
-                        fontSize = 11.sp,
-                        color = colors.markerTextColor,
-                        modifier = Modifier.weight(1f),
-                        textAlign = when {
-                            markerValue == valueRange.start -> TextAlign.Start
-                            markerValue == valueRange.endInclusive -> TextAlign.End
-                            else -> TextAlign.Center
-                        }
-                    )
+                if (markerLabels != null) {
+                    markerLabels.forEach { (_, label) ->
+                        Text(
+                            text = label,
+                            fontSize = 11.sp,
+                            color = colors.markerText,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else if (steps > 0) {
+                    // Generate evenly spaced markers
+                    val stepSize = (valueRange.endInclusive - valueRange.start) / (steps + 1)
+                    for (i in 0..steps + 1) {
+                        val markerValue = valueRange.start + (i * stepSize)
+                        Text(
+                            text = labelFormatter(markerValue),
+                            fontSize = 11.sp,
+                            color = colors.markerText,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else {
+                    // Default markers at 0%, 25%, 50%, 75%, 100%
+                    listOf(0f, 0.25f, 0.5f, 0.75f, 1f).forEach { percent ->
+                        val markerValue = valueRange.start + 
+                            (percent * (valueRange.endInclusive - valueRange.start))
+                        Text(
+                            text = labelFormatter(markerValue),
+                            fontSize = 11.sp,
+                            color = colors.markerText,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
         }
@@ -236,98 +314,70 @@ fun HorizontalSlider(
 }
 
 /**
- * Helper function to draw tick marks on the slider
+ * Preset-based horizontal slider with quick selection options
  */
-private fun DrawScope.drawTicks(
-    steps: Int,
-    startX: Float,
-    endX: Float,
-    centerY: Float,
-    trackHeight: Float,
-    color: Color
-) {
-    val tickCount = steps + 1
-    val tickSpacing = (endX - startX) / steps
-    
-    for (i in 0..steps) {
-        val x = startX + (i * tickSpacing)
-        drawLine(
-            color = color,
-            start = Offset(x, centerY - trackHeight * 1.5f),
-            end = Offset(x, centerY + trackHeight * 1.5f),
-            strokeWidth = 1.dp.toPx(),
-            cap = StrokeCap.Round
-        )
-    }
-}
-
-/**
- * Helper function to update slider value with optional haptic feedback
- */
-private fun updateValue(
-    x: Float,
-    width: Int,
-    valueRange: ClosedFloatingPointRange<Float>,
-    steps: Int,
+@Composable
+fun PresetHorizontalSlider(
+    value: Float,
     onValueChange: (Float) -> Unit,
-    haptics: androidx.compose.ui.hapticfeedback.HapticFeedback,
-    enableHaptics: Boolean
+    presets: List<QuickOption>,
+    modifier: Modifier = Modifier,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..100f,
+    showSlider: Boolean = true,
+    colors: HorizontalSliderColors = HorizontalSliderDefaults.colors()
 ) {
-    val normalizedPosition = (x / width).coerceIn(0f, 1f)
-    var newValue = valueRange.start + normalizedPosition * (valueRange.endInclusive - valueRange.start)
-    
-    // Snap to steps if defined
-    if (steps > 0) {
-        val stepSize = (valueRange.endInclusive - valueRange.start) / steps
-        val steppedValue = ((newValue - valueRange.start) / stepSize).roundToInt() * stepSize + valueRange.start
-        
-        // Haptic feedback when crossing a step
-        if (enableHaptics && steppedValue != newValue) {
-            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Preset chips
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            presets.forEach { preset ->
+                val presetValue = (preset.value as? Number)?.toFloat() ?: 0f
+                FilterChip(
+                    selected = abs(value - presetValue) < 0.01f,
+                    onClick = { onValueChange(presetValue) },
+                    label = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            preset.icon?.let { icon ->
+                                Text(text = icon, fontSize = 16.sp)
+                            }
+                            Text(text = preset.label)
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
         
-        newValue = steppedValue
+        // Optional slider for fine-tuning
+        if (showSlider) {
+            HorizontalSlider(
+                value = value,
+                onValueChange = onValueChange,
+                valueRange = valueRange,
+                colors = colors,
+                showLabel = true,
+                showValueMarkers = false
+            )
+        }
     }
-    
-    onValueChange(newValue.coerceIn(valueRange.start, valueRange.endInclusive))
 }
 
-/**
- * Colors configuration for HorizontalSlider
- */
-data class HorizontalSliderColors(
-    val trackColor: Color,
-    val activeTrackColor: Color,
-    val thumbColor: Color,
-    val thumbBorderColor: Color,
-    val tickColor: Color,
-    val labelBackground: Color,
-    val labelText: Color,
-    val markerTextColor: Color
-)
-
-/**
- * Default configurations for HorizontalSlider
- */
-object HorizontalSliderDefaults {
-    @Composable
-    fun colors(
-        trackColor: Color = MaterialTheme.colorScheme.surfaceVariant,
-        activeTrackColor: Color = MaterialTheme.colorScheme.primary,
-        thumbColor: Color = MaterialTheme.colorScheme.primary,
-        thumbBorderColor: Color = MaterialTheme.colorScheme.surface,
-        tickColor: Color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-        labelBackground: Color = MaterialTheme.colorScheme.secondaryContainer,
-        labelText: Color = MaterialTheme.colorScheme.onSecondaryContainer,
-        markerTextColor: Color = MaterialTheme.colorScheme.onSurfaceVariant
-    ) = HorizontalSliderColors(
-        trackColor = trackColor,
-        activeTrackColor = activeTrackColor,
-        thumbColor = thumbColor,
-        thumbBorderColor = thumbBorderColor,
-        tickColor = tickColor,
-        labelBackground = labelBackground,
-        labelText = labelText,
-        markerTextColor = markerTextColor
-    )
+private fun snapToStep(
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int
+): Float {
+    if (steps <= 0) return value
+    
+    val stepSize = (valueRange.endInclusive - valueRange.start) / (steps + 1)
+    val stepIndex = ((value - valueRange.start) / stepSize).roundToInt()
+    return (valueRange.start + stepIndex * stepSize).coerceIn(valueRange)
 }

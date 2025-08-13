@@ -160,6 +160,7 @@ private fun NumberQuickAddContent(
 
 /**
  * Vertical slider quick add (for ratings, mood, satisfaction, etc.)
+ * UPDATED TO SUPPORT topLabel, bottomLabel, and showValue fields
  */
 @Composable
 private fun VerticalSliderQuickAddContent(
@@ -185,62 +186,99 @@ private fun VerticalSliderQuickAddContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Optional emoji/icon display based on value
-                config.options?.find { (it.value as? Number)?.toInt() == value.roundToInt() }?.let { option ->
-                    option.icon?.let { icon ->
-                        Text(
-                            text = icon,
-                            style = MaterialTheme.typography.displaySmall
-                        )
+                // Optional emoji/icon display based on value - ONLY show if showValue is true
+                if (config.showValue) {
+                    config.options?.find { (it.value as? Number)?.toInt() == value.roundToInt() }?.let { option ->
+                        option.icon?.let { icon ->
+                            Text(
+                                text = icon,
+                                style = MaterialTheme.typography.displaySmall
+                            )
+                        }
                     }
                 }
                 
-                // Vertical slider
-                VerticalSlider(
-                    value = value,
-                    onValueChange = { value = it },
-                    valueRange = ((config.min as? Number)?.toFloat() ?: 1f)..((config.max as? Number)?.toFloat() ?: 5f),
-                    steps = ((config.max as? Number)?.toFloat()?.minus((config.min as? Number)?.toFloat() ?: 1f))?.toInt()?.minus(1) ?: 3,
-                    height = 200.dp,
-                    showLabel = true,
-                    showTicks = true,
-                    colors = when(plugin.id) {
-                        "mood" -> VerticalSliderDefaults.moodColors()
-                        "energy" -> VerticalSliderDefaults.energyColors()
-                        "stress" -> VerticalSliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.error,
-                            activeTrackColor = MaterialTheme.colorScheme.error
+                // Container for slider with labels
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Labels on the left side
+                    Column(
+                        modifier = Modifier.padding(end = 8.dp),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        // Top label (use topLabel if provided, otherwise max value)
+                        Text(
+                            text = config.topLabel ?: "${config.max ?: 5}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        "sleep" -> VerticalSliderDefaults.sleepColors()
-                        else -> VerticalSliderDefaults.colors()
-                    },
-                    labelFormatter = when(plugin.id) {
-                        "mood" -> SliderDescriptions.mood
-                        "energy" -> SliderDescriptions.energy
-                        "stress" -> SliderDescriptions.stress
-                        "sleep" -> SliderDescriptions.sleep
-                        else -> { v -> 
-                            config.options?.find { (it.value as? Number)?.toFloat() == v }?.label 
-                                ?: v.roundToInt().toString()
+                        Spacer(modifier = Modifier.weight(1f))
+                        // Bottom label (use bottomLabel if provided, otherwise min value)
+                        Text(
+                            text = config.bottomLabel ?: "${config.min ?: 1}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    
+                    // Vertical slider
+                    VerticalSlider(
+                        value = value,
+                        onValueChange = { value = it },
+                        valueRange = ((config.min as? Number)?.toFloat() ?: 1f)..((config.max as? Number)?.toFloat() ?: 5f),
+                        steps = ((config.max as? Number)?.toFloat()?.minus((config.min as? Number)?.toFloat() ?: 1f))?.toInt()?.minus(1) ?: 3,
+                        height = 200.dp,
+                        showLabel = config.showValue,  // Use the showValue flag to control numeric display
+                        showTicks = true,
+                        colors = when(plugin.id) {
+                            "mood" -> VerticalSliderDefaults.moodColors()
+                            "energy" -> VerticalSliderDefaults.energyColors()
+                            "stress" -> VerticalSliderDefaults.colors(
+                                thumbColor = MaterialTheme.colorScheme.error,
+                                activeTrackColor = MaterialTheme.colorScheme.error
+                            )
+                            "sleep" -> VerticalSliderDefaults.sleepColors()
+                            else -> VerticalSliderDefaults.colors()
+                        },
+                        labelFormatter = when(plugin.id) {
+                            "mood" -> if (config.showValue) SliderDescriptions.mood else { _ -> "" }
+                            "energy" -> if (config.showValue) SliderDescriptions.energy else { _ -> "" }
+                            "stress" -> if (config.showValue) SliderDescriptions.stress else { _ -> "" }
+                            "sleep" -> if (config.showValue) SliderDescriptions.sleep else { _ -> "" }
+                            else -> { v -> 
+                                if (config.showValue) {
+                                    config.options?.find { (it.value as? Number)?.toFloat() == v }?.label 
+                                        ?: v.roundToInt().toString()
+                                } else {
+                                    ""
+                                }
+                            }
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
-                // Optional description text
-                config.options?.find { (it.value as? Number)?.toInt() == value.roundToInt() }?.let { option ->
-                    Text(
-                        text = option.label,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                
+                // Show current selection text ONLY if showValue is true
+                if (config.showValue) {
+                    config.options?.find { (it.value as? Number)?.toInt() == value.roundToInt() }?.let { option ->
+                        Text(
+                            text = option.label,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
-                    onConfirm(mapOf(config.id to value.roundToInt()))
+                    onConfirm(mapOf(config.id to value))
                 }
             ) {
                 Text("Add")
@@ -255,7 +293,7 @@ private fun VerticalSliderQuickAddContent(
 }
 
 /**
- * Horizontal slider quick add (for quantities, amounts, durations, etc.)
+ * Horizontal slider quick add (for quantities, amounts, etc.)
  */
 @Composable
 private fun HorizontalSliderQuickAddContent(
@@ -275,10 +313,12 @@ private fun HorizontalSliderQuickAddContent(
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Use horizontal slider for quantities
+                // Horizontal slider component
                 HorizontalSlider(
                     value = value,
                     onValueChange = { value = it },
@@ -569,22 +609,6 @@ private fun QuickAddStageContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        stage.title?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        
-        stage.description?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        
         when (stage.inputType) {
             InputType.TEXT -> {
                 var text by remember(stage.id) { 
