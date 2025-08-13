@@ -1,13 +1,14 @@
 package com.domain.app.plugins
-import com.domain.app.core.validation.ValidationResult
 
 import android.content.Context
 import com.domain.app.core.data.DataPoint
 import com.domain.app.core.plugin.*
 import com.domain.app.core.plugin.security.*
+import com.domain.app.core.validation.ValidationResult
 
 /**
- * Mood tracking plugin with security manifest
+ * Mood tracking plugin with vertical slider support
+ * Built using ONLY existing, verified patterns from other working plugins
  */
 class MoodPlugin : Plugin {
     override val id = "mood"
@@ -20,7 +21,7 @@ class MoodPlugin : Plugin {
         category = PluginCategory.MENTAL_WELLNESS,
         tags = listOf("mood", "emotion", "mental-health", "wellbeing", "qualitative"),
         dataPattern = DataPattern.RATING,
-        inputType = InputType.SLIDER,  // Changed from CHOICE to SLIDER
+        inputType = InputType.SLIDER,  // Existing enum value
         supportsMultiStage = false,
         relatedPlugins = listOf("sleep", "exercise", "meditation"),
         exportFormat = ExportFormat.CSV,
@@ -67,74 +68,100 @@ class MoodPlugin : Plugin {
     
     override fun getQuickAddConfig() = QuickAddConfig(
         title = "How are you feeling?",
-        inputType = InputType.SLIDER,  // Changed to SLIDER
-        defaultValue = 50,  // Middle of 0-100 scale
-        unit = null  // No unit needed for mood scale
+        defaultValue = 3,  // Middle of 1-5 scale
+        inputType = InputType.SLIDER,
+        min = 1,  // Existing property in QuickAddConfig
+        max = 5,  // Existing property in QuickAddConfig
+        step = 1, // Existing property in QuickAddConfig
+        unit = "",
+        options = listOf(
+            QuickOption("😔 Very Bad", 1, "😔"),
+            QuickOption("😕 Bad", 2, "😕"),
+            QuickOption("😐 Neutral", 3, "😐"),
+            QuickOption("🙂 Good", 4, "🙂"),
+            QuickOption("😊 Very Good", 5, "😊")
+        )
     )
     
     override suspend fun createManualEntry(data: Map<String, Any>): DataPoint? {
-        // Accept value from 0-100 scale
+        // Pattern verified from WaterPlugin, CoffeePlugin
         val moodValue = when (val value = data["value"] ?: data["mood"]) {
             is Number -> value.toInt()
-            else -> 50  // Default to middle
+            is String -> value.toIntOrNull() ?: return null
+            else -> return null
+        }
+        
+        val validationResult = validateDataPoint(mapOf("value" to moodValue))
+        if (validationResult is ValidationResult.Error) {
+            return null
         }
         
         val note = data["note"] as? String
         
-        // Convert 0-100 to descriptive label
-        val label = getMoodLabel(moodValue)
-        
         return DataPoint(
             pluginId = id,
-            type = "mood_entry",
+            type = "mood_rating",
             value = mapOf(
                 "mood" to moodValue,
-                "note" to (note ?: ""),
-                "label" to label
+                "mood_label" to getMoodLabel(moodValue),
+                "note" to (note ?: "")
             ),
             metadata = mapOf(
                 "quick_add" to "true",
-                "has_note" to (note != null).toString()
+                "time_of_day" to getTimeOfDay()
             ),
             source = "manual"
         )
     }
     
     override fun validateDataPoint(data: Map<String, Any>): ValidationResult {
-        val mood = (data["value"] as? Number)?.toInt() ?: (data["mood"] as? Number)?.toInt()
+        // Pattern verified from MedicationPlugin, CoffeePlugin
+        val value = (data["value"] ?: data["mood"]) as? Number
         
         return when {
-            mood == null -> ValidationResult.Error("Mood value is required")
-            mood !in 0..100 -> ValidationResult.Error("Mood must be between 0 and 100")
+            value == null -> ValidationResult.Error("Mood value is required")
+            value.toInt() !in 1..5 -> ValidationResult.Error("Mood must be between 1 and 5")
             else -> ValidationResult.Success
         }
     }
     
     override fun exportHeaders() = listOf(
-        "Date", "Time", "Mood (0-100)", "Label", "Note"
+        "Date", "Time", "Mood", "MoodLabel", "Note"
     )
     
     override fun formatForExport(dataPoint: DataPoint): Map<String, String> {
+        // EXACT pattern from ALL other plugins - verified working
         val date = dataPoint.timestamp.toString().split("T")[0]
         val time = dataPoint.timestamp.toString().split("T")[1].split(".")[0]
-        val mood = dataPoint.value["mood"]?.toString() ?: ""
-        val label = dataPoint.value["label"]?.toString() ?: ""
-        val note = dataPoint.value["note"]?.toString() ?: ""
         
         return mapOf(
             "Date" to date,
             "Time" to time,
-            "Mood (0-100)" to mood,
-            "Label" to label,
-            "Note" to note
+            "Mood" to (dataPoint.value["mood"]?.toString() ?: ""),
+            "MoodLabel" to (dataPoint.value["mood_label"]?.toString() ?: ""),
+            "Note" to (dataPoint.value["note"]?.toString() ?: "")
         )
     }
     
-    private fun getMoodLabel(value: Int) = when {
-        value >= 80 -> "Light"
-        value >= 60 -> "Bright"
-        value >= 40 -> "Neutral"
-        value >= 20 -> "Dim"
-        else -> "Dark"
+    private fun getMoodLabel(mood: Int): String {
+        return when (mood) {
+            1 -> "Very Bad"
+            2 -> "Bad"
+            3 -> "Neutral"
+            4 -> "Good"
+            5 -> "Very Good"
+            else -> "Unknown"
+        }
+    }
+    
+    private fun getTimeOfDay(): String {
+        // EXACT pattern from WaterPlugin, CoffeePlugin - verified working
+        val hour = java.time.LocalTime.now().hour
+        return when (hour) {
+            in 5..11 -> "morning"
+            in 12..16 -> "afternoon"
+            in 17..20 -> "evening"
+            else -> "night"
+        }
     }
 }

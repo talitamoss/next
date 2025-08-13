@@ -19,6 +19,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.ui.theme.AppIcons
 import com.domain.app.ui.utils.getPluginIcon
+import com.domain.app.ui.components.plugin.quickadd.UnifiedQuickAddDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,73 +52,25 @@ fun DashboardScreen(
                     }
                 }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showPluginSelector = true }
-            ) {
-                Icon(
-                    imageVector = AppIcons.Action.add,
-                    contentDescription = "Quick Add"
-                )
-            }
         }
     ) { paddingValues ->
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 160.dp),
+            columns = GridCells.Fixed(2),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(paddingValues)
+                .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Summary cards spanning full width
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Text(
-                    text = "Today's Summary",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
+            // Header section
+            item(span = { GridItemSpan(2) }) {
+                DashboardHeader(
+                    totalPlugins = uiState.dashboardPlugins.size,
+                    // FIX 1: Calculate activeToday from pluginDataCounts
+                    activeToday = uiState.pluginDataCounts.count { it.value > 0 }
                 )
-            }
-            
-            item {
-                SummaryCard(
-                    title = "Data Points",
-                    value = uiState.todayEntryCount.toString()
-                )
-            }
-            
-            item {
-                SummaryCard(
-                    title = "Active Plugins",
-                    value = uiState.activePluginCount.toString()
-                )
-            }
-            
-            item {
-                SummaryCard(
-                    title = "Streak",
-                    value = "${uiState.currentStreak} days"
-                )
-            }
-            
-            // Plugins section
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Your Plugins",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    TextButton(onClick = { /* Navigate to all plugins */ }) {
-                        Text("See All")
-                    }
-                }
             }
             
             // Plugin tiles
@@ -151,16 +104,16 @@ fun DashboardScreen(
         }
     }
     
-    // Quick add dialog
+    // Quick add dialog - Using UnifiedQuickAddDialog
     if (showQuickAddDialog && selectedPlugin != null) {
-        MultiStageQuickAddDialog(
+        UnifiedQuickAddDialog(
             plugin = selectedPlugin!!,
             onDismiss = {
                 showQuickAddDialog = false
                 selectedPlugin = null
             },
-            onConfirm = { dataPoint ->
-                viewModel.onQuickAdd(selectedPlugin!!, dataPoint.value)
+            onConfirm = { data ->
+                viewModel.onQuickAdd(selectedPlugin!!, data)
                 showQuickAddDialog = false
                 selectedPlugin = null
             }
@@ -171,13 +124,75 @@ fun DashboardScreen(
     if (showPluginSelector) {
         PluginSelectorBottomSheet(
             plugins = uiState.allPlugins,
-            onPluginSelected = { plugin ->
+            // FIX 2: Explicit type annotation for lambda parameter
+            onPluginSelected = { plugin: Plugin ->
                 viewModel.addPluginToDashboard(plugin.id)
                 showPluginSelector = false
             },
             onDismiss = {
                 showPluginSelector = false
             }
+        )
+    }
+}
+
+@Composable
+fun DashboardHeader(
+    totalPlugins: Int,
+    activeToday: Int
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            Text(
+                text = "Welcome back!",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                StatItem(
+                    label = "Active Plugins",
+                    value = totalPlugins.toString()
+                )
+                StatItem(
+                    label = "Tracked Today",
+                    value = activeToday.toString()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun StatItem(
+    label: String,
+    value: String
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -210,70 +225,100 @@ fun PluginTile(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = getPluginIcon(plugin),
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-                
-                // Data count badge
+                Icon(
+                    imageVector = getPluginIcon(plugin),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
                 if (dataCount > 0) {
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                MaterialTheme.colorScheme.tertiaryContainer,
-                                CircleShape
-                            )
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
+                    Badge {
                         Text(
                             text = dataCount.toString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                            style = MaterialTheme.typography.labelSmall
                         )
                     }
                 }
             }
             
-            // Plugin name and quick add button
-            Column {
-                Text(
-                    text = plugin.metadata.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 2,
-                    modifier = Modifier.fillMaxWidth()
+            // Plugin name
+            Text(
+                text = plugin.metadata.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            
+            // Quick add button
+            Button(
+                onClick = onQuickAdd,
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Icon(
+                    imageVector = AppIcons.Action.add,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
                 )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                // Quick add button
-                FilledTonalButton(
-                    onClick = onQuickAdd,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(8.dp)
-                ) {
-                    Icon(
-                        imageVector = AppIcons.Action.add,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Quick Add",
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                }
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Quick Add",
+                    style = MaterialTheme.typography.labelMedium
+                )
             }
         }
     }
 }
+
+@Composable
+fun AddPluginTile(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        border = CardDefaults.outlinedCardBorder()
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = AppIcons.Action.add,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                        .padding(4.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Add Plugin",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun EmptyPluginTile(
+    modifier: Modifier = Modifier
+) {
+    Spacer(
+        modifier = modifier.aspectRatio(1f)
+    )
+}
+
+// FIX 3: REMOVED duplicate PluginSelectorBottomSheet
+// This function already exists in PluginSelectorBottomSheet.kt
