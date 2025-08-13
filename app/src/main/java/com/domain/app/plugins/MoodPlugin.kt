@@ -6,7 +6,6 @@ import com.domain.app.core.data.DataPoint
 import com.domain.app.core.plugin.*
 import com.domain.app.core.plugin.security.*
 import com.domain.app.core.validation.ValidationResult
-import java.time.LocalTime
 
 /**
  * Mood tracking plugin with vertical slider support
@@ -72,22 +71,16 @@ class MoodPlugin : Plugin {
         id = "mood",
         title = "How are you feeling?",
         defaultValue = 3,  // Middle of 1-5 scale
-        inputType = InputType.VERTICAL_SLIDER,  // Changed from SLIDER to VERTICAL_SLIDER
-        min = 1,  // Minimum mood value
-        max = 5,  // Maximum mood value
-        step = 1, // Integer steps
-        unit = "",
-        // NEW FIELDS ADDED HERE:
-        topLabel = "Yeah",        // Top label instead of "5"
-        bottomLabel = "Nah",       // Bottom label instead of "1"
-        showValue = false,         // Hide numeric value display
-        options = listOf(
-            QuickOption("😔 Very Bad", 1, "😔"),
-            QuickOption("😕 Bad", 2, "😕"),
-            QuickOption("😐 Neutral", 3, "😐"),
-            QuickOption("🙂 Good", 4, "🙂"),
-            QuickOption("😊 Very Good", 5, "😊")
-        )
+        inputType = InputType.VERTICAL_SLIDER,
+        min = 1,
+        max = 5,
+        step = 1,
+        // UI customization:
+        topLabel = "Yeah",         // Positive end
+        bottomLabel = "Nah",        // Negative end
+        showValue = false,          // Hide numeric values
+        primaryColor = "#9333EA",   // Purple color for mood
+        secondaryColor = "#E9D5FF"  // Light purple for track
     )
     
     override suspend fun collectData(): DataPoint? {
@@ -96,7 +89,6 @@ class MoodPlugin : Plugin {
     }
     
     override suspend fun createManualEntry(data: Map<String, Any>): DataPoint? {
-        // Pattern verified from WaterPlugin, CoffeePlugin
         val moodValue = when (val value = data["value"] ?: data["mood"]) {
             is Number -> value.toInt()
             is String -> value.toIntOrNull() ?: return null
@@ -115,12 +107,10 @@ class MoodPlugin : Plugin {
             type = "mood_rating",
             value = mapOf(
                 "mood" to moodValue,
-                "mood_label" to getMoodLabel(moodValue),
                 "note" to (note ?: "")
             ),
             metadata = mapOf(
-                "quick_add" to "true",
-                "time_of_day" to getTimeOfDay()
+                "quick_add" to "true"
             ),
             source = "manual"
         )
@@ -138,11 +128,10 @@ class MoodPlugin : Plugin {
     }
     
     override fun exportHeaders() = listOf(
-        "Date", "Time", "Mood", "MoodLabel", "Note"
+        "Date", "Time", "Mood", "Note"
     )
     
     override fun formatForExport(dataPoint: DataPoint): Map<String, String> {
-        // EXACT pattern from ALL other plugins - verified working
         val date = dataPoint.timestamp.toString().split("T")[0]
         val time = dataPoint.timestamp.toString().split("T")[1].split(".")[0]
         
@@ -150,35 +139,7 @@ class MoodPlugin : Plugin {
             "Date" to date,
             "Time" to time,
             "Mood" to (dataPoint.value["mood"]?.toString() ?: ""),
-            "MoodLabel" to (dataPoint.value["mood_label"]?.toString() ?: ""),
             "Note" to (dataPoint.value["note"]?.toString() ?: "")
         )
-    }
-    
-    /**
-     * Helper function to get mood label from numeric value
-     */
-    private fun getMoodLabel(value: Int): String {
-        return when (value) {
-            1 -> "Very Bad"
-            2 -> "Bad"
-            3 -> "Neutral"
-            4 -> "Good"
-            5 -> "Very Good"
-            else -> "Unknown"
-        }
-    }
-    
-    /**
-     * Helper function to get time of day category
-     */
-    private fun getTimeOfDay(): String {
-        val hour = LocalTime.now().hour
-        return when {
-            hour in 5..11 -> "morning"
-            hour in 12..16 -> "afternoon"
-            hour in 17..20 -> "evening"
-            else -> "night"
-        }
     }
 }

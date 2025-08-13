@@ -156,10 +156,12 @@ data class QuickAddConfig(
     val stages: List<QuickAddStage>? = null,
     val presets: List<QuickOption>? = null,
     val placeholder: String? = null,
-    // NEW FIELDS ADDED HERE:
+    // UI customization fields:
     val topLabel: String? = null,      // Label for top of vertical slider (e.g., "Yeah")
     val bottomLabel: String? = null,   // Label for bottom of vertical slider (e.g., "Nah")
-    val showValue: Boolean = true      // Whether to show numeric value (false hides it)
+    val showValue: Boolean = true,     // Whether to show numeric value (false hides it)
+    val primaryColor: String? = null,  // Primary color as hex string (e.g., "#6B46C1")
+    val secondaryColor: String? = null // Secondary color for gradients as hex string
 )
 
 /**

@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
@@ -16,7 +17,6 @@ import com.domain.app.ui.components.core.sliders.HorizontalSlider
 import com.domain.app.ui.components.core.sliders.HorizontalSliderDefaults
 import com.domain.app.ui.components.core.sliders.VerticalSlider
 import com.domain.app.ui.components.core.sliders.VerticalSliderDefaults
-import com.domain.app.ui.components.core.sliders.SliderDescriptions
 import kotlin.math.roundToInt
 
 /**
@@ -160,7 +160,7 @@ private fun NumberQuickAddContent(
 
 /**
  * Vertical slider quick add (for ratings, mood, satisfaction, etc.)
- * UPDATED TO SUPPORT topLabel, bottomLabel, and showValue fields
+ * Uses config fields for colors and labels - no hard-coded plugin knowledge
  */
 @Composable
 private fun VerticalSliderQuickAddContent(
@@ -227,6 +227,22 @@ private fun VerticalSliderQuickAddContent(
                         )
                     }
                     
+                    // Parse colors from config or use defaults
+                    val sliderColors = if (config.primaryColor != null || config.secondaryColor != null) {
+                        VerticalSliderDefaults.colors(
+                            thumbColor = config.primaryColor?.let { 
+                                try { Color(android.graphics.Color.parseColor(it)) } 
+                                catch (e: Exception) { MaterialTheme.colorScheme.primary }
+                            } ?: MaterialTheme.colorScheme.primary,
+                            activeTrackColor = config.secondaryColor?.let { 
+                                try { Color(android.graphics.Color.parseColor(it)) } 
+                                catch (e: Exception) { MaterialTheme.colorScheme.primaryContainer }
+                            } ?: MaterialTheme.colorScheme.primaryContainer
+                        )
+                    } else {
+                        VerticalSliderDefaults.colors()
+                    }
+                    
                     // Vertical slider
                     VerticalSlider(
                         value = value,
@@ -236,28 +252,14 @@ private fun VerticalSliderQuickAddContent(
                         height = 200.dp,
                         showLabel = config.showValue,  // Use the showValue flag to control numeric display
                         showTicks = true,
-                        colors = when(plugin.id) {
-                            "mood" -> VerticalSliderDefaults.moodColors()
-                            "energy" -> VerticalSliderDefaults.energyColors()
-                            "stress" -> VerticalSliderDefaults.colors(
-                                thumbColor = MaterialTheme.colorScheme.error,
-                                activeTrackColor = MaterialTheme.colorScheme.error
-                            )
-                            "sleep" -> VerticalSliderDefaults.sleepColors()
-                            else -> VerticalSliderDefaults.colors()
-                        },
-                        labelFormatter = when(plugin.id) {
-                            "mood" -> if (config.showValue) SliderDescriptions.mood else { _ -> "" }
-                            "energy" -> if (config.showValue) SliderDescriptions.energy else { _ -> "" }
-                            "stress" -> if (config.showValue) SliderDescriptions.stress else { _ -> "" }
-                            "sleep" -> if (config.showValue) SliderDescriptions.sleep else { _ -> "" }
-                            else -> { v -> 
-                                if (config.showValue) {
-                                    config.options?.find { (it.value as? Number)?.toFloat() == v }?.label 
-                                        ?: v.roundToInt().toString()
-                                } else {
-                                    ""
-                                }
+                        colors = sliderColors,
+                        labelFormatter = { v -> 
+                            if (config.showValue) {
+                                // If showing values, try to find a label from options, otherwise show number
+                                config.options?.find { (it.value as? Number)?.toFloat() == v }?.label 
+                                    ?: v.roundToInt().toString()
+                            } else {
+                                ""  // Don't show any labels if showValue is false
                             }
                         }
                     )
