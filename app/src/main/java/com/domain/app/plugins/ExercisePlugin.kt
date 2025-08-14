@@ -1,39 +1,38 @@
+// app/src/main/java/com/domain/app/plugins/ExercisePlugin.kt
 package com.domain.app.plugins
 
 import android.content.Context
 import com.domain.app.core.data.DataPoint
 import com.domain.app.core.plugin.*
 import com.domain.app.core.plugin.security.*
+import com.domain.app.core.validation.ValidationResult
 
 /**
- * Exercise tracking plugin with security manifest
+ * Exercise tracking plugin with composite inputs
  */
 class ExercisePlugin : Plugin {
     override val id = "exercise"
     
     override val metadata = PluginMetadata(
         name = "Exercise",
-        description = "Log workouts and physical activities",
+        description = "Track your physical activities",
         version = "1.0.0",
         author = "System",
         category = PluginCategory.HEALTH,
-        tags = listOf("exercise", "fitness", "workout", "activity", "health"),
+        tags = listOf("exercise", "fitness", "workout", "activity"),
         dataPattern = DataPattern.COMPOSITE,
-        inputType = InputType.CHOICE,
-        supportsMultiStage = true,
-        relatedPlugins = listOf("water", "energy", "mood", "sleep"),
+        inputType = InputType.NUMBER, // Default, but we use inputs instead
+        supportsMultiStage = false,   // Using composite instead
+        relatedPlugins = listOf("mood", "sleep", "water"),
         exportFormat = ExportFormat.CSV,
         dataSensitivity = DataSensitivity.NORMAL,
         naturalLanguageAliases = listOf(
-            "exercise", "workout", "gym", "run", "ran", "running",
-            "walk", "walked", "walking", "bike", "biked", "cycling",
-            "yoga", "swim", "swimming", "sport", "training",
-            "cardio", "weights", "fitness"
+            "exercise", "workout", "training", "run", "walk", "cycle",
+            "I exercised", "went for a run", "worked out", "gym session"
         ),
         contextualTriggers = listOf(
             ContextTrigger.TIME_OF_DAY,
-            ContextTrigger.LOCATION,
-            ContextTrigger.PATTERN_BASED
+            ContextTrigger.LOCATION
         )
     )
     
@@ -42,23 +41,21 @@ class ExercisePlugin : Plugin {
             PluginCapability.COLLECT_DATA,
             PluginCapability.READ_OWN_DATA,
             PluginCapability.LOCAL_STORAGE,
-            PluginCapability.EXPORT_DATA,
-            PluginCapability.ANALYTICS_BASIC
+            PluginCapability.EXPORT_DATA
         ),
         dataSensitivity = DataSensitivity.NORMAL,
         dataAccess = setOf(DataAccessScope.OWN_DATA_ONLY),
-        privacyPolicy = "Exercise data is stored locally and used to track your fitness progress. Location data is not collected unless explicitly enabled.",
+        privacyPolicy = "Exercise data is stored locally and encrypted. We never share this data without your explicit consent.",
         dataRetention = DataRetentionPolicy.USER_CONTROLLED
     )
     
     override val trustLevel = PluginTrustLevel.OFFICIAL
     
     override fun getPermissionRationale() = mapOf(
-        PluginCapability.COLLECT_DATA to "Record your workouts and physical activities",
-        PluginCapability.READ_OWN_DATA to "View your exercise history and progress",
+        PluginCapability.COLLECT_DATA to "Record your exercise activities",
+        PluginCapability.READ_OWN_DATA to "View your exercise history",
         PluginCapability.LOCAL_STORAGE to "Save your workout data on your device",
-        PluginCapability.EXPORT_DATA to "Export fitness data for analysis or sharing",
-        PluginCapability.ANALYTICS_BASIC to "Calculate calories burned and activity trends"
+        PluginCapability.EXPORT_DATA to "Export your fitness data for analysis"
     )
     
     override suspend fun initialize(context: Context) {
@@ -67,106 +64,89 @@ class ExercisePlugin : Plugin {
     
     override fun supportsManualEntry() = true
     
-    override fun getQuickAddStages() = listOf(
-        QuickAddStage(
-            id = "activity",
-            title = "What activity did you do?",
-            inputType = InputType.CHOICE,
-            required = true,
-            options = listOf(
-                QuickOption("Walk", "walk", "🚶"),
-                QuickOption("Run", "run", "🏃"),
-                QuickOption("Gym", "gym", "💪"),
-                QuickOption("Yoga", "yoga", "🧘"),
-                QuickOption("Bike", "bike", "🚴"),
-                QuickOption("Swim", "swim", "🏊"),
-                QuickOption("Sports", "sports", "⚽"),
-                QuickOption("Other", "other", "🏋️")
-            )
-        ),
-        QuickAddStage(
-            id = "duration",
-            title = "How long did you exercise?",
-            inputType = InputType.NUMBER,
-            required = true,
-            hint = "Duration in minutes",
-            defaultValue = 30
-        ),
-        QuickAddStage(
-            id = "intensity",
-            title = "How intense was it?",
-            inputType = InputType.CHOICE,
-            required = true,
-            options = listOf(
-                QuickOption("Light", "light", "😌"),
-                QuickOption("Moderate", "moderate", "😊"),
-                QuickOption("Intense", "intense", "😤")
-            )
-        ),
-        QuickAddStage(
-            id = "notes",
-            title = "Any notes?",
-            inputType = InputType.TEXT,
-            required = false,
-            hint = "Optional notes about your workout"
-        )
-    )
-    
     override fun getQuickAddConfig() = QuickAddConfig(
-        title = "Log Exercise",
-        inputType = InputType.CHOICE,
-        options = listOf(
-            QuickOption("Walk", "walk", "🚶"),
-            QuickOption("Run", "run", "🏃"),
-            QuickOption("Gym", "gym", "💪"),
-            QuickOption("Yoga", "yoga", "🧘"),
-            QuickOption("Bike", "bike", "🚴"),
-            QuickOption("Other", "other", "🏋️")
+        title = "Track Exercise",
+        inputs = listOf(
+            QuickAddInput(
+                id = "type",
+                label = "Exercise",
+                type = InputType.CAROUSEL,
+                options = listOf(
+                    QuickOption("Walking", "walking"),
+                    QuickOption("Running", "running"),
+                    QuickOption("Cycling", "cycling"),
+                    QuickOption("Swimming", "swimming"),
+                    QuickOption("Gym", "gym"),
+                    QuickOption("Yoga", "yoga"),
+                    QuickOption("Hiking", "hiking")
+                ),
+                defaultValue = "running"
+            ),
+            QuickAddInput(
+                id = "distance",
+                label = "Distance",
+                type = InputType.HORIZONTAL_SLIDER,
+                min = 0,
+                max = 10,
+                unit = "km",
+                defaultValue = 5.0f,
+                topLabel = "0",
+                bottomLabel = "10 km"
+            ),
+            QuickAddInput(
+                id = "intensity",
+                label = "Intensity",
+                type = InputType.HORIZONTAL_SLIDER,
+                min = 1,
+                max = 5,
+                defaultValue = 3.0f,
+                topLabel = "Easy",
+                bottomLabel = "Hard"
+            )
         )
     )
     
     override suspend fun createManualEntry(data: Map<String, Any>): DataPoint? {
-        val activityType = data["activity"] as? String ?: data["value"] as? String ?: "other"
-        val duration = (data["duration"] as? Number)?.toInt() ?: 30
-        val intensity = data["intensity"] as? String ?: "moderate"
-        val calories = data["calories"] as? Int
-        val notes = data["notes"] as? String
+        val exerciseType = data["type"] as? String ?: return null
+        val distance = (data["distance"] as? Number)?.toFloat() ?: 0f
+        val intensity = (data["intensity"] as? Number)?.toInt() ?: 3
+        
+        val validationResult = validateDataPoint(data)
+        if (validationResult is ValidationResult.Error) {
+            return null
+        }
         
         return DataPoint(
             pluginId = id,
             type = "exercise_session",
             value = mapOf(
-                "activity" to activityType,
-                "activity_label" to getActivityLabel(activityType),
-                "duration_minutes" to duration,
+                "type" to exerciseType,
+                "distance" to distance,
                 "intensity" to intensity,
-                "calories" to (calories ?: estimateCalories(activityType, duration, intensity)),
-                "notes" to (notes ?: ""),
-                "emoji" to getEmojiForActivity(activityType)
+                "intensity_label" to getIntensityLabel(intensity)
             ),
             metadata = mapOf(
-                "quick_add" to "true",
-                "has_notes" to (notes != null).toString()
+                "quick_add" to "true"
             ),
             source = "manual"
         )
     }
     
     override fun validateDataPoint(data: Map<String, Any>): ValidationResult {
-        val duration = (data["duration"] as? Number)?.toInt()
-        val activity = data["activity"] as? String
+        val exerciseType = data["type"] as? String
+        val distance = (data["distance"] as? Number)?.toFloat()
+        val intensity = (data["intensity"] as? Number)?.toInt()
         
         return when {
-            activity.isNullOrBlank() -> ValidationResult.Error("Activity type is required")
-            duration == null -> ValidationResult.Error("Duration is required")
-            duration <= 0 -> ValidationResult.Error("Duration must be positive")
-            duration > 720 -> ValidationResult.Warning("That's over 12 hours! Are you sure?")
+            exerciseType.isNullOrBlank() -> ValidationResult.Error("Exercise type is required")
+            distance == null || distance < 0 -> ValidationResult.Error("Distance must be a positive number")
+            intensity == null || intensity !in 1..5 -> ValidationResult.Error("Intensity must be between 1 and 5")
             else -> ValidationResult.Success
         }
     }
     
     override fun exportHeaders() = listOf(
-        "Date", "Time", "Activity", "Duration (min)", "Intensity", "Calories", "Notes"
+        "Date", "Time", "Type", "Distance", "Intensity", "IntensityLabel"
     )
     
     override fun formatForExport(dataPoint: DataPoint): Map<String, String> {
@@ -176,55 +156,21 @@ class ExercisePlugin : Plugin {
         return mapOf(
             "Date" to date,
             "Time" to time,
-            "Activity" to (dataPoint.value["activity_label"]?.toString() ?: ""),
-            "Duration (min)" to (dataPoint.value["duration_minutes"]?.toString() ?: ""),
+            "Type" to (dataPoint.value["type"]?.toString() ?: ""),
+            "Distance" to (dataPoint.value["distance"]?.toString() ?: "0"),
             "Intensity" to (dataPoint.value["intensity"]?.toString() ?: ""),
-            "Calories" to (dataPoint.value["calories"]?.toString() ?: ""),
-            "Notes" to (dataPoint.value["notes"]?.toString() ?: "")
+            "IntensityLabel" to (dataPoint.value["intensity_label"]?.toString() ?: "")
         )
     }
     
-    private fun getActivityLabel(activity: String) = when(activity) {
-        "walk" -> "Walking"
-        "run" -> "Running"
-        "gym" -> "Gym Workout"
-        "yoga" -> "Yoga"
-        "bike" -> "Cycling"
-        "swim" -> "Swimming"
-        "sports" -> "Sports"
-        else -> "Other Exercise"
-    }
-    
-    private fun getEmojiForActivity(activity: String) = when(activity) {
-        "walk" -> "🚶"
-        "run" -> "🏃"
-        "gym" -> "💪"
-        "yoga" -> "🧘"
-        "bike" -> "🚴"
-        "swim" -> "🏊"
-        "sports" -> "⚽"
-        else -> "🏋️"
-    }
-    
-    private fun estimateCalories(activity: String, duration: Int, intensity: String): Int {
-        val baseRate = when(activity) {
-            "walk" -> 4
-            "run" -> 10
-            "gym" -> 8
-            "yoga" -> 3
-            "bike" -> 7
-            "swim" -> 9
-            "sports" -> 7
-            else -> 5
+    private fun getIntensityLabel(value: Int): String {
+        return when (value) {
+            1 -> "Easy"
+            2 -> "Light"
+            3 -> "Moderate"
+            4 -> "Vigorous"
+            5 -> "Hard"
+            else -> "Unknown"
         }
-        
-        val intensityMultiplier = when(intensity) {
-            "light" -> 0.8
-            "moderate" -> 1.0
-            "intense" -> 1.5
-            else -> 1.0
-        }
-        
-        return (baseRate * duration * intensityMultiplier).toInt()
     }
 }

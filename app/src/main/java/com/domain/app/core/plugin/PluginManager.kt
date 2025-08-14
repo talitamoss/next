@@ -278,17 +278,17 @@ class PluginManager @Inject constructor(
     /**
      * Clean up all plugins
      */
-    suspend fun cleanup() {
-        activePlugins.values.forEach { plugin ->
-            try {
-                plugin.cleanup()
-            } catch (e: Exception) {
-                // Log error but continue cleanup
-            }
+suspend fun cleanup() {
+    // Change from forEach to for loop
+    for (plugin in activePlugins.values) {
+        try {
+            plugin.cleanup()
+        } catch (e: Exception) {
+            // Log error but continue cleanup
         }
-        scope.cancel()
     }
-    
+    scope.cancel()
+}    
     private suspend fun handlePluginError(pluginId: String, error: Throwable) {
         database.pluginStateDao().recordError(
             pluginId, 

@@ -39,6 +39,8 @@ class DashboardViewModel @Inject constructor(
         observePluginPermissions()
         loadDataCounts()
         observeEvents()
+        calculateStreak()
+        loadPluginDataCounts()
     }
     
     private fun loadPlugins() {
@@ -150,6 +152,50 @@ class DashboardViewModel @Inject constructor(
         }
     }
     
+    private fun calculateStreak() {
+        viewModelScope.launch {
+            // Calculate consecutive days with data
+            dataRepository.getRecentData(365)
+                .map { dataPoints ->
+                    if (dataPoints.isEmpty()) return@map 0
+                    
+                    val dayGroups = dataPoints.groupBy { dataPoint ->
+                        dataPoint.timestamp.truncatedTo(ChronoUnit.DAYS)
+                    }
+                    
+                    var streak = 0
+                    var currentDate = Instant.now().truncatedTo(ChronoUnit.DAYS)
+                    
+                    while (dayGroups.containsKey(currentDate)) {
+                        streak++
+                        currentDate = currentDate.minus(1, ChronoUnit.DAYS)
+                    }
+                    
+                    streak
+                }
+                .collect { streak ->
+                    _uiState.update { it.copy(currentStreak = streak) }
+                }
+        }
+    }
+    
+    private fun loadPluginDataCounts() {
+        viewModelScope.launch {
+            // Get today's data counts for each plugin
+            val todayStart = Instant.now().truncatedTo(ChronoUnit.DAYS)
+            dataRepository.getRecentData(24)
+                .map { dataPoints ->
+                    dataPoints
+                        .filter { it.timestamp.isAfter(todayStart) }
+                        .groupBy { it.pluginId }
+                        .mapValues { it.value.size }
+                }
+                .collect { counts ->
+                    _uiState.update { it.copy(pluginDataCounts = counts) }
+                }
+        }
+    }
+    
     private fun observeEvents() {
         EventBus.events
             .filterIsInstance<Event.DataCollected>()
@@ -160,6 +206,9 @@ class DashboardViewModel @Inject constructor(
                         showSuccessFeedback = true
                     )
                 }
+                // Refresh counts when new data is collected
+                loadPluginDataCounts()
+                calculateStreak()
             }
             .launchIn(viewModelScope)
     }
@@ -216,6 +265,14 @@ class DashboardViewModel @Inject constructor(
         _uiState.update { it.copy(showPluginSelector = false) }
     }
     
+    fun addPluginToDashboard(pluginId: String) {
+        viewModelScope.launch {
+            preferencesManager.addToDashboard(pluginId)
+            // Refresh plugin data counts for the new plugin
+            loadPluginDataCounts()
+        }
+    }
+    
     fun onQuickAdd(plugin: Plugin, data: Map<String, Any>) {
         viewModelScope.launch {
             _uiState.update { it.copy(isProcessing = true) }
@@ -223,7 +280,7 @@ class DashboardViewModel @Inject constructor(
             try {
                 val dataPoint = pluginManager.createManualEntry(plugin.id, data)
                 if (dataPoint != null) {
-                    _uiState.update { it.copy(showQuickAdd = false) }
+                    _uiState.update { it.copy(showQuickAdd = false, isProcessing = false) }
                     // Success handled by event observer
                 } else {
                     _uiState.update {
@@ -279,5 +336,8 @@ data class DashboardUiState(
     val isProcessing: Boolean = false,
     val error: String? = null,
     val lastDataPoint: com.domain.app.core.data.DataPoint? = null,
-    val showSuccessFeedback: Boolean = false
+    val showSuccessFeedback: Boolean = false,
+    // NEW PROPERTIES ADDED FOR DASHBOARDSCREEN:
+    val currentStreak: Int = 0,
+    val pluginDataCounts: Map<String, Int> = emptyMap()
 )

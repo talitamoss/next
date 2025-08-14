@@ -1,69 +1,53 @@
+// app/src/main/java/com/domain/app/core/plugin/Plugin.kt
 package com.domain.app.core.plugin
 
 import android.content.Context
 import com.domain.app.core.data.DataPoint
-import com.domain.app.core.plugin.security.PluginSecurityManifest
-import com.domain.app.core.plugin.security.PluginTrustLevel
+import com.domain.app.core.plugin.security.*
+import com.domain.app.core.validation.ValidationResult
 
 /**
- * Core plugin interface defining the contract for all behavioral data collection plugins.
- * Designed for extensibility while maintaining security and privacy.
+ * Core plugin interface that all plugins must implement
+ * Defines the contract for behavioral data collection plugins
  */
 interface Plugin {
     val id: String
     val metadata: PluginMetadata
-    
-    // Security manifest - required for all plugins
     val securityManifest: PluginSecurityManifest
-    
-    // Trust level - determined by system
     val trustLevel: PluginTrustLevel
-        get() = PluginTrustLevel.COMMUNITY
     
-    // Core functionality
     suspend fun initialize(context: Context)
-    fun supportsManualEntry(): Boolean = false
-    suspend fun createManualEntry(data: Map<String, Any>): DataPoint? = null
+    suspend fun collectData(): DataPoint? = null  // Default implementation - returns null
+    suspend fun createManualEntry(data: Map<String, Any>): DataPoint?
+    fun validateDataPoint(data: Map<String, Any>): ValidationResult
+    fun supportsManualEntry(): Boolean
+    fun supportsAutomaticCollection(): Boolean = false
     fun getQuickAddConfig(): QuickAddConfig? = null
-    
-    // Multi-stage input support
-    fun getQuickAddStages(): List<QuickAddStage>? = null
-    
-    // Validation
-    fun validateDataPoint(data: Map<String, Any>): ValidationResult = ValidationResult.Success
-    
-    // Export/Import
-    fun exportHeaders(): List<String> = listOf("timestamp", "value")
-    fun formatForExport(dataPoint: DataPoint): Map<String, String> = mapOf(
-        "timestamp" to dataPoint.timestamp.toString(),
-        "value" to dataPoint.value.toString()
-    )
-    
-    // Permission rationale
-    fun getPermissionRationale(): Map<PluginCapability, String> = emptyMap()
-    
-    // Cleanup
-    suspend fun cleanup() {}
+    fun getPermissionRationale(): Map<PluginCapability, String>
+    fun exportHeaders(): List<String>
+    fun formatForExport(dataPoint: DataPoint): Map<String, String>
+    suspend fun cleanup() = Unit  // Default implementation - does nothing
 }
 
 /**
- * Plugin metadata containing descriptive and behavioral information
+ * Plugin metadata for discovery and categorization
  */
 data class PluginMetadata(
     val name: String,
     val description: String,
     val version: String,
     val author: String,
-    val category: PluginCategory = PluginCategory.OTHER,
+    val category: PluginCategory,
     val tags: List<String> = emptyList(),
+    val iconResId: Int? = null,
+    val bannerResId: Int? = null,
     val dataPattern: DataPattern = DataPattern.SINGLE_VALUE,
     val inputType: InputType = InputType.NUMBER,
     val supportsMultiStage: Boolean = false,
-    val relatedPlugins: List<String> = emptyList(),
     val exportFormat: ExportFormat = ExportFormat.CSV,
     val dataSensitivity: DataSensitivity = DataSensitivity.NORMAL,
     val naturalLanguageAliases: List<String> = emptyList(),
-    val iconResource: Int? = null,
+    val relatedPlugins: List<String> = emptyList(),
     val permissions: List<String> = emptyList(),
     val contextualTriggers: List<ContextTrigger> = emptyList()
 )
@@ -95,23 +79,48 @@ enum class DataPattern {
 
 /**
  * Input types for data collection
+ * Each type maps directly to a specific UI component in the component repository
  */
 enum class InputType {
-    NUMBER,
-    TEXT,
-    CHOICE,
-    SLIDER,
-    DURATION,
-    SCALE,
-    TIME_PICKER,
-    DATE_PICKER
+    // Original input types
+    NUMBER,                    // Numeric input field
+    TEXT,                      // Text input field
+    CHOICE,                    // Single choice from options
+    @Deprecated("Use VERTICAL_SLIDER or HORIZONTAL_SLIDER for specific orientation")
+    SLIDER,                    // Generic slider (kept for backward compatibility)
+    DURATION,                  // Duration picker
+    SCALE,                     // Rating scale
+    TIME_PICKER,               // Time picker (original)
+    DATE_PICKER,               // Date picker (original)
+    
+    // New slider types for better control
+    VERTICAL_SLIDER,           // Vertical slider for ratings/scales (NEW)
+    HORIZONTAL_SLIDER,         // Horizontal slider for quantities/amounts (NEW)
+    
+    // Additional types needed by QuickAddDialog
+    BOOLEAN,                   // Toggle/checkbox (NEW - needed by dialog)
+    DATE,                      // Date selection (NEW - needed by dialog) 
+    TIME,                      // Time selection (NEW - needed by dialog)
+    
+    // Special input types
+    CAROUSEL,                  // Horizontal scrolling selector (NEW)
+    TIME_RANGE,               // Time range selector with RangeSlider (NEW)
+    
+    // Future input types for extensibility
+    COLOR_PICKER,              // Color selection (future)
+    LOCATION_PICKER,           // Location selection (future)
+    IMAGE_PICKER,              // Image selection (future)
+    MULTI_CHOICE               // Multiple choice selection (future)
 }
 
 /**
  * Export format options
  */
 enum class ExportFormat {
-    CSV, JSON, XML, CUSTOM
+    CSV, 
+    JSON, 
+    XML, 
+    CUSTOM
 }
 
 /**
@@ -144,11 +153,44 @@ data class QuickAddConfig(
     val defaultValue: Any? = null,
     val inputType: InputType = InputType.NUMBER,
     val options: List<QuickOption>? = null,
-    val unit: String? = null
+    val unit: String? = null,
+    val id: String = "value",
+    val min: Number? = null,
+    val max: Number? = null,
+    val step: Number? = null,
+    val stages: List<QuickAddStage>? = null,
+    val presets: List<QuickOption>? = null,
+    val placeholder: String? = null,
+    // UI customization fields:
+    val topLabel: String? = null,      // Label for top of vertical slider (e.g., "Yeah")
+    val bottomLabel: String? = null,   // Label for bottom of vertical slider (e.g., "Nah")
+    val showValue: Boolean = true,     // Whether to show numeric value (false hides it)
+    val primaryColor: String? = null,  // Primary color as hex string (e.g., "#6B46C1")
+    val secondaryColor: String? = null, // Secondary color for gradients as hex string
+    // NEW: For multiple inputs on one screen
+    val inputs: List<QuickAddInput>? = null
 )
 
 /**
- * Quick add option
+ * Configuration for individual inputs in a composite quick add
+ */
+data class QuickAddInput(
+    val id: String,                    // Field identifier
+    val label: String,                  // Display label
+    val type: InputType,                // What kind of input
+    val defaultValue: Any? = null,
+    val min: Number? = null,
+    val max: Number? = null,
+    val options: List<QuickOption>? = null,
+    val topLabel: String? = null,       // For sliders
+    val bottomLabel: String? = null,    // For sliders
+    val unit: String? = null,           // "km", "min", etc.
+    val placeholder: String? = null,    // For text inputs
+    val required: Boolean = true
+)
+
+/**
+ * Option for choice-based input
  */
 data class QuickOption(
     val label: String,
@@ -157,33 +199,18 @@ data class QuickOption(
 )
 
 /**
- * Multi-stage quick add support
+ * Stage for multi-stage quick add
  */
 data class QuickAddStage(
     val id: String,
     val title: String,
     val inputType: InputType,
-    val required: Boolean = true,
+    val defaultValue: Any? = null,
+    val min: Number? = null,
+    val max: Number? = null,
+    val step: Number? = null,
+    val unit: String? = null,
     val options: List<QuickOption>? = null,
-    val validation: ((Any?) -> ValidationResult)? = null,
-    val hint: String? = null,
-    val defaultValue: Any? = null
-)
-
-/**
- * Validation results
- */
-sealed class ValidationResult {
-    object Success : ValidationResult()
-    data class Error(val message: String) : ValidationResult()
-    data class Warning(val message: String) : ValidationResult()
-}
-
-/**
- * Risk warning for permissions
- */
-data class RiskWarning(
-    val severity: RiskLevel,
-    val message: String,
-    val capability: PluginCapability
+    val placeholder: String? = null,
+    val required: Boolean = true
 )

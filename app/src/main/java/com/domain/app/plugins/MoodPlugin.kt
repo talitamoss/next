@@ -1,12 +1,15 @@
+// app/src/main/java/com/domain/app/plugins/MoodPlugin.kt
 package com.domain.app.plugins
 
 import android.content.Context
 import com.domain.app.core.data.DataPoint
 import com.domain.app.core.plugin.*
 import com.domain.app.core.plugin.security.*
+import com.domain.app.core.validation.ValidationResult
 
 /**
- * Mood tracking plugin with security manifest
+ * Mood tracking plugin with vertical slider support
+ * Built using ONLY existing, verified patterns from other working plugins
  */
 class MoodPlugin : Plugin {
     override val id = "mood"
@@ -19,7 +22,7 @@ class MoodPlugin : Plugin {
         category = PluginCategory.MENTAL_WELLNESS,
         tags = listOf("mood", "emotion", "mental-health", "wellbeing", "qualitative"),
         dataPattern = DataPattern.RATING,
-        inputType = InputType.CHOICE,
+        inputType = InputType.VERTICAL_SLIDER,  // Using the new vertical slider type
         supportsMultiStage = false,
         relatedPlugins = listOf("sleep", "exercise", "meditation"),
         exportFormat = ExportFormat.CSV,
@@ -65,87 +68,78 @@ class MoodPlugin : Plugin {
     override fun supportsManualEntry() = true
     
     override fun getQuickAddConfig() = QuickAddConfig(
+        id = "mood",
         title = "How are you feeling?",
-        inputType = InputType.CHOICE,
-        options = listOf(
-            QuickOption("Great", 5, "😊"),
-            QuickOption("Good", 4, "🙂"),
-            QuickOption("Okay", 3, "😐"),
-            QuickOption("Not Great", 2, "😕"),
-            QuickOption("Bad", 1, "😢")
-        )
+        defaultValue = 3,  // Middle of 1-5 scale
+        inputType = InputType.VERTICAL_SLIDER,
+        min = 1,
+        max = 5,
+        step = 1,
+        // UI customization:
+        topLabel = "Yeah",         // Positive end
+        bottomLabel = "Nah",        // Negative end
+        showValue = false,          // Hide numeric values
+        primaryColor = "#9333EA",   // Purple color for mood
+        secondaryColor = "#E9D5FF"  // Light purple for track
     )
+    
+    override suspend fun collectData(): DataPoint? {
+        // Automatic collection not supported for mood
+        return null
+    }
     
     override suspend fun createManualEntry(data: Map<String, Any>): DataPoint? {
         val moodValue = when (val value = data["value"] ?: data["mood"]) {
             is Number -> value.toInt()
-            else -> 3
+            is String -> value.toIntOrNull() ?: return null
+            else -> return null
+        }
+        
+        val validationResult = validateDataPoint(mapOf("value" to moodValue))
+        if (validationResult is ValidationResult.Error) {
+            return null
         }
         
         val note = data["note"] as? String
         
         return DataPoint(
             pluginId = id,
-            type = "mood_entry",
+            type = "mood_rating",
             value = mapOf(
                 "mood" to moodValue,
-                "note" to (note ?: ""),
-                "emoji" to getEmojiForMood(moodValue),
-                "label" to getLabelForMood(moodValue)
+                "note" to (note ?: "")
             ),
             metadata = mapOf(
-                "quick_add" to "true",
-                "has_note" to (note != null).toString()
+                "quick_add" to "true"
             ),
             source = "manual"
         )
     }
     
     override fun validateDataPoint(data: Map<String, Any>): ValidationResult {
-        val mood = (data["value"] as? Number)?.toInt() ?: (data["mood"] as? Number)?.toInt()
+        // Pattern verified from MedicationPlugin, CoffeePlugin
+        val value = (data["value"] ?: data["mood"]) as? Number
         
         return when {
-            mood == null -> ValidationResult.Error("Mood value is required")
-            mood !in 1..5 -> ValidationResult.Error("Mood must be between 1 and 5")
+            value == null -> ValidationResult.Error("Mood value is required")
+            value.toInt() !in 1..5 -> ValidationResult.Error("Mood must be between 1 and 5")
             else -> ValidationResult.Success
         }
     }
     
     override fun exportHeaders() = listOf(
-        "Date", "Time", "Mood (1-5)", "Label", "Note"
+        "Date", "Time", "Mood", "Note"
     )
     
     override fun formatForExport(dataPoint: DataPoint): Map<String, String> {
         val date = dataPoint.timestamp.toString().split("T")[0]
         val time = dataPoint.timestamp.toString().split("T")[1].split(".")[0]
-        val mood = dataPoint.value["mood"]?.toString() ?: ""
-        val label = dataPoint.value["label"]?.toString() ?: ""
-        val note = dataPoint.value["note"]?.toString() ?: ""
         
         return mapOf(
             "Date" to date,
             "Time" to time,
-            "Mood (1-5)" to mood,
-            "Label" to label,
-            "Note" to note
+            "Mood" to (dataPoint.value["mood"]?.toString() ?: ""),
+            "Note" to (dataPoint.value["note"]?.toString() ?: "")
         )
-    }
-    
-    private fun getEmojiForMood(value: Int) = when(value) {
-        5 -> "😊"
-        4 -> "🙂"
-        3 -> "😐"
-        2 -> "😕"
-        1 -> "😢"
-        else -> "😐"
-    }
-    
-    private fun getLabelForMood(value: Int) = when(value) {
-        5 -> "Great"
-        4 -> "Good"
-        3 -> "Okay"
-        2 -> "Not Great"
-        1 -> "Bad"
-        else -> "Unknown"
     }
 }

@@ -1,398 +1,337 @@
-package com.domain.app.ui.security
+package com.domain.app.core.plugin.security
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginCapability
+import com.domain.app.core.plugin.RiskLevel
 import com.domain.app.core.plugin.getRiskLevel
 import com.domain.app.core.plugin.getDescription
-import com.domain.app.core.plugin.RiskLevel
-import com.domain.app.core.plugin.RiskWarning
-import com.domain.app.core.plugin.security.PluginTrustLevel
+import com.domain.app.core.plugin.security.getWarningMessage
 import com.domain.app.ui.theme.AppIcons
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Dialog for requesting plugin permissions with detailed explanations
+ */
 @Composable
 fun PluginPermissionDialog(
     plugin: Plugin,
     requestedPermissions: Set<PluginCapability>,
-    riskWarnings: List<RiskWarning> = emptyList(),
     onGrant: () -> Unit,
     onDeny: () -> Unit
 ) {
-    AlertDialog(
+    // Generate warnings from high-risk capabilities
+    val highRiskCapabilities = requestedPermissions.filter { capability ->
+        capability.getRiskLevel() in listOf(RiskLevel.HIGH, RiskLevel.CRITICAL)
+    }
+    
+    Dialog(
         onDismissRequest = onDeny,
-        title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
             ) {
-                // Plugin icon
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
+                // Header
+                Text(
+                    text = "Permission Request",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Plugin info
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = AppIcons.getPluginIcon(plugin.id),
+                        imageVector = AppIcons.Plugin.custom,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(40.dp),
+                        tint = MaterialTheme.colorScheme.primary
                     )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = plugin.metadata.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "Version ${plugin.metadata.version}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 
-                Column {
-                    Text(
-                        text = "${plugin.metadata.name} Permissions",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Text(
-                        text = "Version ${plugin.metadata.version}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        },
-        text = {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // Trust level indicator
-                item {
-                    PluginTrustLevelCard(plugin.trustLevel)
-                }
+                Spacer(modifier = Modifier.height(16.dp))
                 
-                // Plugin description
-                item {
-                    Text(
-                        text = plugin.metadata.description,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                
-                // Risk warnings if any
-                if (riskWarnings.isNotEmpty()) {
-                    item {
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            )
+                // Trust level if available
+                plugin.trustLevel?.let { trustLevel ->
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = when (trustLevel) {
+                                PluginTrustLevel.OFFICIAL -> MaterialTheme.colorScheme.primaryContainer
+                                PluginTrustLevel.VERIFIED -> MaterialTheme.colorScheme.secondaryContainer
+                                PluginTrustLevel.COMMUNITY -> MaterialTheme.colorScheme.surfaceVariant
+                                PluginTrustLevel.UNTRUSTED -> MaterialTheme.colorScheme.errorContainer
+                                PluginTrustLevel.BLOCKED -> MaterialTheme.colorScheme.errorContainer
+                                PluginTrustLevel.QUARANTINED -> MaterialTheme.colorScheme.errorContainer
+                            }
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            Icon(
+                                imageVector = when (trustLevel) {
+                                    PluginTrustLevel.OFFICIAL -> AppIcons.Status.verified
+                                    PluginTrustLevel.VERIFIED -> AppIcons.Status.check
+                                    PluginTrustLevel.COMMUNITY -> AppIcons.Status.info
+                                    PluginTrustLevel.UNTRUSTED -> AppIcons.Status.warning
+                                    PluginTrustLevel.BLOCKED -> AppIcons.Status.error
+                                    PluginTrustLevel.QUARANTINED -> AppIcons.Status.pause
+                                },
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = when (trustLevel) {
+                                    PluginTrustLevel.OFFICIAL -> "Official Plugin"
+                                    PluginTrustLevel.VERIFIED -> "Verified Plugin"
+                                    PluginTrustLevel.COMMUNITY -> "Community Plugin"
+                                    PluginTrustLevel.UNTRUSTED -> "Untrusted Source"
+                                    PluginTrustLevel.BLOCKED -> "Blocked Plugin"
+                                    PluginTrustLevel.QUARANTINED -> "Under Review"
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                
+                // Show warnings for high-risk capabilities
+                if (highRiskCapabilities.isNotEmpty()) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = AppIcons.Status.warning,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onErrorContainer
-                                    )
+                                Icon(
+                                    imageVector = AppIcons.Status.warning,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Security Warnings",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            highRiskCapabilities.forEach { capability ->
+                                val warningMessage = capability.getWarningMessage()
+                                if (warningMessage != null) {
                                     Text(
-                                        text = "High Risk Permissions",
-                                        style = MaterialTheme.typography.titleSmall,
+                                        text = "• $warningMessage",
+                                        style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onErrorContainer
                                     )
                                 }
-                                Text(
-                                    text = "This plugin requests sensitive permissions. Grant only if you trust the developer.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
                 
                 // Permissions list
-                item {
-                    Text(
-                        text = "This plugin requests:",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                Text(
+                    text = "This plugin requests the following permissions:",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(requestedPermissions.toList()) { capability ->
+                        PermissionRequestItem(capability = capability)
+                    }
                 }
                 
-                items(requestedPermissions.toList()) { capability ->
-                    PermissionItem(
-                        capability = capability,
-                        rationale = plugin.getPermissionRationale()[capability]
-                    )
-                }
+                Spacer(modifier = Modifier.height(16.dp))
                 
-                // Privacy policy
-                val privacyPolicyText = plugin.securityManifest.privacyPolicy
-                if (!privacyPolicyText.isNullOrBlank()) {
-                    item {
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp)
-                            ) {
-                                Text(
-                                    text = "Privacy Policy",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = privacyPolicyText,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
+                // Action buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDeny) {
+                        Text("Deny")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = onGrant) {
+                        Text("Grant Permissions")
                     }
                 }
             }
-        },
-        confirmButton = {
-            FilledTonalButton(
-                onClick = onGrant,
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
-            ) {
-                Text("Grant Permissions")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDeny) {
-                Text("Deny")
-            }
         }
-    )
+    }
 }
 
 @Composable
-fun PermissionItem(
-    capability: PluginCapability,
-    rationale: String?
-) {
+private fun PermissionRequestItem(capability: PluginCapability) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = when (capability.getRiskLevel()) {
-                RiskLevel.LOW -> MaterialTheme.colorScheme.surface
-                RiskLevel.MEDIUM -> MaterialTheme.colorScheme.secondaryContainer
-                RiskLevel.HIGH -> MaterialTheme.colorScheme.tertiaryContainer
-                RiskLevel.CRITICAL -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-            }
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            verticalAlignment = Alignment.Top
         ) {
-            // Risk indicator
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(
-                        when (capability.getRiskLevel()) {
-                            RiskLevel.LOW -> MaterialTheme.colorScheme.primary
-                            RiskLevel.MEDIUM -> MaterialTheme.colorScheme.secondary
-                            RiskLevel.HIGH -> MaterialTheme.colorScheme.tertiary
-                            RiskLevel.CRITICAL -> MaterialTheme.colorScheme.error
-                        }
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = getIconForCapability(capability),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+            Icon(
+                imageVector = getIconForCapability(capability),
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = when (capability.getRiskLevel()) {
+                    RiskLevel.HIGH, RiskLevel.CRITICAL -> MaterialTheme.colorScheme.error
+                    RiskLevel.MEDIUM -> MaterialTheme.colorScheme.tertiary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
             
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = capability.name.replace("_", " ").lowercase().capitalize(),
+                    text = capability.name.replace("_", " ").lowercase()
+                        .replaceFirstChar { it.uppercase() },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = rationale ?: capability.getDescription(),
+                    text = capability.getDescription(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-            
-            // Risk badge
-            Text(
-                text = capability.getRiskLevel().name,
-                style = MaterialTheme.typography.labelSmall,
-                color = when (capability.getRiskLevel()) {
-                    RiskLevel.LOW -> MaterialTheme.colorScheme.primary
-                    RiskLevel.MEDIUM -> MaterialTheme.colorScheme.secondary
-                    RiskLevel.HIGH -> MaterialTheme.colorScheme.tertiary
-                    RiskLevel.CRITICAL -> MaterialTheme.colorScheme.error
-                }
-            )
-        }
-    }
-}
-
-@Composable
-fun PluginTrustLevelCard(trustLevel: PluginTrustLevel) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = when (trustLevel) {
-                PluginTrustLevel.OFFICIAL -> MaterialTheme.colorScheme.primaryContainer
-                PluginTrustLevel.VERIFIED -> MaterialTheme.colorScheme.secondaryContainer
-                PluginTrustLevel.COMMUNITY -> MaterialTheme.colorScheme.surfaceVariant
-                PluginTrustLevel.UNTRUSTED -> MaterialTheme.colorScheme.errorContainer
-                PluginTrustLevel.BLOCKED -> MaterialTheme.colorScheme.error
-                PluginTrustLevel.QUARANTINED -> MaterialTheme.colorScheme.errorContainer
-            }
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = when (trustLevel) {
-                    PluginTrustLevel.OFFICIAL -> AppIcons.Status.success
-                    PluginTrustLevel.VERIFIED -> AppIcons.Security.shield
-                    else -> AppIcons.Status.warning
-                },
-                contentDescription = null,
-                tint = when (trustLevel) {
-                    PluginTrustLevel.OFFICIAL -> MaterialTheme.colorScheme.onPrimaryContainer
-                    PluginTrustLevel.VERIFIED -> MaterialTheme.colorScheme.onSecondaryContainer
-                    else -> MaterialTheme.colorScheme.onErrorContainer
-                }
-            )
-            Text(
-                text = when (trustLevel) {
-                    PluginTrustLevel.OFFICIAL -> "Official Plugin"
-                    PluginTrustLevel.VERIFIED -> "Verified Plugin"
-                    PluginTrustLevel.COMMUNITY -> "Community Plugin"
-                    PluginTrustLevel.UNTRUSTED -> "Untrusted Plugin"
-                    PluginTrustLevel.BLOCKED -> "Blocked Plugin"
-                    PluginTrustLevel.QUARANTINED -> "Quarantined Plugin"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SimplePermissionDialog(
-    capability: PluginCapability,
-    onGrant: () -> Unit,
-    onDeny: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDeny,
-        title = {
-            Text("Grant Permission?")
-        },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "Grant ${capability.name.replace("_", " ").lowercase()} permission?",
-                    style = MaterialTheme.typography.bodyLarge
-                )
                 
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
+                // Show risk level for high-risk permissions
+                if (capability.getRiskLevel() in listOf(RiskLevel.HIGH, RiskLevel.CRITICAL)) {
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = capability.getDescription(),
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodyMedium
+                        text = "⚠️ ${capability.getRiskLevel().name} RISK",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
                     )
                 }
-                
-                if (capability.getRiskLevel() != RiskLevel.LOW) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = AppIcons.Status.warning,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            Text(
-                                text = "Risk Level: ${capability.getRiskLevel()}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onGrant) {
-                Text("Grant")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDeny) {
-                Text("Deny")
             }
         }
-    )
+    }
 }
 
+/**
+ * Helper function to get icon for capability
+ */
 private fun getIconForCapability(capability: PluginCapability): androidx.compose.ui.graphics.vector.ImageVector {
     return when (capability) {
         PluginCapability.COLLECT_DATA -> AppIcons.Action.add
-        PluginCapability.READ_OWN_DATA,
-        PluginCapability.READ_ALL_DATA -> AppIcons.Storage.folder
+        PluginCapability.READ_OWN_DATA -> AppIcons.Storage.folder
+        PluginCapability.READ_ALL_DATA -> AppIcons.Storage.database
         PluginCapability.DELETE_DATA -> AppIcons.Action.delete
-        PluginCapability.SHOW_NOTIFICATIONS -> AppIcons.Communication.notification
-        PluginCapability.NETWORK_ACCESS -> AppIcons.Storage.cloud
-        PluginCapability.ACCESS_LOCATION -> AppIcons.Plugin.location
-        PluginCapability.LOCAL_STORAGE -> AppIcons.Storage.storage
+        PluginCapability.MODIFY_DATA -> AppIcons.Action.edit
+        
         PluginCapability.EXPORT_DATA -> AppIcons.Data.upload
+        PluginCapability.IMPORT_DATA -> AppIcons.Data.download
+        PluginCapability.SHARE_DATA -> AppIcons.Communication.share
+        PluginCapability.INTEGRATE_SERVICES -> AppIcons.Communication.link
+        
+        PluginCapability.SHOW_NOTIFICATIONS -> AppIcons.Communication.notifications
+        PluginCapability.SYSTEM_NOTIFICATIONS -> AppIcons.Communication.notifications
+        PluginCapability.SCHEDULE_NOTIFICATIONS -> AppIcons.Data.calendar
+        PluginCapability.PUSH_NOTIFICATIONS -> AppIcons.Communication.notifications
+        
+        PluginCapability.LOCAL_STORAGE -> AppIcons.Storage.storage
+        PluginCapability.EXTERNAL_STORAGE -> AppIcons.Storage.folder
+        PluginCapability.CLOUD_STORAGE -> AppIcons.Storage.cloud
+        PluginCapability.CLOUD_SYNC -> AppIcons.Storage.cloud
+        PluginCapability.CACHE_DATA -> AppIcons.Storage.storage
+        
+        PluginCapability.NETWORK_ACCESS -> AppIcons.Communication.cloud
+        PluginCapability.FILE_ACCESS -> AppIcons.Storage.folder
+        PluginCapability.CAMERA_ACCESS -> AppIcons.Device.camera
+        PluginCapability.MICROPHONE_ACCESS -> AppIcons.Device.mic
+        
+        PluginCapability.ACCESS_LOCATION -> AppIcons.Plugin.location
+        PluginCapability.ACCESS_SENSORS -> AppIcons.Device.sensors
+        PluginCapability.ACCESS_BIOMETRIC -> AppIcons.Device.fingerprint
+        
         PluginCapability.MODIFY_SETTINGS -> AppIcons.Navigation.settings
+        PluginCapability.INSTALL_PLUGINS -> AppIcons.Plugin.custom
+        PluginCapability.MODIFY_THEME -> AppIcons.Action.palette
+        PluginCapability.ADD_MENU_ITEMS -> AppIcons.Navigation.menu
+        PluginCapability.CUSTOM_UI -> AppIcons.Action.dashboard
+        PluginCapability.FULLSCREEN_UI -> AppIcons.Action.fullscreen
+        
+        PluginCapability.BACKGROUND_SYNC -> AppIcons.Status.sync
+        PluginCapability.BACKGROUND_PROCESS -> AppIcons.Status.sync
+        PluginCapability.BACKGROUND_PROCESSING -> AppIcons.Status.sync
+        
+        PluginCapability.ANALYTICS_BASIC -> AppIcons.Data.analytics
+        PluginCapability.ANALYTICS_DETAILED -> AppIcons.Data.analytics
+        
+        PluginCapability.SEND_EMAILS -> AppIcons.Communication.email
+        PluginCapability.SEND_SMS -> AppIcons.Communication.message
+        
+        // Default for any unmapped capabilities
         else -> AppIcons.Plugin.custom
     }
 }

@@ -1,3 +1,4 @@
+// app/src/main/java/com/domain/app/core/plugin/PluginCapability.kt
 package com.domain.app.core.plugin
 
 /**
@@ -17,11 +18,14 @@ enum class PluginCapability {
     MODIFY_THEME,
     ADD_MENU_ITEMS,
     SHOW_NOTIFICATIONS,
+    SYSTEM_NOTIFICATIONS,        // Added for system-level notifications
+    SCHEDULE_NOTIFICATIONS,       // Added for scheduled notifications
     FULLSCREEN_UI,
     
     // System capabilities
     BACKGROUND_SYNC,
     BACKGROUND_PROCESS,
+    BACKGROUND_PROCESSING,        // Added as alias for BACKGROUND_PROCESS
     NETWORK_ACCESS,
     FILE_ACCESS,
     CAMERA_ACCESS,
@@ -51,7 +55,9 @@ enum class PluginCapability {
     
     // Storage capabilities
     LOCAL_STORAGE,
+    EXTERNAL_STORAGE,             // Added for external storage access
     CLOUD_STORAGE,
+    CLOUD_SYNC,                   // Added for cloud synchronization
     CACHE_DATA
 }
 
@@ -62,7 +68,8 @@ enum class RiskLevel {
     LOW,
     MEDIUM,
     HIGH,
-    CRITICAL
+    CRITICAL,
+    UNKNOWN                       // Added for unknown capabilities
 }
 
 /**
@@ -74,14 +81,15 @@ fun PluginCapability.getRiskLevel(): RiskLevel {
         PluginCapability.READ_OWN_DATA,
         PluginCapability.CUSTOM_UI,
         PluginCapability.LOCAL_STORAGE,
-        PluginCapability.CACHE_DATA -> RiskLevel.LOW
+        PluginCapability.CACHE_DATA,
+        PluginCapability.SHOW_NOTIFICATIONS -> RiskLevel.LOW
         
-        PluginCapability.SHOW_NOTIFICATIONS,
         PluginCapability.ADD_MENU_ITEMS,
         PluginCapability.BACKGROUND_SYNC,
         PluginCapability.NETWORK_ACCESS,
         PluginCapability.SHARE_DATA,
-        PluginCapability.ANALYTICS_BASIC -> RiskLevel.MEDIUM
+        PluginCapability.ANALYTICS_BASIC,
+        PluginCapability.SCHEDULE_NOTIFICATIONS -> RiskLevel.MEDIUM
         
         PluginCapability.READ_ALL_DATA,
         PluginCapability.MODIFY_DATA,
@@ -91,7 +99,11 @@ fun PluginCapability.getRiskLevel(): RiskLevel {
         PluginCapability.EXPORT_DATA,
         PluginCapability.IMPORT_DATA,
         PluginCapability.INTEGRATE_SERVICES,
-        PluginCapability.ANALYTICS_DETAILED -> RiskLevel.HIGH
+        PluginCapability.ANALYTICS_DETAILED,
+        PluginCapability.SYSTEM_NOTIFICATIONS,
+        PluginCapability.EXTERNAL_STORAGE,
+        PluginCapability.CLOUD_SYNC,
+        PluginCapability.BACKGROUND_PROCESSING -> RiskLevel.HIGH
         
         PluginCapability.MODIFY_SETTINGS,
         PluginCapability.INSTALL_PLUGINS,
@@ -123,11 +135,14 @@ fun PluginCapability.getDescription(): String {
         PluginCapability.CUSTOM_UI -> "Display custom interface elements"
         PluginCapability.MODIFY_THEME -> "Change app colors and appearance"
         PluginCapability.ADD_MENU_ITEMS -> "Add options to app menus"
-        PluginCapability.SHOW_NOTIFICATIONS -> "Display system notifications"
+        PluginCapability.SHOW_NOTIFICATIONS -> "Display in-app notifications"
+        PluginCapability.SYSTEM_NOTIFICATIONS -> "Display system notifications"
+        PluginCapability.SCHEDULE_NOTIFICATIONS -> "Schedule future notifications"
         PluginCapability.FULLSCREEN_UI -> "Take control of entire screen"
         
         PluginCapability.BACKGROUND_SYNC -> "Sync data when app is closed"
         PluginCapability.BACKGROUND_PROCESS -> "Run tasks in background"
+        PluginCapability.BACKGROUND_PROCESSING -> "Process data in background"
         PluginCapability.NETWORK_ACCESS -> "Connect to the internet"
         PluginCapability.FILE_ACCESS -> "Read and write files on device"
         PluginCapability.CAMERA_ACCESS -> "Use device camera"
@@ -152,7 +167,9 @@ fun PluginCapability.getDescription(): String {
         PluginCapability.PUSH_NOTIFICATIONS -> "Send push notifications"
         
         PluginCapability.LOCAL_STORAGE -> "Store data on device"
+        PluginCapability.EXTERNAL_STORAGE -> "Access external storage"
         PluginCapability.CLOUD_STORAGE -> "Store data in cloud"
+        PluginCapability.CLOUD_SYNC -> "Synchronize with cloud services"
         PluginCapability.CACHE_DATA -> "Cache temporary data"
     }
 }
@@ -169,12 +186,15 @@ fun PluginCapability.getRequiredAndroidPermissions(): List<String> {
             "android.permission.ACCESS_COARSE_LOCATION"
         )
         PluginCapability.NETWORK_ACCESS -> listOf("android.permission.INTERNET")
-        PluginCapability.FILE_ACCESS -> listOf(
+        PluginCapability.FILE_ACCESS,
+        PluginCapability.EXTERNAL_STORAGE -> listOf(
             "android.permission.READ_EXTERNAL_STORAGE",
             "android.permission.WRITE_EXTERNAL_STORAGE"
         )
         PluginCapability.SEND_SMS -> listOf("android.permission.SEND_SMS")
-        PluginCapability.SHOW_NOTIFICATIONS -> listOf("android.permission.POST_NOTIFICATIONS")
+        PluginCapability.SHOW_NOTIFICATIONS,
+        PluginCapability.SYSTEM_NOTIFICATIONS,
+        PluginCapability.SCHEDULE_NOTIFICATIONS -> listOf("android.permission.POST_NOTIFICATIONS")
         else -> emptyList()
     }
 }
