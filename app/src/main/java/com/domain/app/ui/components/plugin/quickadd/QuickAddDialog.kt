@@ -3,6 +3,7 @@ package com.domain.app.ui.components.plugin.quickadd
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -10,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.domain.app.core.plugin.*
@@ -17,7 +19,210 @@ import com.domain.app.ui.components.core.sliders.HorizontalSlider
 import com.domain.app.ui.components.core.sliders.HorizontalSliderDefaults
 import com.domain.app.ui.components.core.sliders.VerticalSlider
 import com.domain.app.ui.components.core.sliders.VerticalSliderDefaults
+import com.domain.app.ui.components.core.sliders.RangeSlider
+import com.domain.app.ui.components.core.sliders.RangeSliderDefaults
+import com.domain.app.ui.components.core.carousel.Carousel
+import com.domain.app.ui.components.core.carousel.CarouselOption
+import com.domain.app.ui.components.core.carousel.CarouselDefaults
 import kotlin.math.roundToInt
+
+/**
+ * Time range quick add (for sleep tracking)
+ */
+@Composable
+private fun TimeRangeQuickAddContent(
+    plugin: Plugin,
+    config: QuickAddConfig,
+    onDismiss: () -> Unit,
+    onConfirm: (Map<String, Any>) -> Unit
+) {
+    // Get default values or use sensible defaults
+    val defaults = config.defaultValue as? Map<*, *>
+    var bedtimeHours by remember { 
+        mutableStateOf(defaults?.get("bedtime") as? Float ?: 23f) // 11 PM
+    }
+    var waketimeHours by remember { 
+        mutableStateOf(defaults?.get("waketime") as? Float ?: 7f) // 7 AM
+    }
+    
+    // Calculate sleep duration
+    val duration = remember(bedtimeHours, waketimeHours) {
+        var diff = waketimeHours - bedtimeHours
+        if (diff < 0) diff += 24 // Handle overnight sleep
+        diff
+    }
+    
+    // Format time for display
+    fun formatTime(hours: Float): String {
+        val h = hours.toInt()
+        val m = ((hours - h) * 60).toInt()
+        val period = if (h >= 12) "PM" else "AM"
+        val displayHour = when {
+            h == 0 -> 12
+            h > 12 -> h - 12
+            else -> h
+        }
+        return String.format("%d:%02d %s", displayHour, m, period)
+    }
+    
+    // Format duration for display
+    fun formatDuration(hours: Float): String {
+        val h = hours.toInt()
+        val m = ((hours - h) * 60).toInt()
+        return "${h}h ${m}m"
+    }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(config.title)
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                // Sleep duration display (prominent)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Total Sleep",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = formatDuration(duration),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Recommended: 7-9 hours",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                
+                // Bedtime and Wake time display
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "🌙",
+                            style = MaterialTheme.typography.headlineSmall
+                        )
+                        Text(
+                            text = "Bedtime",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = formatTime(bedtimeHours),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "☀️",
+                            style = MaterialTheme.typography.headlineSmall
+                        )
+                        Text(
+                            text = "Wake up",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = formatTime(waketimeHours),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+                
+                // Time range slider
+                Column {
+                    Text(
+                        text = "Adjust sleep schedule",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    
+                    // Convert to 12PM-12PM range for display
+                    val adjustedBedtime = if (bedtimeHours >= 12) bedtimeHours else bedtimeHours + 24
+                    val adjustedWaketime = if (waketimeHours >= 12) waketimeHours else waketimeHours + 24
+                    
+                    RangeSlider(
+                        startValue = adjustedBedtime,
+                        endValue = adjustedWaketime,
+                        onRangeChange = { start, end ->
+                            bedtimeHours = if (start >= 24) start - 24 else start
+                            waketimeHours = if (end >= 24) end - 24 else end
+                        },
+                        valueRange = 12f..36f, // 12PM to 12PM next day
+                        steps = 47, // 30-minute increments (24 hours * 2 - 1)
+                        minRange = 0.5f, // Minimum 30 minutes sleep
+                        showLabels = false, // We're showing custom labels above
+                        colors = RangeSliderDefaults.colors(
+                            activeTrackStartColor = Color(0xFF6B46C1),
+                            activeTrackEndColor = Color(0xFF9333EA)
+                        )
+                    )
+                    
+                    // Time markers
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("12PM", style = MaterialTheme.typography.labelSmall)
+                        Text("6PM", style = MaterialTheme.typography.labelSmall)
+                        Text("12AM", style = MaterialTheme.typography.labelSmall)
+                        Text("6AM", style = MaterialTheme.typography.labelSmall)
+                        Text("12PM", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(mapOf(
+                        "bedtime" to bedtimeHours,
+                        "waketime" to waketimeHours
+                    ))
+                }
+            ) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
 
 /**
  * Unified quick-add dialog that adapts to any plugin configuration.
@@ -32,6 +237,16 @@ fun UnifiedQuickAddDialog(
     val config = plugin.getQuickAddConfig()
     
     when {
+        // NEW: Check for composite inputs first
+        config?.inputs != null -> {
+            CompositeQuickAddContent(
+                plugin = plugin,
+                config = config,
+                onDismiss = onDismiss,
+                onConfirm = onConfirm
+            )
+        }
+        
         plugin.metadata.supportsMultiStage -> {
             config?.stages?.let { stages ->
                 MultiStageQuickAddContent(
@@ -54,6 +269,7 @@ fun UnifiedQuickAddDialog(
                 InputType.BOOLEAN -> BooleanQuickAddContent(plugin, config, onDismiss, onConfirm)
                 InputType.DATE -> DateQuickAddContent(plugin, config, onDismiss, onConfirm)
                 InputType.TIME -> TimeQuickAddContent(plugin, config, onDismiss, onConfirm)
+                InputType.TIME_RANGE -> TimeRangeQuickAddContent(plugin, config, onDismiss, onConfirm)
                 else -> GenericQuickAddContent(plugin, onDismiss, onConfirm)
             }
         }
@@ -780,4 +996,204 @@ private fun GenericQuickAddContent(
             }
         }
     )
+}
+
+/**
+ * Composite quick add for multiple inputs on one screen
+ */
+@Composable
+private fun CompositeQuickAddContent(
+    plugin: Plugin,
+    config: QuickAddConfig,
+    onDismiss: () -> Unit,
+    onConfirm: (Map<String, Any>) -> Unit
+) {
+    val collectedData = remember { mutableStateMapOf<String, Any>() }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(config.title)
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                config.inputs?.forEach { input ->
+                    CompositeInputItem(
+                        input = input,
+                        onValueChange = { value ->
+                            if (value != null) {
+                                collectedData[input.id] = value
+                            } else {
+                                collectedData.remove(input.id)
+                            }
+                        }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(collectedData.toMap())
+                },
+                enabled = config.inputs?.all { input ->
+                    !input.required || collectedData.containsKey(input.id)
+                } ?: true
+            ) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * Individual input item for composite layout
+ */
+@Composable
+private fun CompositeInputItem(
+    input: QuickAddInput,
+    onValueChange: (Any?) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = input.label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium
+        )
+        
+        when (input.type) {
+            InputType.HORIZONTAL_SLIDER -> {
+                var sliderValue by remember { 
+                    mutableStateOf((input.defaultValue as? Number)?.toFloat() ?: 0f) 
+                }
+                
+                LaunchedEffect(sliderValue) {
+                    onValueChange(sliderValue)
+                }
+                
+                Column {
+                    HorizontalSlider(
+                        value = sliderValue,
+                        onValueChange = { sliderValue = it },
+                        valueRange = ((input.min as? Number)?.toFloat() ?: 0f)..((input.max as? Number)?.toFloat() ?: 100f),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = input.topLabel ?: "${input.min ?: 0}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "${sliderValue.roundToInt()}${input.unit?.let { " $it" } ?: ""}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = input.bottomLabel ?: "${input.max ?: 100}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            
+            InputType.CAROUSEL -> {
+                var selectedOption by remember { 
+                    mutableStateOf(
+                        input.options?.find { it.value == input.defaultValue }
+                            ?: input.options?.firstOrNull()
+                    )
+                }
+                
+                LaunchedEffect(selectedOption) {
+                    onValueChange(selectedOption?.value)
+                }
+                
+                // Use the proper Carousel component
+                Carousel(
+                    options = input.options?.map { 
+                        CarouselOption(it.label, it.value, it.icon)
+                    } ?: emptyList(),
+                    selectedOption = selectedOption?.let { 
+                        CarouselOption(it.label, it.value, it.icon)
+                    },
+                    onOptionSelected = { carouselOption ->
+                        selectedOption = input.options?.find { 
+                            it.value == carouselOption.value 
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = when (input.id) {
+                        "type" -> CarouselDefaults.exerciseColors()
+                        else -> CarouselDefaults.colors()
+                    }
+                )
+            }
+            
+            InputType.TEXT -> {
+                var text by remember { 
+                    mutableStateOf(input.defaultValue as? String ?: "") 
+                }
+                
+                LaunchedEffect(text) {
+                    onValueChange(text.ifEmpty { null })
+                }
+                
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    placeholder = { Text(input.placeholder ?: "") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            
+            InputType.NUMBER -> {
+                var number by remember { 
+                    mutableStateOf(input.defaultValue?.toString() ?: "") 
+                }
+                
+                LaunchedEffect(number) {
+                    onValueChange(number.toDoubleOrNull())
+                }
+                
+                OutlinedTextField(
+                    value = number,
+                    onValueChange = { newValue ->
+                        if (newValue.isEmpty() || newValue.toDoubleOrNull() != null) {
+                            number = newValue
+                        }
+                    },
+                    placeholder = { Text(input.placeholder ?: "Enter number") },
+                    suffix = { input.unit?.let { Text(it) } },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            
+            else -> {
+                Text(
+                    text = "Unsupported input type: ${input.type}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
 }

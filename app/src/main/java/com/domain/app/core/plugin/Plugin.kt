@@ -26,6 +26,7 @@ interface Plugin {
     fun getPermissionRationale(): Map<PluginCapability, String>
     fun exportHeaders(): List<String>
     fun formatForExport(dataPoint: DataPoint): Map<String, String>
+    suspend fun cleanup() = Unit  // Default implementation - does nothing
 }
 
 /**
@@ -101,6 +102,10 @@ enum class InputType {
     DATE,                      // Date selection (NEW - needed by dialog) 
     TIME,                      // Time selection (NEW - needed by dialog)
     
+    // Special input types
+    CAROUSEL,                  // Horizontal scrolling selector (NEW)
+    TIME_RANGE,               // Time range selector with RangeSlider (NEW)
+    
     // Future input types for extensibility
     COLOR_PICKER,              // Color selection (future)
     LOCATION_PICKER,           // Location selection (future)
@@ -161,7 +166,27 @@ data class QuickAddConfig(
     val bottomLabel: String? = null,   // Label for bottom of vertical slider (e.g., "Nah")
     val showValue: Boolean = true,     // Whether to show numeric value (false hides it)
     val primaryColor: String? = null,  // Primary color as hex string (e.g., "#6B46C1")
-    val secondaryColor: String? = null // Secondary color for gradients as hex string
+    val secondaryColor: String? = null, // Secondary color for gradients as hex string
+    // NEW: For multiple inputs on one screen
+    val inputs: List<QuickAddInput>? = null
+)
+
+/**
+ * Configuration for individual inputs in a composite quick add
+ */
+data class QuickAddInput(
+    val id: String,                    // Field identifier
+    val label: String,                  // Display label
+    val type: InputType,                // What kind of input
+    val defaultValue: Any? = null,
+    val min: Number? = null,
+    val max: Number? = null,
+    val options: List<QuickOption>? = null,
+    val topLabel: String? = null,       // For sliders
+    val bottomLabel: String? = null,    // For sliders
+    val unit: String? = null,           // "km", "min", etc.
+    val placeholder: String? = null,    // For text inputs
+    val required: Boolean = true
 )
 
 /**
