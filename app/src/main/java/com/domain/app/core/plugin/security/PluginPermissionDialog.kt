@@ -1,8 +1,5 @@
-// app/src/main/java/com/domain/app/core/plugin/security/PluginPermissionDialog.kt
 package com.domain.app.core.plugin.security
 
-import com.domain.app.core.plugin.getRiskLevel
-import com.domain.app.core.plugin.getDescription
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,7 +14,9 @@ import androidx.compose.ui.window.DialogProperties
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginCapability
 import com.domain.app.core.plugin.RiskLevel
-import com.domain.app.core.plugin.RiskWarning
+import com.domain.app.core.plugin.getRiskLevel
+import com.domain.app.core.plugin.getDescription
+import com.domain.app.core.plugin.security.getWarningMessage
 import com.domain.app.ui.theme.AppIcons
 
 /**
@@ -27,10 +26,14 @@ import com.domain.app.ui.theme.AppIcons
 fun PluginPermissionDialog(
     plugin: Plugin,
     requestedPermissions: Set<PluginCapability>,
-    riskWarnings: List<RiskWarning> = emptyList(),
     onGrant: () -> Unit,
     onDeny: () -> Unit
 ) {
+    // Generate warnings from high-risk capabilities
+    val highRiskCapabilities = requestedPermissions.filter { capability ->
+        capability.getRiskLevel() in listOf(RiskLevel.HIGH, RiskLevel.CRITICAL)
+    }
+    
     Dialog(
         onDismissRequest = onDeny,
         properties = DialogProperties(
@@ -137,8 +140,8 @@ fun PluginPermissionDialog(
                     Spacer(modifier = Modifier.height(16.dp))
                 }
                 
-                // Risk warnings
-                if (riskWarnings.isNotEmpty()) {
+                // Show warnings for high-risk capabilities
+                if (highRiskCapabilities.isNotEmpty()) {
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer
@@ -166,12 +169,15 @@ fun PluginPermissionDialog(
                                 )
                             }
                             Spacer(modifier = Modifier.height(8.dp))
-                            riskWarnings.forEach { warning ->
-                                Text(
-                                    text = "• ${warning.message}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
+                            highRiskCapabilities.forEach { capability ->
+                                val warningMessage = capability.getWarningMessage()
+                                if (warningMessage != null) {
+                                    Text(
+                                        text = "• $warningMessage",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
                             }
                         }
                     }
@@ -272,7 +278,9 @@ private fun PermissionRequestItem(capability: PluginCapability) {
     }
 }
 
-// Helper function to get icon for capability
+/**
+ * Helper function to get icon for capability
+ */
 private fun getIconForCapability(capability: PluginCapability): androidx.compose.ui.graphics.vector.ImageVector {
     return when (capability) {
         PluginCapability.COLLECT_DATA -> AppIcons.Action.add
@@ -327,6 +335,3 @@ private fun getIconForCapability(capability: PluginCapability): androidx.compose
         else -> AppIcons.Plugin.custom
     }
 }
-
-// Note: The getDescription() and getRiskLevel() extension functions 
-// are already defined in PluginCapability.kt and should not be duplicated here
