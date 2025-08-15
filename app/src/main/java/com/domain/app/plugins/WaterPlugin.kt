@@ -10,6 +10,7 @@ import java.time.Instant
 /**
  * Water intake tracking plugin
  * Simple horizontal slider for 0-2000ml input
+ * Uses standard "value" key for consistency across all plugins
  */
 class WaterPlugin : Plugin {
     override val id = "water"
@@ -66,13 +67,13 @@ class WaterPlugin : Plugin {
     override fun supportsManualEntry() = true
     
     override fun getQuickAddConfig() = QuickAddConfig(
-        id = "water",
+        id = "value",  // STANDARD KEY for all single-input plugins
         title = "Add Water",
         inputType = InputType.HORIZONTAL_SLIDER,
         min = 0f,
         max = 2000f,
         step = 10f,
-        defaultValue = 500f,
+        defaultValue = 250f,
         unit = "ml",
         showValue = true,
         primaryColor = "#2196F3",   // Blue for water
@@ -85,15 +86,11 @@ class WaterPlugin : Plugin {
     }
     
     override suspend fun createManualEntry(data: Map<String, Any>): DataPoint? {
-        // Get value from slider
-        val amount = when (val value = data["value"]) {
-            is Number -> value.toFloat()
-            is String -> value.toFloatOrNull() ?: return null
-            else -> return null
-        }
+        // Standard extraction using "value" key
+        val value = (data["value"] as? Number)?.toFloat() ?: return null
         
         // Validate
-        val validationResult = validateDataPoint(mapOf("value" to amount))
+        val validationResult = validateDataPoint(mapOf("value" to value))
         if (validationResult is ValidationResult.Error) {
             return null
         }
@@ -103,7 +100,7 @@ class WaterPlugin : Plugin {
             pluginId = id,
             type = "water_intake",
             value = mapOf(
-                "amount" to amount,
+                "amount" to value,
                 "unit" to "ml"
             ),
             metadata = mapOf(
