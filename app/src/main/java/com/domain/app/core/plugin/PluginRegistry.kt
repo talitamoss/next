@@ -79,6 +79,7 @@ class PluginRegistry @Inject constructor() {
     private fun registerBuiltInPlugins() {
         // Register all plugins from flat structure
 	register(WaterPlugin())
+	register(SleepPlugin())
         
         // Future plugins will be added here
         // register(JournalPlugin())
