@@ -540,10 +540,7 @@ private fun TimeRangeQuickAddContent(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-<<<<<<< Updated upstream
             Text(config.title)
-=======
-<<<<<<< Updated upstream
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -559,19 +556,7 @@ private fun TimeRangeQuickAddContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
->>>>>>> Stashed changes
         },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // TODO: Implement RangeSlider UI
-                Text("Time range selection not yet implemented")
-                Text("Bedtime: ${startTime.toInt()}:00")
-                Text("Wake time: ${endTime.toInt()}:00")
-            }
-        },
-=======
             Text(config.title)
         },
 	text = {
