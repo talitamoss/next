@@ -1,18 +1,17 @@
 package com.domain.app.ui.components.plugin.quickadd
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.domain.app.core.plugin.*
+import com.domain.app.core.validation.ValidationResult
+import com.domain.app.ui.components.core.input.ValidatedTextField
 import com.domain.app.ui.components.core.sliders.HorizontalSlider
 import com.domain.app.ui.components.core.sliders.VerticalSlider
 import com.domain.app.ui.components.core.sliders.RangeSlider
@@ -157,19 +156,17 @@ private fun HorizontalSliderQuickAddContent(
             Text(config.title)
         },
         text = {
-            Column {
-                Slider(
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                HorizontalSlider(
                     value = value,
                     onValueChange = { value = it },
                     valueRange = range,
-                    steps = ((config.step as? Number)?.toInt() ?: 0) - 1,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
-                Text(
-                    text = "${value.roundToInt()} ${config.unit ?: ""}",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                    labelFormatter = { v ->
+                        "${v.roundToInt()}${config.unit?.let { " $it" } ?: ""}"
+                    },
+                    modifier = Modifier
                 )
             }
         },
@@ -191,7 +188,7 @@ private fun HorizontalSliderQuickAddContent(
 }
 
 /**
- * Vertical slider quick add (using rotated slider or custom implementation)
+ * Vertical slider quick add
  */
 @Composable
 private fun VerticalSliderQuickAddContent(
@@ -204,7 +201,7 @@ private fun VerticalSliderQuickAddContent(
         mutableStateOf((config.defaultValue as? Number)?.toFloat() ?: 0f)
     }
     
-    val range = ((config.min as? Number)?.toFloat() ?: 0f)..((config.max as? Number)?.toFloat() ?: 100f)
+    val range = ((config.min as? Number)?.toFloat() ?: 0f)..((config.max as? Number)?.toFloat() ?: 10f)
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -213,14 +210,14 @@ private fun VerticalSliderQuickAddContent(
         },
         text = {
             Column(
-                modifier = Modifier.height(200.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.height(250.dp)
             ) {
                 VerticalSlider(
                     value = value,
                     onValueChange = { value = it },
                     valueRange = range,
-                    enabled = true,
                     showLabel = config.showValue,
                     labelFormatter = { v ->
                         when {
@@ -229,6 +226,7 @@ private fun VerticalSliderQuickAddContent(
                             else -> v.roundToInt().toString()
                         }
                     },
+                    height = 200.dp,
                     modifier = Modifier
                 )
             }
@@ -328,62 +326,23 @@ private fun ChoiceQuickAddContent(
         title = {
             Text(config.title)
         },
-	text = {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // Duration display
-        val duration = if (endTime > startTime) endTime - startTime else (24 - startTime) + endTime
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = "${duration.toInt()}h sleep",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(12.dp)
-            )
-        }
-        
-        // Time display
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text("Bedtime: ${startTime.toInt()}:00")
-            Text("Wake: ${endTime.toInt()}:00")
-        }
-        
-        // RangeSlider for time selection
-        RangeSlider(
-            startValue = startTime,
-            endValue = if (endTime < startTime) endTime + 24f else endTime,
-            onRangeChange = { start, end ->
-                startTime = start % 24
-                endTime = end % 24
-            },
-            valueRange = 0f..48f,
-            steps = 47,
-            minRange = 1f,
-            showLabels = false,
-            modifier = Modifier.fillMaxWidth()
-        )
-        
-        // Time markers
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text("12AM", style = MaterialTheme.typography.labelSmall)
-            Text("6AM", style = MaterialTheme.typography.labelSmall)
-            Text("12PM", style = MaterialTheme.typography.labelSmall)
-            Text("6PM", style = MaterialTheme.typography.labelSmall)
-            Text("12AM", style = MaterialTheme.typography.labelSmall)
-        }
-    }
-},
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                config.options?.forEach { option ->
+                    FilterChip(
+                        selected = selectedOption == option,
+                        onClick = { selectedOption = option },
+                        label = { Text(option.label) },
+                        leadingIcon = {
+                            option.icon?.let { Text(it) }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
         confirmButton = {
             TextButton(
                 onClick = {
@@ -564,10 +523,6 @@ private fun TimeRangeQuickAddContent(
     onDismiss: () -> Unit,
     onConfirm: (Map<String, Any>) -> Unit
 ) {
-
-    var startTime by remember { mutableStateOf(23f) }  // Default bedtime 11 PM
-    var endTime by remember { mutableStateOf(7f) }      // Default wake time 7 AM
-
     // Initialize from config defaults or use standard sleep times
     var startTime by remember { 
         mutableStateOf(
@@ -589,10 +544,61 @@ private fun TimeRangeQuickAddContent(
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // TODO: Implement RangeSlider UI
-                Text("Time range selection not yet implemented")
-                Text("Bedtime: ${startTime.toInt()}:00")
-                Text("Wake time: ${endTime.toInt()}:00")
+                // Duration display
+                val duration = if (endTime > startTime) {
+                    endTime - startTime
+                } else {
+                    (24 - startTime) + endTime
+                }
+                
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "${duration.toInt()}h sleep",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+                
+                // Time display
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Bedtime: ${formatTime24Hour(startTime)}")
+                    Text("Wake: ${formatTime24Hour(endTime)}")
+                }
+                
+                // RangeSlider for time selection
+                RangeSlider(
+                    startValue = startTime,
+                    endValue = if (endTime < startTime) endTime + 24f else endTime,
+                    onRangeChange = { start, end ->
+                        startTime = start % 24
+                        endTime = end % 24
+                    },
+                    valueRange = 0f..48f,
+                    steps = 47,
+                    minRange = 1f,
+                    showLabels = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                // Time markers
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("12AM", style = MaterialTheme.typography.labelSmall)
+                    Text("6AM", style = MaterialTheme.typography.labelSmall)
+                    Text("12PM", style = MaterialTheme.typography.labelSmall)
+                    Text("6PM", style = MaterialTheme.typography.labelSmall)
+                    Text("12AM", style = MaterialTheme.typography.labelSmall)
+                }
             }
         },
         confirmButton = {
@@ -629,18 +635,128 @@ private fun MultiStageQuickAddContent(
     var currentStageIndex by remember { mutableStateOf(0) }
     val results = remember { mutableStateMapOf<String, Any>() }
     
-    // TODO: Implement multi-stage UI
+    if (stages.isEmpty()) {
+        // Fallback if no stages defined
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = {
+                Text("Configuration Error")
+            },
+            text = {
+                Text("No stages defined for multi-stage input")
+            },
+            confirmButton = {
+                TextButton(onClick = onDismiss) {
+                    Text("OK")
+                }
+            }
+        )
+        return
+    }
+    
+    val currentStage = stages[currentStageIndex]
+    var stageValue by remember(currentStageIndex) { 
+        mutableStateOf(results[currentStage.id] ?: currentStage.defaultValue ?: "")
+    }
+    
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("Multi-stage not implemented")
+            Column {
+                Text(currentStage.title)
+                // Progress indicator
+                LinearProgressIndicator(
+                    progress = (currentStageIndex + 1f) / stages.size,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                )
+            }
         },
         text = {
-            Text("This plugin uses multi-stage input which is not yet implemented")
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Stage-specific input based on type
+                when (currentStage.inputType) {
+                    InputType.TEXT -> {
+                        OutlinedTextField(
+                            value = stageValue.toString(),
+                            onValueChange = { stageValue = it },
+                            label = { Text(currentStage.placeholder ?: "Enter value") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    InputType.NUMBER -> {
+                        OutlinedTextField(
+                            value = stageValue.toString(),
+                            onValueChange = { 
+                                stageValue = it.toFloatOrNull() ?: 0f
+                            },
+                            label = { Text(currentStage.placeholder ?: "Enter number") },
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    InputType.CHOICE -> {
+                        Column {
+                            currentStage.options?.forEach { option ->
+                                FilterChip(
+                                    selected = stageValue == option.value,
+                                    onClick = { stageValue = option.value },
+                                    label = { Text(option.label) },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                            }
+                        }
+                    }
+                    else -> {
+                        Text("Input type ${currentStage.inputType} not yet implemented")
+                    }
+                }
+            }
         },
         confirmButton = {
+            Row {
+                if (currentStageIndex > 0) {
+                    TextButton(
+                        onClick = {
+                            results[currentStage.id] = stageValue
+                            currentStageIndex--
+                        }
+                    ) {
+                        Text("Back")
+                    }
+                }
+                
+                Spacer(modifier = Modifier.weight(1f))
+                
+                TextButton(
+                    onClick = {
+                        results[currentStage.id] = stageValue
+                        if (currentStageIndex < stages.size - 1) {
+                            currentStageIndex++
+                        } else {
+                            onConfirm(results.toMap())
+                        }
+                    },
+                    enabled = when {
+                        currentStage.required && stageValue.toString().isBlank() -> false
+                        else -> true
+                    }
+                ) {
+                    Text(
+                        if (currentStageIndex < stages.size - 1) "Next" else "Complete"
+                    )
+                }
+            }
+        },
+        dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("OK")
+                Text("Cancel")
             }
         }
     )
@@ -734,32 +850,27 @@ private fun CompositeQuickAddContent(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     
-                                    val value = (results[input.id] as? Number)?.toFloat() ?: 0f
+                                    val value = (results[input.id] as? Number)?.toFloat() 
+                                        ?: (input.defaultValue as? Number)?.toFloat() 
+                                        ?: 0f
+                                    
                                     Text(
-                                        text = if (input.unit != null) {
-                                            "${value.roundToInt()} ${input.unit}"
-                                        } else {
-                                            formatSliderValue(value, input)
-                                        },
+                                        text = formatSliderValue(value, input),
                                         style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.primary
+                                        fontWeight = FontWeight.Medium
                                     )
                                 }
                                 
                                 val currentValue = (results[input.id] as? Number)?.toFloat() 
                                     ?: (input.defaultValue as? Number)?.toFloat() 
                                     ?: 0f
-                                    
-                                val range = ((input.min as? Number)?.toFloat() ?: 0f)..
-                                           ((input.max as? Number)?.toFloat() ?: 100f)
                                 
-                                Slider(
+                                HorizontalSlider(
                                     value = currentValue,
-                                    onValueChange = { newValue ->
-                                        results[input.id] = newValue
-                                    },
-                                    valueRange = range,
+                                    onValueChange = { results[input.id] = it },
+                                    valueRange = ((input.min as? Number)?.toFloat() ?: 0f)..
+                                            ((input.max as? Number)?.toFloat() ?: 100f),
+                                    showLabel = false,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 
@@ -782,6 +893,33 @@ private fun CompositeQuickAddContent(
                                     }
                                 }
                             }
+                        }
+                        
+                        InputType.TEXT -> {
+                            OutlinedTextField(
+                                value = results[input.id]?.toString() ?: "",
+                                onValueChange = { results[input.id] = it },
+                                label = { Text(input.label) },
+                                placeholder = { input.placeholder?.let { Text(it) } },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        
+                        InputType.NUMBER -> {
+                            OutlinedTextField(
+                                value = results[input.id]?.toString() ?: "",
+                                onValueChange = { 
+                                    it.toFloatOrNull()?.let { num ->
+                                        results[input.id] = num
+                                    }
+                                },
+                                label = { Text(input.label) },
+                                suffix = { input.unit?.let { Text(it) } },
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                         
                         else -> {
@@ -834,7 +972,16 @@ private fun formatSliderValue(value: Float, input: QuickAddInput): String {
             value < 0.8f -> "Hard"
             else -> "Extreme"
         }
+    } else if (input.unit != null) {
+        "${value.roundToInt()}${input.unit}"
     } else {
         value.roundToInt().toString()
     }
+}
+
+// Helper function to format 24-hour time
+private fun formatTime24Hour(hour: Float): String {
+    val h = hour.toInt() % 24
+    val m = ((hour % 1) * 60).toInt()
+    return String.format("%02d:%02d", h, m)
 }
