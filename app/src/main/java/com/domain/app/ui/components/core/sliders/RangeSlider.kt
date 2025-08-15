@@ -33,6 +33,52 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
+ * Color configuration for RangeSlider
+ */
+data class RangeSliderColors(
+    val thumbColor: Color = Color(0xFF667EEA),
+    val thumbSize: Dp = 24.dp,
+    val trackColor: Color = Color.Gray.copy(alpha = 0.3f),
+    val activeTrackStartColor: Color = Color(0xFF667EEA),
+    val activeTrackEndColor: Color = Color(0xFF764BA2),
+    val labelBackgroundColor: Color = Color.Gray.copy(alpha = 0.2f),
+    val labelTextColor: Color = Color.White,
+    val rangeIndicatorColor: Color = Color.Gray,
+    val tickColor: Color = Color.Gray.copy(alpha = 0.5f),
+    val tickLabelColor: Color = Color.Gray
+)
+
+/**
+ * Default colors provider
+ */
+object RangeSliderDefaults {
+    @Composable
+    fun colors(
+        thumbColor: Color = MaterialTheme.colorScheme.primary,
+        thumbSize: Dp = 24.dp,
+        trackColor: Color = MaterialTheme.colorScheme.surfaceVariant,
+        activeTrackStartColor: Color = MaterialTheme.colorScheme.primary,
+        activeTrackEndColor: Color = MaterialTheme.colorScheme.tertiary,
+        labelBackgroundColor: Color = MaterialTheme.colorScheme.surface,
+        labelTextColor: Color = MaterialTheme.colorScheme.onSurface,
+        rangeIndicatorColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+        tickColor: Color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+        tickLabelColor: Color = MaterialTheme.colorScheme.onSurfaceVariant
+    ) = RangeSliderColors(
+        thumbColor = thumbColor,
+        thumbSize = thumbSize,
+        trackColor = trackColor,
+        activeTrackStartColor = activeTrackStartColor,
+        activeTrackEndColor = activeTrackEndColor,
+        labelBackgroundColor = labelBackgroundColor,
+        labelTextColor = labelTextColor,
+        rangeIndicatorColor = rangeIndicatorColor,
+        tickColor = tickColor,
+        tickLabelColor = tickLabelColor
+    )
+}
+
+/**
  * A dual-ended range slider component for selecting a range of values.
  * Features two draggable thumbs for start and end values with a colored range between them.
  *
@@ -145,24 +191,26 @@ fun RangeSlider(
             }
         }
         
-        // Slider
+        // Slider track and thumbs
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp)
-                .onSizeChanged { sliderWidth = it.width.toFloat() }
+                .onSizeChanged { size ->
+                    sliderWidth = size.width.toFloat()
+                }
         ) {
-            // Track
+            // Track background
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(colors.trackHeight)
+                    .height(6.dp)
                     .align(Alignment.Center)
-                    .clip(RoundedCornerShape(colors.trackHeight / 2))
-                    .background(colors.inactiveTrackColor)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(colors.trackColor)
             )
             
-            // Active range
+            // Active track (between thumbs)
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
@@ -170,11 +218,11 @@ fun RangeSlider(
             ) {
                 Box(
                     modifier = Modifier
-                        .padding(start = (startPercent * sliderWidth / density.density).dp)
-                        .width(((endPercent - startPercent) * sliderWidth / density.density).dp)
-                        .height(colors.trackHeight)
+                        .padding(start = (startPercent * sliderWidth).dp)
+                        .width(((endPercent - startPercent) * sliderWidth).dp)
+                        .height(6.dp)
                         .align(Alignment.Center)
-                        .clip(RoundedCornerShape(colors.trackHeight / 2))
+                        .clip(RoundedCornerShape(3.dp))
                         .background(
                             brush = Brush.horizontalGradient(
                                 colors = listOf(
@@ -211,6 +259,7 @@ fun RangeSlider(
                 scale = startThumbScale,
                 colors = colors,
                 isStart = true,
+                sliderWidth = sliderWidth,
                 onDrag = { delta ->
                     if (sliderWidth > 0) {
                         val deltaPercent = delta / sliderWidth
@@ -245,6 +294,7 @@ fun RangeSlider(
                 scale = endThumbScale,
                 colors = colors,
                 isStart = false,
+                sliderWidth = sliderWidth,
                 onDrag = { delta ->
                     if (sliderWidth > 0) {
                         val deltaPercent = delta / sliderWidth
@@ -286,7 +336,8 @@ fun RangeSlider(
                     val value = valueRange.start + 
                         (index * (valueRange.endInclusive - valueRange.start) / steps)
                     Text(
-                        text = labelFormatter?.invoke(value) ?: value.roundToInt().toString(),
+                        text = labelFormatter?.invoke(value) 
+                            ?: value.roundToInt().toString(),
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.tickLabelColor,
                         textAlign = TextAlign.Center,
@@ -307,6 +358,7 @@ private fun RangeThumb(
     scale: Float,
     colors: RangeSliderColors,
     isStart: Boolean,
+    sliderWidth: Float,
     onDrag: (Float) -> Unit,
     onDragStart: () -> Unit,
     onDragEnd: () -> Unit
@@ -316,9 +368,17 @@ private fun RangeThumb(
             .fillMaxHeight()
             .fillMaxWidth()
     ) {
+        val offsetX = remember(position, sliderWidth) {
+            if (sliderWidth > 0) {
+                (position * sliderWidth).dp
+            } else {
+                0.dp
+            }
+        }
+        
         Box(
             modifier = Modifier
-                .offset(x = (position * 100).dp)
+                .offset(x = offsetX)
                 .size(colors.thumbSize)
                 .scale(scale)
                 .align(Alignment.CenterStart)
@@ -341,94 +401,11 @@ private fun RangeThumb(
             // Inner circle for visual depth
             Box(
                 modifier = Modifier
-                    .size(colors.thumbSize * 0.4f)
-                    .align(Alignment.Center)
+                    .fillMaxSize()
+                    .padding(4.dp)
                     .clip(CircleShape)
-                    .background(
-                        if (isStart) colors.startThumbAccentColor 
-                        else colors.endThumbAccentColor
-                    )
+                    .background(Color.White.copy(alpha = 0.3f))
             )
         }
     }
-}
-
-/**
- * Colors for the range slider
- */
-data class RangeSliderColors(
-    val activeTrackStartColor: Color,
-    val activeTrackEndColor: Color,
-    val inactiveTrackColor: Color,
-    val thumbColor: Color,
-    val startThumbAccentColor: Color,
-    val endThumbAccentColor: Color,
-    val tickColor: Color,
-    val tickLabelColor: Color,
-    val labelBackgroundColor: Color,
-    val labelTextColor: Color,
-    val rangeIndicatorColor: Color,
-    val trackHeight: Dp,
-    val thumbSize: Dp
-)
-
-/**
- * Default configurations for RangeSlider
- */
-object RangeSliderDefaults {
-    
-    @Composable
-    fun colors(
-        activeTrackStartColor: Color = Color(0xFF667EEA),
-        activeTrackEndColor: Color = Color(0xFF764BA2),
-        inactiveTrackColor: Color = MaterialTheme.colorScheme.surfaceVariant,
-        thumbColor: Color = MaterialTheme.colorScheme.surface,
-        startThumbAccentColor: Color = Color(0xFF667EEA),
-        endThumbAccentColor: Color = Color(0xFF764BA2),
-        tickColor: Color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-        tickLabelColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
-        labelBackgroundColor: Color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-        labelTextColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
-        rangeIndicatorColor: Color = MaterialTheme.colorScheme.primary,
-        trackHeight: Dp = 6.dp,
-        thumbSize: Dp = 24.dp
-    ): RangeSliderColors = RangeSliderColors(
-        activeTrackStartColor = activeTrackStartColor,
-        activeTrackEndColor = activeTrackEndColor,
-        inactiveTrackColor = inactiveTrackColor,
-        thumbColor = thumbColor,
-        startThumbAccentColor = startThumbAccentColor,
-        endThumbAccentColor = endThumbAccentColor,
-        tickColor = tickColor,
-        tickLabelColor = tickLabelColor,
-        labelBackgroundColor = labelBackgroundColor,
-        labelTextColor = labelTextColor,
-        rangeIndicatorColor = rangeIndicatorColor,
-        trackHeight = trackHeight,
-        thumbSize = thumbSize
-    )
-    
-    @Composable
-    fun successColors(): RangeSliderColors = colors(
-        activeTrackStartColor = Color(0xFF10B981),
-        activeTrackEndColor = Color(0xFF059669),
-        startThumbAccentColor = Color(0xFF10B981),
-        endThumbAccentColor = Color(0xFF059669)
-    )
-    
-    @Composable
-    fun warningColors(): RangeSliderColors = colors(
-        activeTrackStartColor = Color(0xFFF59E0B),
-        activeTrackEndColor = Color(0xFFD97706),
-        startThumbAccentColor = Color(0xFFF59E0B),
-        endThumbAccentColor = Color(0xFFD97706)
-    )
-    
-    @Composable
-    fun errorColors(): RangeSliderColors = colors(
-        activeTrackStartColor = Color(0xFFEF4444),
-        activeTrackEndColor = Color(0xFFDC2626),
-        startThumbAccentColor = Color(0xFFEF4444),
-        endThumbAccentColor = Color(0xFFDC2626)
-    )
 }

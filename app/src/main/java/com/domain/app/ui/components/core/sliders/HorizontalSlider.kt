@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -170,6 +171,26 @@ fun HorizontalSlider(
                     .pointerInput(enabled, valueRange) {
                         if (!enabled) return@pointerInput
                         
+                        detectTapGestures(
+                            onTap = { offset ->
+                                // Allow tapping anywhere on the track to set value
+                                val newNormalized = (offset.x / size.width).coerceIn(0f, 1f)
+                                val newValue = valueRange.start + 
+                                    (newNormalized * (valueRange.endInclusive - valueRange.start))
+                                val snappedValue = snapToStep(newValue, valueRange, steps)
+                                
+                                if (hapticFeedback) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                }
+                                
+                                onValueChange(snappedValue)
+                                onValueChangeFinished?.invoke()
+                            }
+                        )
+                    }
+                    .pointerInput(enabled, valueRange) {
+                        if (!enabled) return@pointerInput
+                        
                         detectHorizontalDragGestures(
                             onDragStart = { offset ->
                                 isDragging = true
@@ -285,26 +306,15 @@ fun HorizontalSlider(
                     }
                 } else if (steps > 0) {
                     // Generate evenly spaced markers
-                    val stepSize = (valueRange.endInclusive - valueRange.start) / (steps + 1)
-                    for (i in 0..steps + 1) {
-                        val markerValue = valueRange.start + (i * stepSize)
-                        Text(
-                            text = labelFormatter(markerValue),
-                            fontSize = 11.sp,
-                            color = colors.markerText,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                } else {
-                    // Default markers at 0%, 25%, 50%, 75%, 100%
-                    listOf(0f, 0.25f, 0.5f, 0.75f, 1f).forEach { percent ->
+                    repeat(steps + 2) { index ->
                         val markerValue = valueRange.start + 
-                            (percent * (valueRange.endInclusive - valueRange.start))
+                            (index * (valueRange.endInclusive - valueRange.start) / (steps + 1))
                         Text(
                             text = labelFormatter(markerValue),
                             fontSize = 11.sp,
                             color = colors.markerText,
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
@@ -314,10 +324,10 @@ fun HorizontalSlider(
 }
 
 /**
- * Preset-based horizontal slider with quick selection options
+ * Horizontal slider with preset buttons
  */
 @Composable
-fun PresetHorizontalSlider(
+fun HorizontalSliderWithPresets(
     value: Float,
     onValueChange: (Float) -> Unit,
     presets: List<QuickOption>,

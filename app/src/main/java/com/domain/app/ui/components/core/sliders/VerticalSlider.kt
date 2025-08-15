@@ -6,6 +6,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -67,7 +68,7 @@ object VerticalSliderDefaults {
         activeTrackColor: Color = MaterialTheme.colorScheme.primary,
         labelText: Color = MaterialTheme.colorScheme.onSurface,
         tickColor: Color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-        gradientColors: List<Color>? = listOf(Color(0xFF667EEA), Color(0xFF764BA2))
+        gradientColors: List<Color>? = null
     ) = VerticalSliderColors(
         thumbColor = thumbColor,
         thumbBorderColor = thumbBorderColor,
@@ -80,7 +81,7 @@ object VerticalSliderDefaults {
 }
 
 /**
- * A highly customizable vertical slider component
+ * A customizable vertical slider component
  */
 @Composable
 fun VerticalSlider(
@@ -92,12 +93,12 @@ fun VerticalSlider(
     enabled: Boolean = true,
     showLabel: Boolean = true,
     showTicks: Boolean = false,
+    width: Dp = 60.dp,
     height: Dp = 200.dp,
-    width: Dp = 80.dp,
-    colors: VerticalSliderColors = VerticalSliderDefaults.colors(),
-    style: SliderStyle = SliderStyle.Modern,
     trackWidth: Dp = 6.dp,
-    thumbSize: Dp = 24.dp,
+    thumbSize: Dp = 20.dp,
+    style: SliderStyle = SliderStyle.Classic,
+    colors: VerticalSliderColors = VerticalSliderDefaults.colors(),
     hapticFeedback: Boolean = true,
     labelFormatter: (Float) -> String = { it.roundToInt().toString() },
     sideLabels: Pair<String, String>? = null,
@@ -208,6 +209,7 @@ fun VerticalSlider(
                                 (newNormalized * (valueRange.endInclusive - valueRange.start))
                             val snappedValue = snapToStep(newValue, valueRange, steps)
                             
+                            // Haptic feedback on step changes
                             if (hapticFeedback && steps > 0) {
                                 val stepSize = (valueRange.endInclusive - valueRange.start) / (steps + 1)
                                 if (abs(snappedValue - lastHapticValue) >= stepSize * 0.9f) {
@@ -306,6 +308,17 @@ private fun ModernVerticalSlider(
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
                 
+                detectTapGestures(
+                    onTap = { offset ->
+                        val newNormalized = 1f - (offset.y / size.height).coerceIn(0f, 1f)
+                        onValueChange(newNormalized)
+                        onDragStateChange(false)
+                    }
+                )
+            }
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                
                 detectVerticalDragGestures(
                     onDragStart = { offset ->
                         onDragStateChange(true)
@@ -373,6 +386,17 @@ private fun ClassicVerticalSlider(
 ) {
     Canvas(
         modifier = modifier
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                
+                detectTapGestures(
+                    onTap = { offset ->
+                        val newNormalized = 1f - (offset.y / size.height).coerceIn(0f, 1f)
+                        onValueChange(newNormalized)
+                        onDragStateChange(false)
+                    }
+                )
+            }
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
                 

@@ -9,12 +9,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.ui.theme.AppIcons
 import com.domain.app.ui.utils.getPluginIcon
@@ -24,8 +25,24 @@ import com.domain.app.ui.utils.getPluginIcon
 fun PluginSelectorBottomSheet(
     plugins: List<Plugin>,
     onPluginSelected: (Plugin) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    viewModel: DashboardViewModel = hiltViewModel()
 ) {
+    // Get the current UI state
+    val uiState by viewModel.uiState.collectAsState()
+    
+    // Extract dashboard plugin IDs
+    val dashboardPluginIds = remember(uiState.dashboardPlugins) {
+        uiState.dashboardPlugins.map { it.id }.toSet()
+    }
+    
+    // Filter out plugins already on dashboard
+    val availablePlugins = remember(plugins, dashboardPluginIds) {
+        plugins.filter { plugin ->
+            plugin.id !in dashboardPluginIds
+        }
+    }
+    
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
@@ -37,73 +54,42 @@ fun PluginSelectorBottomSheet(
         ) {
             // Title
             Text(
-                text = "Select Plugin",
+                text = "Select Plugin to Add",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
             
-            Divider()
-            
-            // Plugin list
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(vertical = 8.dp)
-            ) {
-                items(plugins) { plugin ->
-                    PluginSelectorItem(
-                        plugin = plugin,
-                        onClick = { onPluginSelected(plugin) }
+            // Show message if all plugins are already added
+            if (availablePlugins.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "All available plugins are already on your dashboard",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            } else {
+                HorizontalDivider() // FIX: Changed from deprecated Divider to HorizontalDivider
                 
-                // Add new plugin option
-                item {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                            .clickable { /* Navigate to plugin store */ },
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                // Plugin list - only show available plugins
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(vertical = 8.dp)
+                ) {
+                    items(availablePlugins) { plugin ->
+                        PluginSelectorItem(
+                            plugin = plugin,
+                            onClick = { 
+                                onPluginSelected(plugin)
+                                onDismiss()
+                            }
                         )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = AppIcons.Action.add,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
-                                    tint = MaterialTheme.colorScheme.onSecondaryContainer
-                                )
-                            }
-                            
-                            Column(
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(
-                                    text = "Browse More Plugins",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Text(
-                                    text = "Discover new ways to track data",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                                )
-                            }
-                        }
                     }
                 }
             }
@@ -165,7 +151,7 @@ private fun PluginSelectorItem(
                 )
             }
             
-            // Arrow icon - FIXED: Using correct Material3 icon
+            // Arrow icon
             Icon(
                 imageVector = Icons.AutoMirrored.Default.ArrowForward,
                 contentDescription = "Select",
