@@ -80,6 +80,7 @@ class PluginRegistry @Inject constructor() {
         // Register all plugins from flat structure
 	register(WaterPlugin())
 	register(SleepPlugin())
+	register(MovementPlugin())
         
         // Future plugins will be added here
         // register(JournalPlugin())

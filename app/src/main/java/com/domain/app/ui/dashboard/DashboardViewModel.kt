@@ -29,6 +29,8 @@ class DashboardViewModel @Inject constructor(
     
     companion object {
         private const val TAG = "DashboardViewModel"
+        // For MVP, we'll show these plugins by default
+        private val MVP_PLUGIN_IDS = listOf("water", "sleep", "Movement")
     }
     
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -42,7 +44,8 @@ class DashboardViewModel @Inject constructor(
     }
     
     /**
-     * Initialize the MVP dashboard with just the Water plugin
+     * Initialize the MVP dashboard with hardcoded plugins for testing
+     * In production, this would read from user preferences
      */
     private fun initializeMVPDashboard() {
         Log.d(TAG, "initializeMVPDashboard() called")
@@ -52,17 +55,13 @@ class DashboardViewModel @Inject constructor(
                 Log.d(TAG, "Initializing plugins...")
                 pluginManager.initializePlugins()
                 
-                // Get all available plugins (should just be Water for now)
+                // Get all available plugins
                 val allPlugins = pluginManager.getAllActivePlugins()
                 Log.d(TAG, "Loaded ${allPlugins.size} active plugins: ${allPlugins.map { it.id }}")
                 
-                // For MVP, we'll just show Water plugin if available
-                val waterPlugin = allPlugins.find { it.id == "water" }
-		val sleepPlugin = allPlugins.find { it.id == "sleep"}
-                val dashboardPlugins = if (waterPlugin != null) {
-                    listOf(waterPlugin)
-                } else {
-                    emptyList()
+                // For MVP, filter to show only our enabled plugins
+                val dashboardPlugins = allPlugins.filter { plugin ->
+                    plugin.id in MVP_PLUGIN_IDS
                 }
                 
                 Log.d(TAG, "Dashboard plugins: ${dashboardPlugins.map { it.id }}")
@@ -75,23 +74,30 @@ class DashboardViewModel @Inject constructor(
                     )
                 }
                 
-                // Ensure Water plugin is added to dashboard preferences
-                if (waterPlugin != null) {
-                    viewModelScope.launch {
-                        // Check if already on dashboard
-                        val currentDashboardIds = preferencesManager.dashboardPlugins.first()
-                        if (waterPlugin.id !in currentDashboardIds) {
-                            Log.d(TAG, "Adding Water plugin to dashboard preferences")
-                            preferencesManager.addToDashboard(waterPlugin.id)
-                        }
-                    }
-                }
+                // Ensure MVP plugins are added to dashboard preferences
+                // This maintains consistency even though we're hardcoding for MVP
+                ensurePluginsInPreferences(dashboardPlugins)
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Error initializing MVP dashboard", e)
                 _uiState.update {
                     it.copy(error = "Failed to load plugins: ${e.message}")
                 }
+            }
+        }
+    }
+    
+    /**
+     * Ensure plugins are registered in preferences
+     * This maintains data consistency even in MVP mode
+     */
+    private suspend fun ensurePluginsInPreferences(plugins: List<Plugin>) {
+        val currentDashboardIds = preferencesManager.dashboardPlugins.first()
+        
+        plugins.forEach { plugin ->
+            if (plugin.id !in currentDashboardIds) {
+                Log.d(TAG, "Adding ${plugin.id} plugin to dashboard preferences")
+                preferencesManager.addToDashboard(plugin.id)
             }
         }
     }
@@ -189,6 +195,66 @@ class DashboardViewModel @Inject constructor(
                         error = e.message,
                         isProcessing = false
                     )
+                }
+            }
+        }
+    }
+    
+    /**
+     * Add a plugin to the dashboard (for future use when we enable dynamic dashboard)
+     */
+    fun addPluginToDashboard(pluginId: String) {
+        Log.d(TAG, "Adding plugin $pluginId to dashboard")
+        viewModelScope.launch {
+            try {
+                val plugin = pluginManager.getPlugin(pluginId)
+                if (plugin != null) {
+                    preferencesManager.addToDashboard(pluginId)
+                    
+                    // Update local state
+                    _uiState.update { state ->
+                        state.copy(
+                            dashboardPlugins = state.dashboardPlugins + plugin
+                        )
+                    }
+                    
+                    Log.d(TAG, "Successfully added $pluginId to dashboard")
+                } else {
+                    Log.e(TAG, "Plugin $pluginId not found")
+                    _uiState.update {
+                        it.copy(error = "Plugin not found")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error adding plugin to dashboard", e)
+                _uiState.update {
+                    it.copy(error = "Failed to add plugin: ${e.message}")
+                }
+            }
+        }
+    }
+    
+    /**
+     * Remove a plugin from the dashboard (for future use)
+     */
+    fun removePluginFromDashboard(pluginId: String) {
+        Log.d(TAG, "Removing plugin $pluginId from dashboard")
+        viewModelScope.launch {
+            try {
+                preferencesManager.removeFromDashboard(pluginId)
+                
+                // Update local state
+                _uiState.update { state ->
+                    state.copy(
+                        dashboardPlugins = state.dashboardPlugins.filter { it.id != pluginId }
+                    )
+                }
+                
+                Log.d(TAG, "Successfully removed $pluginId from dashboard")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error removing plugin from dashboard", e)
+                _uiState.update {
+                    it.copy(error = "Failed to remove plugin: ${e.message}")
                 }
             }
         }
