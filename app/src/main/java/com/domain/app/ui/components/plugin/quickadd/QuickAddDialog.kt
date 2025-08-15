@@ -15,9 +15,9 @@ import com.domain.app.ui.components.core.input.ValidatedTextField
 import com.domain.app.ui.components.core.sliders.HorizontalSlider
 import com.domain.app.ui.components.core.sliders.VerticalSlider
 import com.domain.app.ui.components.core.sliders.RangeSlider
-import com.domain.app.ui.components.core.sliders.RangeSliderDefaults
 import com.domain.app.ui.components.core.carousel.Carousel
 import com.domain.app.ui.components.core.carousel.CarouselOption
+import com.domain.app.ui.components.core.button.TileButtonGrid
 import kotlin.math.roundToInt
 
 /**
@@ -310,7 +310,7 @@ private fun CarouselQuickAddContent(
 }
 
 /**
- * Choice-based quick add
+ * Choice-based quick add using tile buttons
  */
 @Composable
 private fun ChoiceQuickAddContent(
@@ -319,7 +319,8 @@ private fun ChoiceQuickAddContent(
     onDismiss: () -> Unit,
     onConfirm: (Map<String, Any>) -> Unit
 ) {
-    var selectedOption by remember { mutableStateOf(config.options?.firstOrNull()) }
+    var selectedOption by remember { mutableStateOf<String?>(null) }
+    val options = config.options ?: emptyList()
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -327,27 +328,21 @@ private fun ChoiceQuickAddContent(
             Text(config.title)
         },
         text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                config.options?.forEach { option ->
-                    FilterChip(
-                        selected = selectedOption == option,
-                        onClick = { selectedOption = option },
-                        label = { Text(option.label) },
-                        leadingIcon = {
-                            option.icon?.let { Text(it) }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
+            TileButtonGrid(
+                options = options.map { it.label },
+                selectedOption = selectedOption,
+                onOptionSelected = { selectedOption = it },
+                columns = 3
+            )
         },
         confirmButton = {
             TextButton(
                 onClick = {
-                    selectedOption?.let {
-                        onConfirm(mapOf(config.id to it.value))
+                    selectedOption?.let { selected ->
+                        val option = options.find { it.label == selected }
+                        option?.let {
+                            onConfirm(mapOf(config.id to it.value))
+                        }
                     }
                 },
                 enabled = selectedOption != null
@@ -544,51 +539,24 @@ private fun TimeRangeQuickAddContent(
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Duration display
-                val duration = if (endTime > startTime) {
-                    endTime - startTime
-                } else {
-                    (24 - startTime) + endTime
-                }
-                
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "${duration.toInt()}h sleep",
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(12.dp)
-                    )
-                }
-                
-                // Time display
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Bedtime: ${formatTime24Hour(startTime)}")
-                    Text("Wake: ${formatTime24Hour(endTime)}")
-                }
+                Text(
+                    text = "Select sleep time",
+                    style = MaterialTheme.typography.bodyMedium
+                )
                 
                 // RangeSlider for time selection
                 RangeSlider(
-                    startValue = startTime,
-                    endValue = if (endTime < startTime) endTime + 24f else endTime,
-                    onRangeChange = { start, end ->
-                        startTime = start % 24
-                        endTime = end % 24
+                    value = startTime..endTime,
+                    onValueChange = { range ->
+                        startTime = range.start
+                        endTime = range.endInclusive
                     },
-                    valueRange = 0f..48f,
-                    steps = 47,
-                    minRange = 1f,
-                    showLabels = false,
+                    valueRange = 0f..48f,  // 48 hours to handle crossing midnight
+                    steps = 47,  // 1-hour increments
                     modifier = Modifier.fillMaxWidth()
                 )
                 
-                // Time markers
+                // Time labels
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -776,15 +744,6 @@ private fun CompositeQuickAddContent(
     val inputs = config.inputs ?: return
     val results = remember { mutableStateMapOf<String, Any>() }
     
-    // Initialize default values
-    LaunchedEffect(inputs) {
-        inputs.forEach { input ->
-            input.defaultValue?.let { 
-                results[input.id] = it 
-            }
-        }
-    }
-    
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -792,143 +751,52 @@ private fun CompositeQuickAddContent(
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 inputs.forEach { input ->
                     when (input.type) {
-                        InputType.CAROUSEL -> {
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
+                        InputType.HORIZONTAL_SLIDER -> {
+                            var value by remember { 
+                                mutableStateOf((input.defaultValue as? Number)?.toFloat() ?: 0f)
+                            }
+                            Column {
                                 Text(
                                     text = input.label,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    style = MaterialTheme.typography.labelMedium
                                 )
-                                
-                                input.options?.let { options ->
-                                    val selectedOption = results[input.id] as? String
-                                    
-                                    Carousel(
-                                        options = options.map { option ->
-                                            CarouselOption(
-                                                label = option.label,
-                                                value = option.value,
-                                                icon = option.icon
-                                            )
-                                        },
-                                        selectedOption = options.find { it.value == selectedOption }?.let { selected ->
-                                            CarouselOption(
-                                                label = selected.label,
-                                                value = selected.value,
-                                                icon = selected.icon
-                                            )
-                                        },
-                                        onOptionSelected = { carouselOption ->
-                                            results[input.id] = carouselOption.value
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        height = 60.dp
-                                    )
-                                }
-                            }
-                        }
-                        
-                        InputType.HORIZONTAL_SLIDER -> {
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = input.label,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    
-                                    val value = (results[input.id] as? Number)?.toFloat() 
-                                        ?: (input.defaultValue as? Number)?.toFloat() 
-                                        ?: 0f
-                                    
-                                    Text(
-                                        text = formatSliderValue(value, input),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
-                                
-                                val currentValue = (results[input.id] as? Number)?.toFloat() 
-                                    ?: (input.defaultValue as? Number)?.toFloat() 
-                                    ?: 0f
-                                
                                 HorizontalSlider(
-                                    value = currentValue,
-                                    onValueChange = { results[input.id] = it },
+                                    value = value,
+                                    onValueChange = { 
+                                        value = it
+                                        results[input.id] = it
+                                    },
                                     valueRange = ((input.min as? Number)?.toFloat() ?: 0f)..
                                             ((input.max as? Number)?.toFloat() ?: 100f),
-                                    showLabel = false,
+                                    showLabel = true,
+                                    labelFormatter = { v ->
+                                        "${v.roundToInt()}${input.unit?.let { " $it" } ?: ""}"
+                                    },
                                     modifier = Modifier.fillMaxWidth()
                                 )
-                                
-                                // Show labels if provided
-                                if (input.bottomLabel != null || input.topLabel != null) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(
-                                            text = input.bottomLabel ?: "",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                        )
-                                        Text(
-                                            text = input.topLabel ?: "",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                        )
-                                    }
-                                }
                             }
                         }
-                        
                         InputType.TEXT -> {
+                            var value by remember { 
+                                mutableStateOf((input.defaultValue as? String) ?: "")
+                            }
                             OutlinedTextField(
-                                value = results[input.id]?.toString() ?: "",
-                                onValueChange = { results[input.id] = it },
-                                label = { Text(input.label) },
-                                placeholder = { input.placeholder?.let { Text(it) } },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                        
-                        InputType.NUMBER -> {
-                            OutlinedTextField(
-                                value = results[input.id]?.toString() ?: "",
+                                value = value,
                                 onValueChange = { 
-                                    it.toFloatOrNull()?.let { num ->
-                                        results[input.id] = num
-                                    }
+                                    value = it
+                                    results[input.id] = it
                                 },
                                 label = { Text(input.label) },
-                                suffix = { input.unit?.let { Text(it) } },
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Number
-                                ),
+                                placeholder = { Text(input.placeholder ?: "") },
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
-                        
                         else -> {
-                            // For other input types, show a placeholder
-                            Text(
-                                text = "${input.label}: ${input.type} (not implemented)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Text("Input type ${input.type} not implemented for composite")
                         }
                     }
                 }
@@ -938,19 +806,17 @@ private fun CompositeQuickAddContent(
             TextButton(
                 onClick = {
                     // Validate required fields
-                    val missingRequired = inputs
+                    val allRequiredPresent = inputs
                         .filter { it.required }
-                        .any { !results.containsKey(it.id) || results[it.id] == null }
+                        .all { results.containsKey(it.id) }
                     
-                    if (!missingRequired) {
+                    if (allRequiredPresent) {
                         onConfirm(results.toMap())
                     }
                 },
-                enabled = inputs
-                    .filter { it.required }
-                    .all { results.containsKey(it.id) && results[it.id] != null }
+                enabled = inputs.filter { it.required }.all { results.containsKey(it.id) }
             ) {
-                Text("Save")
+                Text("Add")
             }
         },
         dismissButton = {
@@ -959,29 +825,4 @@ private fun CompositeQuickAddContent(
             }
         }
     )
-}
-
-// Helper function to format slider values for intensity
-private fun formatSliderValue(value: Float, input: QuickAddInput): String {
-    // For intensity slider (0 to 1 range)
-    return if (input.label.contains("Intensity", ignoreCase = true)) {
-        when {
-            value < 0.2f -> "Light"
-            value < 0.4f -> "Easy"
-            value < 0.6f -> "Moderate"
-            value < 0.8f -> "Hard"
-            else -> "Extreme"
-        }
-    } else if (input.unit != null) {
-        "${value.roundToInt()}${input.unit}"
-    } else {
-        value.roundToInt().toString()
-    }
-}
-
-// Helper function to format 24-hour time
-private fun formatTime24Hour(hour: Float): String {
-    val h = hour.toInt() % 24
-    val m = ((hour % 1) * 60).toInt()
-    return String.format("%02d:%02d", h, m)
 }

@@ -30,7 +30,7 @@ class DashboardViewModel @Inject constructor(
     companion object {
         private const val TAG = "DashboardViewModel"
         // For MVP, we'll show these plugins by default
-        private val MVP_PLUGIN_IDS = listOf("water", "sleep", "movement")
+        private val MVP_PLUGIN_IDS = listOf("water", "sleep", "movement", "work")
     }
     
     private val _uiState = MutableStateFlow(DashboardUiState())
