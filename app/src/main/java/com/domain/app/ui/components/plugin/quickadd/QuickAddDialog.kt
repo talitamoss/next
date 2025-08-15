@@ -328,23 +328,62 @@ private fun ChoiceQuickAddContent(
         title = {
             Text(config.title)
         },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                config.options?.forEach { option ->
-                    FilterChip(
-                        selected = selectedOption == option,
-                        onClick = { selectedOption = option },
-                        label = { Text(option.label) },
-                        leadingIcon = {
-                            option.icon?.let { Text(it) }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        },
+	text = {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Duration display
+        val duration = if (endTime > startTime) endTime - startTime else (24 - startTime) + endTime
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = "${duration.toInt()}h sleep",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(12.dp)
+            )
+        }
+        
+        // Time display
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("Bedtime: ${startTime.toInt()}:00")
+            Text("Wake: ${endTime.toInt()}:00")
+        }
+        
+        // RangeSlider for time selection
+        RangeSlider(
+            startValue = startTime,
+            endValue = if (endTime < startTime) endTime + 24f else endTime,
+            onRangeChange = { start, end ->
+                startTime = start % 24
+                endTime = end % 24
+            },
+            valueRange = 0f..48f,
+            steps = 47,
+            minRange = 1f,
+            showLabels = false,
+            modifier = Modifier.fillMaxWidth()
+        )
+        
+        // Time markers
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("12AM", style = MaterialTheme.typography.labelSmall)
+            Text("6AM", style = MaterialTheme.typography.labelSmall)
+            Text("12PM", style = MaterialTheme.typography.labelSmall)
+            Text("6PM", style = MaterialTheme.typography.labelSmall)
+            Text("12AM", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+},
         confirmButton = {
             TextButton(
                 onClick = {
@@ -525,6 +564,10 @@ private fun TimeRangeQuickAddContent(
     onDismiss: () -> Unit,
     onConfirm: (Map<String, Any>) -> Unit
 ) {
+
+    var startTime by remember { mutableStateOf(23f) }  // Default bedtime 11 PM
+    var endTime by remember { mutableStateOf(7f) }      // Default wake time 7 AM
+
     // Initialize from config defaults or use standard sleep times
     var startTime by remember { 
         mutableStateOf(
