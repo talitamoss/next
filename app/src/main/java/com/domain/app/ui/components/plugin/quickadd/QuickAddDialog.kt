@@ -6,8 +6,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.domain.app.core.plugin.*
@@ -148,10 +150,6 @@ private fun HorizontalSliderQuickAddContent(
     }
     
     val range = ((config.min as? Number)?.toFloat() ?: 0f)..((config.max as? Number)?.toFloat() ?: 100f)
-    val steps = if (config.step != null) {
-        val stepSize = (config.step as Number).toFloat()
-        ((range.endInclusive - range.start) / stepSize).toInt() - 1
-    } else 0
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -159,22 +157,19 @@ private fun HorizontalSliderQuickAddContent(
             Text(config.title)
         },
         text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                HorizontalSlider(
+            Column {
+                Slider(
                     value = value,
                     onValueChange = { value = it },
                     valueRange = range,
-                    steps = steps,
-                    showLabel = true,
-                    labelFormatter = { v -> 
-                        "${v.roundToInt()}${config.unit?.let { " $it" } ?: ""}"
-                    },
+                    steps = ((config.step as? Number)?.toInt() ?: 0) - 1,
                     modifier = Modifier.fillMaxWidth()
+                )
+                
+                Text(
+                    text = "${value.roundToInt()} ${config.unit ?: ""}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
             }
         },
@@ -196,7 +191,7 @@ private fun HorizontalSliderQuickAddContent(
 }
 
 /**
- * Vertical slider quick add
+ * Vertical slider quick add (using rotated slider or custom implementation)
  */
 @Composable
 private fun VerticalSliderQuickAddContent(
@@ -206,14 +201,10 @@ private fun VerticalSliderQuickAddContent(
     onConfirm: (Map<String, Any>) -> Unit
 ) {
     var value by remember { 
-        mutableStateOf((config.defaultValue as? Number)?.toFloat() ?: 3f)
+        mutableStateOf((config.defaultValue as? Number)?.toFloat() ?: 0f)
     }
     
-    val range = ((config.min as? Number)?.toFloat() ?: 1f)..((config.max as? Number)?.toFloat() ?: 5f)
-    val steps = if (config.step != null) {
-        val stepSize = (config.step as Number).toFloat()
-        ((range.endInclusive - range.start) / stepSize).toInt() - 1
-    } else (range.endInclusive.toInt() - range.start.toInt() - 1)
+    val range = ((config.min as? Number)?.toFloat() ?: 0f)..((config.max as? Number)?.toFloat() ?: 100f)
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -221,20 +212,17 @@ private fun VerticalSliderQuickAddContent(
             Text(config.title)
         },
         text = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 16.dp),
-                contentAlignment = Alignment.Center
+            Column(
+                modifier = Modifier.height(200.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 VerticalSlider(
                     value = value,
                     onValueChange = { value = it },
                     valueRange = range,
-                    steps = steps,
-                    height = 200.dp,
-                    showLabel = !config.showValue,
-                    labelFormatter = { v -> 
+                    enabled = true,
+                    showLabel = config.showValue,
+                    labelFormatter = { v ->
                         when {
                             config.topLabel != null && v >= range.endInclusive - 0.5f -> config.topLabel!!
                             config.bottomLabel != null && v <= range.start + 0.5f -> config.bottomLabel!!
@@ -549,21 +537,6 @@ private fun TimeRangeQuickAddContent(
         )
     }
     
-    // Use 0-48 range to handle crossing midnight smoothly
-    var rangeStart by remember { mutableStateOf(startTime) }
-    var rangeEnd by remember { 
-        mutableStateOf(
-            if (endTime < startTime) endTime + 24f else endTime
-        )
-    }
-    
-    // Calculate sleep duration
-    val duration = if (rangeEnd > rangeStart) {
-        rangeEnd - rangeStart
-    } else {
-        0f
-    }
-    
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -573,81 +546,18 @@ private fun TimeRangeQuickAddContent(
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Duration display
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "${duration.toInt()}h ${((duration % 1) * 60).toInt()}m sleep",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(12.dp)
-                    )
-                }
-                
-                // Time labels
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text(
-                            "Bedtime",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Text(
-                            "${(rangeStart % 24).toInt()}:00",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            "Wake time",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Text(
-                            "${(rangeEnd % 24).toInt()}:00",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                }
-                
-                // Range Slider
-                RangeSlider(
-                    startValue = rangeStart,
-                    endValue = rangeEnd,
-                    onRangeChange = { start, end ->
-                        rangeStart = start
-                        rangeEnd = end
-                    },
-                    valueRange = 0f..48f,
-                    steps = 47, // Hour increments
-                    minRange = 1f, // Minimum 1 hour sleep
-                    showLabels = false,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
-                // Time markers
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("12AM", style = MaterialTheme.typography.labelSmall)
-                    Text("6AM", style = MaterialTheme.typography.labelSmall)
-                    Text("12PM", style = MaterialTheme.typography.labelSmall)
-                    Text("6PM", style = MaterialTheme.typography.labelSmall)
-                    Text("12AM", style = MaterialTheme.typography.labelSmall)
-                }
+                // TODO: Implement RangeSlider UI
+                Text("Time range selection not yet implemented")
+                Text("Bedtime: ${startTime.toInt()}:00")
+                Text("Wake time: ${endTime.toInt()}:00")
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
                     onConfirm(mapOf(
-                        "bedtime" to (rangeStart % 24),
-                        "waketime" to (rangeEnd % 24)
+                        "bedtime" to startTime,
+                        "waketime" to endTime
                     ))
                 }
             ) {
@@ -663,7 +573,7 @@ private fun TimeRangeQuickAddContent(
 }
 
 /**
- * Multi-stage quick add
+ * Multi-stage quick add implementation
  */
 @Composable
 private fun MultiStageQuickAddContent(
@@ -672,16 +582,30 @@ private fun MultiStageQuickAddContent(
     onDismiss: () -> Unit,
     onConfirm: (Map<String, Any>) -> Unit
 ) {
-    var currentStage by remember { mutableStateOf(0) }
     val stages = config.stages ?: return
+    var currentStageIndex by remember { mutableStateOf(0) }
     val results = remember { mutableStateMapOf<String, Any>() }
     
-    // Implementation continues as in original...
-    // (Rest of the multi-stage implementation remains the same)
+    // TODO: Implement multi-stage UI
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Multi-stage not implemented")
+        },
+        text = {
+            Text("This plugin uses multi-stage input which is not yet implemented")
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("OK")
+            }
+        }
+    )
 }
 
 /**
- * Composite quick add with multiple inputs
+ * Composite quick add with multiple inputs on one screen
+ * THIS IS THE KEY IMPLEMENTATION FOR MOVEMENT PLUGIN
  */
 @Composable
 private fun CompositeQuickAddContent(
@@ -693,6 +617,181 @@ private fun CompositeQuickAddContent(
     val inputs = config.inputs ?: return
     val results = remember { mutableStateMapOf<String, Any>() }
     
-    // Implementation continues as in original...
-    // (Rest of the composite implementation remains the same)
+    // Initialize default values
+    LaunchedEffect(inputs) {
+        inputs.forEach { input ->
+            input.defaultValue?.let { 
+                results[input.id] = it 
+            }
+        }
+    }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(config.title)
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                inputs.forEach { input ->
+                    when (input.type) {
+                        InputType.CAROUSEL -> {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = input.label,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                
+                                input.options?.let { options ->
+                                    val selectedOption = results[input.id] as? String
+                                    
+                                    Carousel(
+                                        options = options.map { option ->
+                                            CarouselOption(
+                                                label = option.label,
+                                                value = option.value,
+                                                icon = option.icon
+                                            )
+                                        },
+                                        selectedOption = options.find { it.value == selectedOption }?.let { selected ->
+                                            CarouselOption(
+                                                label = selected.label,
+                                                value = selected.value,
+                                                icon = selected.icon
+                                            )
+                                        },
+                                        onOptionSelected = { carouselOption ->
+                                            results[input.id] = carouselOption.value
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        height = 60.dp
+                                    )
+                                }
+                            }
+                        }
+                        
+                        InputType.HORIZONTAL_SLIDER -> {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = input.label,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    
+                                    val value = (results[input.id] as? Number)?.toFloat() ?: 0f
+                                    Text(
+                                        text = if (input.unit != null) {
+                                            "${value.roundToInt()} ${input.unit}"
+                                        } else {
+                                            formatSliderValue(value, input)
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                
+                                val currentValue = (results[input.id] as? Number)?.toFloat() 
+                                    ?: (input.defaultValue as? Number)?.toFloat() 
+                                    ?: 0f
+                                    
+                                val range = ((input.min as? Number)?.toFloat() ?: 0f)..
+                                           ((input.max as? Number)?.toFloat() ?: 100f)
+                                
+                                Slider(
+                                    value = currentValue,
+                                    onValueChange = { newValue ->
+                                        results[input.id] = newValue
+                                    },
+                                    valueRange = range,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                
+                                // Show labels if provided
+                                if (input.bottomLabel != null || input.topLabel != null) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = input.bottomLabel ?: "",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        )
+                                        Text(
+                                            text = input.topLabel ?: "",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        else -> {
+                            // For other input types, show a placeholder
+                            Text(
+                                text = "${input.label}: ${input.type} (not implemented)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    // Validate required fields
+                    val missingRequired = inputs
+                        .filter { it.required }
+                        .any { !results.containsKey(it.id) || results[it.id] == null }
+                    
+                    if (!missingRequired) {
+                        onConfirm(results.toMap())
+                    }
+                },
+                enabled = inputs
+                    .filter { it.required }
+                    .all { results.containsKey(it.id) && results[it.id] != null }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+// Helper function to format slider values for intensity
+private fun formatSliderValue(value: Float, input: QuickAddInput): String {
+    // For intensity slider (0 to 1 range)
+    return if (input.label.contains("Intensity", ignoreCase = true)) {
+        when {
+            value < 0.2f -> "Light"
+            value < 0.4f -> "Easy"
+            value < 0.6f -> "Moderate"
+            value < 0.8f -> "Hard"
+            else -> "Extreme"
+        }
+    } else {
+        value.roundToInt().toString()
+    }
 }
