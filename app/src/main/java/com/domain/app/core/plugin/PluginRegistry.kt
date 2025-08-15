@@ -1,5 +1,6 @@
 package com.domain.app.core.plugin
 
+
 import com.domain.app.plugins.*
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -77,13 +78,7 @@ class PluginRegistry @Inject constructor() {
     
     private fun registerBuiltInPlugins() {
         // Register all plugins from flat structure
-        register(WaterPlugin())
-        register(MoodPlugin())
-        register(SleepPlugin())
-        register(ExercisePlugin())
-        register(CounterPlugin())
-        register(CoffeePlugin())
-	register(ComponentTestPlugin())
+	register(WaterPlugin())
         
         // Future plugins will be added here
         // register(JournalPlugin())
