@@ -58,6 +58,7 @@ class DashboardViewModel @Inject constructor(
                 
                 // For MVP, we'll just show Water plugin if available
                 val waterPlugin = allPlugins.find { it.id == "water" }
+		val sleepPlugin = allPlugins.find { it.id == "sleep"}
                 val dashboardPlugins = if (waterPlugin != null) {
                     listOf(waterPlugin)
                 } else {
