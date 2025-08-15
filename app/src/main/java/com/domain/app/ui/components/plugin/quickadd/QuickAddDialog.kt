@@ -540,7 +540,26 @@ private fun TimeRangeQuickAddContent(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
+<<<<<<< Updated upstream
             Text(config.title)
+=======
+<<<<<<< Updated upstream
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = plugin.metadata.name,
+                    style = MaterialTheme.typography.headlineSmall
+                )
+                Text(
+                    text = "Step ${currentStageIndex + 1} of ${stages.size}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+>>>>>>> Stashed changes
         },
         text = {
             Column(
@@ -552,6 +571,61 @@ private fun TimeRangeQuickAddContent(
                 Text("Wake time: ${endTime.toInt()}:00")
             }
         },
+=======
+            Text(config.title)
+        },
+	text = {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Show current selection
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Bedtime: ${startTime.toInt()}:00")
+                Text("Wake: ${endTime.toInt()}:00")
+            }
+        }
+        
+        // Add the RangeSlider
+        RangeSlider(
+            startValue = startTime,
+            endValue = if (endTime < startTime) endTime + 24f else endTime,
+            onRangeChange = { start, end ->
+                startTime = start % 24
+                endTime = end % 24
+            },
+            valueRange = 0f..48f,
+            steps = 47,
+            minRange = 1f,
+            showLabels = false,
+            modifier = Modifier.fillMaxWidth()
+        )
+        
+        // Time markers
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("12AM", style = MaterialTheme.typography.labelSmall)
+            Text("6AM", style = MaterialTheme.typography.labelSmall)
+            Text("12PM", style = MaterialTheme.typography.labelSmall)
+            Text("6PM", style = MaterialTheme.typography.labelSmall)
+            Text("12AM", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+},
+
+>>>>>>> Stashed changes
         confirmButton = {
             TextButton(
                 onClick = {
