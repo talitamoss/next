@@ -71,8 +71,8 @@ class WaterPlugin : Plugin {
         inputType = InputType.HORIZONTAL_SLIDER,
         min = 0f,
         max = 2000f,
-        step = 50f,
-        defaultValue = 250f,
+        step = 10f,
+        defaultValue = 500f,
         unit = "ml",
         showValue = true,
         primaryColor = "#2196F3",   // Blue for water
