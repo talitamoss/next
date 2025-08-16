@@ -112,10 +112,14 @@ class SleepPlugin : Plugin {
                 "duration" to duration,
                 "quality" to calculateSleepQuality(duration)
             ),
-            metadata = mapOf(
-                "version" to metadata.version,
-                "inputType" to "manual"
-            )
+	metadata = mapOf(
+    "startKey" to "bedtime",
+    "endKey" to "waketime",
+    "startLabel" to "Bedtime",
+    "endLabel" to "Wake",
+    "durationLabel" to "{duration} sleep",
+    "timeFormat" to "12h"
+)
         )
     }
     

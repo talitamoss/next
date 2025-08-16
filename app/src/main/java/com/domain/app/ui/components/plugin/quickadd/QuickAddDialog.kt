@@ -1,28 +1,30 @@
 package com.domain.app.ui.components.plugin.quickadd
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.clickable  // FIXED: Added missing import
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.domain.app.core.plugin.*
-import com.domain.app.core.validation.ValidationResult
-import com.domain.app.ui.components.core.input.ValidatedTextField
-import com.domain.app.ui.components.core.sliders.HorizontalSlider
-import com.domain.app.ui.components.core.sliders.VerticalSlider
-import com.domain.app.ui.components.core.sliders.RangeSlider
+import com.domain.app.core.plugin.InputType
+import com.domain.app.core.plugin.Plugin
+import com.domain.app.core.plugin.QuickAddConfig
+import com.domain.app.core.plugin.QuickOption
 import com.domain.app.ui.components.core.carousel.Carousel
 import com.domain.app.ui.components.core.carousel.CarouselOption
-import com.domain.app.ui.components.core.button.TileButtonGrid
+import com.domain.app.ui.components.core.sliders.RangeSlider
+import com.domain.app.ui.components.core.sliders.RangeSliderDefaults
+import com.domain.app.ui.components.core.sliders.VerticalSlider
 import kotlin.math.roundToInt
 
 /**
- * Quick add dialog for plugins
- * Renders appropriate input components based on plugin configuration
+ * Quick add dialog that adapts to different plugin input types
  */
 @Composable
 fun QuickAddDialog(
@@ -30,104 +32,115 @@ fun QuickAddDialog(
     onDismiss: () -> Unit,
     onConfirm: (Map<String, Any>) -> Unit
 ) {
-    val config = plugin.getQuickAddConfig() ?: return
+    val config = plugin.getQuickAddConfig()
     
-    when {
-        // Multi-stage input
-        config.stages != null -> {
-            MultiStageQuickAddContent(
-                plugin = plugin,
-                config = config,
-                onDismiss = onDismiss,
-                onConfirm = onConfirm
-            )
-        }
-        
-        // Composite inputs (multiple inputs on one screen)
-        config.inputs != null -> {
-            CompositeQuickAddContent(
-                plugin = plugin,
-                config = config,
-                onDismiss = onDismiss,
-                onConfirm = onConfirm
-            )
-        }
-        
-        // Single input based on type
-        else -> {
-            when (config.inputType) {
-                InputType.HORIZONTAL_SLIDER -> {
-                    HorizontalSliderQuickAddContent(
-                        plugin = plugin,
-                        config = config,
-                        onDismiss = onDismiss,
-                        onConfirm = onConfirm
-                    )
+    if (config == null) {
+        // Plugin doesn't support quick add
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Not Supported") },
+            text = { Text("This plugin doesn't support quick add") },
+            confirmButton = {
+                TextButton(onClick = onDismiss) {
+                    Text("OK")
                 }
-                InputType.VERTICAL_SLIDER -> {
-                    VerticalSliderQuickAddContent(
-                        plugin = plugin,
-                        config = config,
-                        onDismiss = onDismiss,
-                        onConfirm = onConfirm
-                    )
-                }
-                InputType.CAROUSEL -> {
-                    CarouselQuickAddContent(
-                        plugin = plugin,
-                        config = config,
-                        onDismiss = onDismiss,
-                        onConfirm = onConfirm
-                    )
-                }
-                InputType.CHOICE -> {
-                    ChoiceQuickAddContent(
-                        plugin = plugin,
-                        config = config,
-                        onDismiss = onDismiss,
-                        onConfirm = onConfirm
-                    )
-                }
-                InputType.NUMBER -> {
-                    NumberQuickAddContent(
-                        plugin = plugin,
-                        config = config,
-                        onDismiss = onDismiss,
-                        onConfirm = onConfirm
-                    )
-                }
-                InputType.TEXT -> {
-                    TextQuickAddContent(
-                        plugin = plugin,
-                        config = config,
-                        onDismiss = onDismiss,
-                        onConfirm = onConfirm
-                    )
-                }
-                InputType.BOOLEAN -> {
-                    BooleanQuickAddContent(
-                        plugin = plugin,
-                        config = config,
-                        onDismiss = onDismiss,
-                        onConfirm = onConfirm
-                    )
-                }
-                InputType.TIME_RANGE -> {
-                    TimeRangeQuickAddContent(
-                        plugin = plugin,
-                        config = config,
-                        onDismiss = onDismiss,
-                        onConfirm = onConfirm
-                    )
-                }
-                else -> {
-                    // Fallback to simple number input
-                    NumberQuickAddContent(
-                        plugin = plugin,
-                        config = config,
-                        onDismiss = onDismiss,
-                        onConfirm = onConfirm
-                    )
+            }
+        )
+    } else {
+        // Check if this is a multi-stage or composite input
+        when {
+            config.stages != null && config.stages.isNotEmpty() -> {
+                MultiStageQuickAddContent(
+                    plugin = plugin,
+                    config = config,
+                    onDismiss = onDismiss,
+                    onConfirm = onConfirm
+                )
+            }
+            config.inputs != null && config.inputs.isNotEmpty() -> {
+                CompositeQuickAddContent(
+                    plugin = plugin,
+                    config = config,
+                    onDismiss = onDismiss,
+                    onConfirm = onConfirm
+                )
+            }
+            else -> {
+                // Single input based on type
+                when (config.inputType) {
+                    InputType.VERTICAL_SLIDER -> {
+                        VerticalSliderQuickAddContent(
+                            plugin = plugin,
+                            config = config,
+                            onDismiss = onDismiss,
+                            onConfirm = onConfirm
+                        )
+                    }
+                    InputType.HORIZONTAL_SLIDER -> {
+                        HorizontalSliderQuickAddContent(
+                            plugin = plugin,
+                            config = config,
+                            onDismiss = onDismiss,
+                            onConfirm = onConfirm
+                        )
+                    }
+                    InputType.CAROUSEL -> {
+                        CarouselQuickAddContent(
+                            plugin = plugin,
+                            config = config,
+                            onDismiss = onDismiss,
+                            onConfirm = onConfirm
+                        )
+                    }
+                    InputType.CHOICE -> {
+                        ChoiceQuickAddContent(
+                            plugin = plugin,
+                            config = config,
+                            onDismiss = onDismiss,
+                            onConfirm = onConfirm
+                        )
+                    }
+                    InputType.NUMBER -> {
+                        NumberQuickAddContent(
+                            plugin = plugin,
+                            config = config,
+                            onDismiss = onDismiss,
+                            onConfirm = onConfirm
+                        )
+                    }
+                    InputType.TEXT -> {
+                        TextQuickAddContent(
+                            plugin = plugin,
+                            config = config,
+                            onDismiss = onDismiss,
+                            onConfirm = onConfirm
+                        )
+                    }
+                    InputType.BOOLEAN -> {
+                        BooleanQuickAddContent(
+                            plugin = plugin,
+                            config = config,
+                            onDismiss = onDismiss,
+                            onConfirm = onConfirm
+                        )
+                    }
+                    InputType.TIME_RANGE -> {
+                        TimeRangeQuickAddContent(
+                            plugin = plugin,
+                            config = config,
+                            onDismiss = onDismiss,
+                            onConfirm = onConfirm
+                        )
+                    }
+                    else -> {
+                        // Fallback to simple number input
+                        NumberQuickAddContent(
+                            plugin = plugin,
+                            config = config,
+                            onDismiss = onDismiss,
+                            onConfirm = onConfirm
+                        )
+                    }
                 }
             }
         }
@@ -159,15 +172,39 @@ private fun HorizontalSliderQuickAddContent(
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                HorizontalSlider(
+                // Current value display
+                Text(
+                    text = "${value.roundToInt()} ${config.unit ?: ""}",
+                    style = MaterialTheme.typography.headlineMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                // Slider
+                Slider(
                     value = value,
                     onValueChange = { value = it },
                     valueRange = range,
-                    labelFormatter = { v ->
-                        "${v.roundToInt()}${config.unit?.let { " $it" } ?: ""}"
-                    },
-                    modifier = Modifier
+                    steps = if (config.step != null) {
+                        ((range.endInclusive - range.start) / config.step.toFloat()).toInt() - 1
+                    } else 0,
+                    modifier = Modifier.fillMaxWidth()
                 )
+                
+                // Min/Max labels
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "${range.start.roundToInt()}",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                    Text(
+                        text = "${range.endInclusive.roundToInt()}",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             }
         },
         confirmButton = {
@@ -201,7 +238,7 @@ private fun VerticalSliderQuickAddContent(
         mutableStateOf((config.defaultValue as? Number)?.toFloat() ?: 0f)
     }
     
-    val range = ((config.min as? Number)?.toFloat() ?: 0f)..((config.max as? Number)?.toFloat() ?: 10f)
+    val range = ((config.min as? Number)?.toFloat() ?: 0f)..((config.max as? Number)?.toFloat() ?: 5f)
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -209,17 +246,21 @@ private fun VerticalSliderQuickAddContent(
             Text(config.title)
         },
         text = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.height(250.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(250.dp),
+                contentAlignment = Alignment.Center
             ) {
                 VerticalSlider(
                     value = value,
                     onValueChange = { value = it },
                     valueRange = range,
-                    showLabel = config.showValue,
-                    labelFormatter = { v ->
+                    steps = if (config.step != null) {
+                        ((range.endInclusive - range.start) / config.step.toFloat()).toInt() - 1
+                    } else 0,
+                    showValue = config.showValue,
+                    formatValue = { v ->
                         when {
                             config.topLabel != null && v >= range.endInclusive - 0.5f -> config.topLabel!!
                             config.bottomLabel != null && v <= range.start + 0.5f -> config.bottomLabel!!
@@ -310,7 +351,7 @@ private fun CarouselQuickAddContent(
 }
 
 /**
- * Choice-based quick add using tile buttons
+ * Choice-based quick add
  */
 @Composable
 private fun ChoiceQuickAddContent(
@@ -319,8 +360,7 @@ private fun ChoiceQuickAddContent(
     onDismiss: () -> Unit,
     onConfirm: (Map<String, Any>) -> Unit
 ) {
-    var selectedOption by remember { mutableStateOf<String?>(null) }
-    val options = config.options ?: emptyList()
+    var selectedOption by remember { mutableStateOf(config.options?.firstOrNull()) }
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -328,21 +368,38 @@ private fun ChoiceQuickAddContent(
             Text(config.title)
         },
         text = {
-            TileButtonGrid(
-                options = options.map { it.label },
-                selectedOption = selectedOption,
-                onOptionSelected = { selectedOption = it },
-                columns = 3
-            )
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                config.options?.forEach { option ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedOption = option },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (selectedOption == option) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surface
+                            }
+                        )
+                    ) {
+                        Text(
+                            text = option.label,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                }
+            }
         },
         confirmButton = {
             TextButton(
                 onClick = {
-                    selectedOption?.let { selected ->
-                        val option = options.find { it.label == selected }
-                        option?.let {
-                            onConfirm(mapOf(config.id to it.value))
-                        }
+                    selectedOption?.let {
+                        onConfirm(mapOf(config.id to it.value))
                     }
                 },
                 enabled = selectedOption != null
@@ -381,11 +438,9 @@ private fun NumberQuickAddContent(
             OutlinedTextField(
                 value = value,
                 onValueChange = { value = it },
-                label = { Text(config.placeholder ?: "Value") },
+                label = { Text(config.placeholder ?: "Enter value") },
                 suffix = { config.unit?.let { Text(it) } },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number
-                ),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -393,8 +448,9 @@ private fun NumberQuickAddContent(
         confirmButton = {
             TextButton(
                 onClick = {
-                    value.toFloatOrNull()?.let {
-                        onConfirm(mapOf(config.id to it))
+                    val numericValue = value.toFloatOrNull()
+                    if (numericValue != null) {
+                        onConfirm(mapOf(config.id to numericValue))
                     }
                 },
                 enabled = value.toFloatOrNull() != null
@@ -509,7 +565,20 @@ private fun BooleanQuickAddContent(
 
 /**
  * Time range quick add using RangeSlider
- * Used for Sleep plugin to select bedtime and wake time
+ * FULLY FLEXIBLE VERSION - All configuration comes from the plugin
+ * 
+ * The plugin provides ALL necessary information via config.metadata map:
+ * - "startKey": Key for start time in data map (default: "start_time")
+ * - "endKey": Key for end time in data map (default: "end_time")
+ * - "startLabel": Display label for start time (default: "Start")
+ * - "endLabel": Display label for end time (default: "End")
+ * - "durationLabel": Format for duration display (default: "{duration} duration")
+ * - "defaultStartTime": Default start time (default: from defaultValue map or 9f)
+ * - "defaultEndTime": Default end time (default: from defaultValue map or 17f)
+ * - "headerText": Text to show above the slider (optional)
+ * - "durationUnit": Unit for duration (default: "h" for hours)
+ * - "showDuration": Whether to show duration card (default: true)
+ * - "timeFormat": "24h" or "12h" (default: "24h")
  */
 @Composable
 private fun TimeRangeQuickAddContent(
@@ -518,15 +587,67 @@ private fun TimeRangeQuickAddContent(
     onDismiss: () -> Unit,
     onConfirm: (Map<String, Any>) -> Unit
 ) {
-    // Initialize from config defaults or use standard sleep times
-    var startTime by remember { 
+    // Extract ALL configuration from the plugin's metadata
+    // This allows plugins to have complete control without modifying this file
+    val metadata = (config.metadata as? Map<String, Any>) ?: emptyMap()
+    
+    // Keys for data map - plugins can specify custom keys
+    val startKey = metadata["startKey"] as? String ?: "start_time"
+    val endKey = metadata["endKey"] as? String ?: "end_time"
+    
+    // Display labels - plugins can specify custom labels
+    val startLabel = metadata["startLabel"] as? String ?: "Start"
+    val endLabel = metadata["endLabel"] as? String ?: "End"
+    
+    // Duration display format - plugins can customize this
+    val durationLabel = metadata["durationLabel"] as? String ?: "{duration} duration"
+    val durationUnit = metadata["durationUnit"] as? String ?: "h"
+    val showDuration = metadata["showDuration"] as? Boolean ?: true
+    
+    // Header text (optional)
+    val headerText = metadata["headerText"] as? String
+    
+    // Time format preference
+    val timeFormat = metadata["timeFormat"] as? String ?: "24h"
+    
+    // Initialize times from config with flexible key handling
+    var startTime by remember {
         mutableStateOf(
-            (config.defaultValue as? Map<*, *>)?.get("bedtime") as? Float ?: 23f
+            when (val default = config.defaultValue) {
+                is Map<*, *> -> {
+                    // Try the plugin-specified key first
+                    (default[startKey] as? Number)?.toFloat()
+                        // Then try common alternatives
+                        ?: (default["start_time"] as? Number)?.toFloat()
+                        ?: (default["startTime"] as? Number)?.toFloat()
+                        ?: (default["start"] as? Number)?.toFloat()
+                        // Plugin-specific fallback from metadata
+                        ?: (metadata["defaultStartTime"] as? Number)?.toFloat()
+                        ?: 9f  // Final fallback
+                }
+                is Number -> default.toFloat()
+                else -> (metadata["defaultStartTime"] as? Number)?.toFloat() ?: 9f
+            }
         )
     }
-    var endTime by remember { 
+    
+    var endTime by remember {
         mutableStateOf(
-            (config.defaultValue as? Map<*, *>)?.get("waketime") as? Float ?: 7f
+            when (val default = config.defaultValue) {
+                is Map<*, *> -> {
+                    // Try the plugin-specified key first
+                    (default[endKey] as? Number)?.toFloat()
+                        // Then try common alternatives
+                        ?: (default["end_time"] as? Number)?.toFloat()
+                        ?: (default["endTime"] as? Number)?.toFloat()
+                        ?: (default["end"] as? Number)?.toFloat()
+                        // Plugin-specific fallback from metadata
+                        ?: (metadata["defaultEndTime"] as? Number)?.toFloat()
+                        ?: 17f  // Final fallback
+                }
+                is Number -> default.toFloat()
+                else -> (metadata["defaultEndTime"] as? Number)?.toFloat() ?: 17f
+            }
         )
     }
     
@@ -539,51 +660,106 @@ private fun TimeRangeQuickAddContent(
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "Select sleep time",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                // Optional header text from plugin
+                headerText?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
                 
-                // RangeSlider for time selection
-                RangeSlider(
-                    value = startTime..endTime,
-                    onValueChange = { range ->
-                        startTime = range.start
-                        endTime = range.endInclusive
-                    },
-                    valueRange = 0f..48f,  // 48 hours to handle crossing midnight
-                    steps = 47,  // 1-hour increments
-                    modifier = Modifier.fillMaxWidth()
-                )
+                // Duration display (if enabled by plugin)
+                if (showDuration) {
+                    val duration = if (endTime > startTime) {
+                        endTime - startTime
+                    } else {
+                        (24 - startTime) + endTime
+                    }
+                    
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = formatDurationText(duration, durationLabel, durationUnit),
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
                 
-                // Time labels
+                // Time display with plugin-specified labels
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("12AM", style = MaterialTheme.typography.labelSmall)
-                    Text("6AM", style = MaterialTheme.typography.labelSmall)
-                    Text("12PM", style = MaterialTheme.typography.labelSmall)
-                    Text("6PM", style = MaterialTheme.typography.labelSmall)
-                    Text("12AM", style = MaterialTheme.typography.labelSmall)
+                    Text("$startLabel: ${formatTimeDisplay(startTime, timeFormat)}")
+                    Text("$endLabel: ${formatTimeDisplay(endTime, timeFormat)}")
+                }
+                
+                // RangeSlider for time selection
+                RangeSlider(
+                    startValue = startTime,
+                    endValue = if (endTime < startTime) endTime + 24f else endTime,
+                    onRangeChange = { start, end ->
+                        startTime = start % 24
+                        endTime = if (end > 24) end % 24 else end
+                    },
+                    valueRange = (config.min as? Number)?.toFloat() ?: 0f..(config.max as? Number)?.toFloat() ?: 48f,
+                    steps = if (config.step != null && config.step.toFloat() > 0) {
+                        val range = ((config.max as? Number)?.toFloat() ?: 48f) - ((config.min as? Number)?.toFloat() ?: 0f)
+                        (range / config.step.toFloat()).toInt()
+                    } else {
+                        47  // Default to hourly steps
+                    },
+                    minRange = config.step?.toFloat() ?: 1f,
+                    showLabels = false,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = if (config.primaryColor != null && config.secondaryColor != null) {
+                        RangeSliderDefaults.colors(
+                            thumbColor = Color(android.graphics.Color.parseColor(config.primaryColor)),
+                            activeTrackColor = Color(android.graphics.Color.parseColor(config.primaryColor)),
+                            inactiveTrackColor = Color(android.graphics.Color.parseColor(config.secondaryColor))
+                        )
+                    } else {
+                        RangeSliderDefaults.colors()
+                    }
+                )
+                
+                // Time markers
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Allow plugins to customize time markers via metadata
+                    val markers = metadata["timeMarkers"] as? List<String> ?: listOf(
+                        "12AM", "6AM", "12PM", "6PM", "12AM"
+                    )
+                    markers.forEach { marker ->
+                        Text(marker, style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
-                    onConfirm(mapOf(
-                        "bedtime" to startTime,
-                        "waketime" to endTime
-                    ))
+                    // Use the plugin-specified keys for the result map
+                    val resultMap = mapOf(
+                        startKey to startTime,
+                        endKey to endTime
+                    )
+                    onConfirm(resultMap)
                 }
             ) {
-                Text("Add")
+                Text(metadata["confirmButtonText"] as? String ?: "Add")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(metadata["cancelButtonText"] as? String ?: "Cancel")
             }
         }
     )
@@ -658,68 +834,34 @@ private fun MultiStageQuickAddContent(
                     InputType.NUMBER -> {
                         OutlinedTextField(
                             value = stageValue.toString(),
-                            onValueChange = { 
-                                stageValue = it.toFloatOrNull() ?: 0f
-                            },
+                            onValueChange = { stageValue = it },
                             label = { Text(currentStage.placeholder ?: "Enter number") },
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Number
-                            ),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
-                    InputType.CHOICE -> {
-                        Column {
-                            currentStage.options?.forEach { option ->
-                                FilterChip(
-                                    selected = stageValue == option.value,
-                                    onClick = { stageValue = option.value },
-                                    label = { Text(option.label) },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                            }
-                        }
-                    }
                     else -> {
-                        Text("Input type ${currentStage.inputType} not yet implemented")
+                        Text("Input type not supported in multi-stage")
                     }
                 }
             }
         },
         confirmButton = {
-            Row {
-                if (currentStageIndex > 0) {
-                    TextButton(
-                        onClick = {
-                            results[currentStage.id] = stageValue
-                            currentStageIndex--
-                        }
-                    ) {
-                        Text("Back")
+            TextButton(
+                onClick = {
+                    // Save current stage result
+                    results[currentStage.id] = stageValue
+                    
+                    if (currentStageIndex < stages.size - 1) {
+                        // Move to next stage
+                        currentStageIndex++
+                    } else {
+                        // Complete all stages
+                        onConfirm(results.toMap())
                     }
                 }
-                
-                Spacer(modifier = Modifier.weight(1f))
-                
-                TextButton(
-                    onClick = {
-                        results[currentStage.id] = stageValue
-                        if (currentStageIndex < stages.size - 1) {
-                            currentStageIndex++
-                        } else {
-                            onConfirm(results.toMap())
-                        }
-                    },
-                    enabled = when {
-                        currentStage.required && stageValue.toString().isBlank() -> false
-                        else -> true
-                    }
-                ) {
-                    Text(
-                        if (currentStageIndex < stages.size - 1) "Next" else "Complete"
-                    )
-                }
+            ) {
+                Text(if (currentStageIndex < stages.size - 1) "Next" else "Complete")
             }
         },
         dismissButton = {
@@ -731,8 +873,7 @@ private fun MultiStageQuickAddContent(
 }
 
 /**
- * Composite quick add with multiple inputs on one screen
- * THIS IS THE KEY IMPLEMENTATION FOR MOVEMENT PLUGIN
+ * Composite quick add for multiple inputs on one screen
  */
 @Composable
 private fun CompositeQuickAddContent(
@@ -751,52 +892,40 @@ private fun CompositeQuickAddContent(
         },
         text = {
             Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.animateContentSize()
             ) {
                 inputs.forEach { input ->
+                    // Render each input based on its type
                     when (input.type) {
                         InputType.HORIZONTAL_SLIDER -> {
                             var value by remember { 
                                 mutableStateOf((input.defaultValue as? Number)?.toFloat() ?: 0f)
                             }
+                            results[input.id] = value
+                            
                             Column {
-                                Text(
-                                    text = input.label,
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                                HorizontalSlider(
+                                Text(input.label ?: input.id)
+                                Slider(
                                     value = value,
                                     onValueChange = { 
                                         value = it
                                         results[input.id] = it
                                     },
-                                    valueRange = ((input.min as? Number)?.toFloat() ?: 0f)..
-                                            ((input.max as? Number)?.toFloat() ?: 100f),
-                                    showLabel = true,
-                                    labelFormatter = { v ->
-                                        "${v.roundToInt()}${input.unit?.let { " $it" } ?: ""}"
-                                    },
+                                    valueRange = (input.min?.toFloat() ?: 0f)..(input.max?.toFloat() ?: 100f),
                                     modifier = Modifier.fillMaxWidth()
                                 )
+                                if (input.unit != null) {
+                                    Text(
+                                        "${value.roundToInt()} ${input.unit}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.align(Alignment.End)
+                                    )
+                                }
                             }
-                        }
-                        InputType.TEXT -> {
-                            var value by remember { 
-                                mutableStateOf((input.defaultValue as? String) ?: "")
-                            }
-                            OutlinedTextField(
-                                value = value,
-                                onValueChange = { 
-                                    value = it
-                                    results[input.id] = it
-                                },
-                                label = { Text(input.label) },
-                                placeholder = { Text(input.placeholder ?: "") },
-                                modifier = Modifier.fillMaxWidth()
-                            )
                         }
                         else -> {
-                            Text("Input type ${input.type} not implemented for composite")
+                            Text("${input.label}: Input type not supported in composite")
                         }
                     }
                 }
@@ -805,16 +934,11 @@ private fun CompositeQuickAddContent(
         confirmButton = {
             TextButton(
                 onClick = {
-                    // Validate required fields
-                    val allRequiredPresent = inputs
-                        .filter { it.required }
-                        .all { results.containsKey(it.id) }
-                    
-                    if (allRequiredPresent) {
+                    if (results.isNotEmpty()) {
                         onConfirm(results.toMap())
                     }
                 },
-                enabled = inputs.filter { it.required }.all { results.containsKey(it.id) }
+                enabled = results.isNotEmpty()
             ) {
                 Text("Add")
             }
@@ -825,4 +949,68 @@ private fun CompositeQuickAddContent(
             }
         }
     )
+}
+
+/**
+ * Helper function to format duration text with plugin template
+ */
+private fun formatDurationText(duration: Float, template: String, unit: String): String {
+    val hours = duration.toInt()
+    val minutes = ((duration - hours) * 60).toInt()
+    
+    return when {
+        // If template contains {hours} and {minutes}, use both
+        template.contains("{hours}") && template.contains("{minutes}") -> {
+            template
+                .replace("{hours}", hours.toString())
+                .replace("{minutes}", minutes.toString())
+        }
+        // If template contains only {duration}, format based on unit
+        template.contains("{duration}") -> {
+            val durationText = when (unit) {
+                "h" -> {
+                    if (minutes > 0) "${hours}h ${minutes}m" else "${hours}h"
+                }
+                "hours" -> {
+                    if (minutes > 0) "$hours hours $minutes minutes" else "$hours hours"
+                }
+                else -> {
+                    if (minutes > 0) "${hours}h ${minutes}m" else "${hours}h"
+                }
+            }
+            template.replace("{duration}", durationText)
+        }
+        // Fallback to simple format
+        else -> {
+            if (minutes > 0) "${hours}h ${minutes}m $template" else "${hours}h $template"
+        }
+    }
+}
+
+/**
+ * Helper function to format time display based on format preference
+ */
+private fun formatTimeDisplay(time: Float, format: String): String {
+    val hours = time.toInt() % 24
+    val minutes = ((time - time.toInt()) * 60).toInt()
+    
+    return when (format) {
+        "12h" -> {
+            val period = if (hours < 12) "AM" else "PM"
+            val displayHour = when (hours) {
+                0 -> 12
+                in 13..23 -> hours - 12
+                else -> hours
+            }
+            if (minutes > 0) {
+                "%d:%02d %s".format(displayHour, minutes, period)
+            } else {
+                "%d:00 %s".format(displayHour, period)
+            }
+        }
+        else -> {
+            // 24h format
+            "%02d:%02d".format(hours, minutes)
+        }
+    }
 }

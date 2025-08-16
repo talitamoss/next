@@ -140,14 +140,14 @@ class WorkPlugin : Plugin {
                 "overtime" to (duration > 8),  // Flag for overtime work
                 "productivity_score" to calculateProductivityScore(duration, startTime)
             ),
-            metadata = mapOf<String, String>(
-                "version" to metadata.version,
-                "inputType" to "manual",
-                "dayOfWeek" to dayOfWeek,
-                "formatted_start" to formatTime(startTime),
-                "formatted_end" to formatTime(endTime),
-                "formatted_duration" to formatDuration(duration)
-            )
+            metadata = mapOf(
+	    "startKey" to "bedtime",
+	    "endKey" to "waketime",
+	    "startLabel" to "Bedtime",
+	    "endLabel" to "Wake",
+	    "durationLabel" to "{duration} sleep",
+	    "timeFormat" to "12h"
+	    )
         )
     }
     
