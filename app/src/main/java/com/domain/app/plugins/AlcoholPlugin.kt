@@ -70,7 +70,7 @@ class AlcoholPlugin : Plugin {
     override fun supportsAutomaticCollection() = false
     
     override fun getQuickAddConfig() = QuickAddConfig(
-        id = "alcohol",
+        id = "value",  // Changed to "value" to match the standard key used by choice inputs
         title = "Log Alcohol",
         inputType = InputType.CHOICE,  // This should trigger tile/choice selection
         options = validTypes.map { type ->
@@ -100,7 +100,7 @@ class AlcoholPlugin : Plugin {
         }
         
         return DataPoint(
-            id = "alcohol_${System.currentTimeMillis()}",
+            id = "alcohol_${System.currentTimeMillis()}_${(0..9999).random()}",
             pluginId = id,
             timestamp = timestamp,
             type = "alcohol_intake",
@@ -110,7 +110,9 @@ class AlcoholPlugin : Plugin {
             metadata = mapOf(
                 "version" to metadata.version,
                 "inputType" to "manual"
-            )
+            ),
+            source = "manual",
+            version = 1
         )
     }
     

@@ -33,8 +33,8 @@ class ScreenTimePlugin : Plugin {
         category = PluginCategory.LIFESTYLE,
         tags = listOf("screen", "device", "digital", "wellness", "reflection"),
         dataPattern = DataPattern.COMPOSITE,  // Multiple values: device, hours, feeling
-        inputType = InputType.CHOICE,  // Start with device selection
-        supportsMultiStage = true,  // Multi-stage input
+        inputType = InputType.CHOICE,  // Primary type (composite handled by inputs field)
+        supportsMultiStage = false,  // All inputs on one page
         relatedPlugins = listOf("mood", "sleep", "focus"),
         exportFormat = ExportFormat.CSV,
         dataSensitivity = DataSensitivity.NORMAL,
@@ -82,14 +82,15 @@ class ScreenTimePlugin : Plugin {
     override fun getQuickAddConfig() = QuickAddConfig(
         id = "screen_time",
         title = "Log Screen Time",
-        inputType = InputType.CHOICE,
-        // Multi-stage configuration
-        stages = listOf(
-            // Stage 1: Device selection (tiles)
-            QuickAddStage(
+        inputType = InputType.CHOICE,  // Primary type (composite handled by inputs field)
+        // Multiple inputs on ONE page via inputs field
+        inputs = listOf(
+            // Input 1: Device selection (choice tiles)
+            QuickAddInput(
                 id = "device",
-                title = "Which device?",
-                inputType = InputType.CHOICE,
+                label = "Which device?",
+                type = InputType.CHOICE,  // Using 'type' field from QuickAddInput
+                required = true,
                 options = listOf(
                     QuickOption(
                         label = "Hand-held",
@@ -108,33 +109,33 @@ class ScreenTimePlugin : Plugin {
                     )
                 )
             ),
-            // Stage 2: Hours spent
-            QuickAddStage(
+            // Input 2: Hours spent (horizontal slider)
+            QuickAddInput(
                 id = "hours",
-                title = "How many hours?",
-                inputType = InputType.HORIZONTAL_SLIDER,
+                label = "How many hours?",
+                type = InputType.HORIZONTAL_SLIDER,
+                required = true,
                 min = 0.5f,
                 max = 12f,
-                step = 0.5f,
                 defaultValue = 2f,
-                unit = "hours",
-                showValue = true
+                unit = "hours"
+                // showValue controlled by QuickAddDialog implementation
             ),
-            // Stage 3: Feeling about the screen time
-            QuickAddStage(
+            // Input 3: Feeling about screen time (horizontal slider with emoji labels)
+            QuickAddInput(
                 id = "feeling",
-                title = "How do we feel about the screen time today?",
-                inputType = InputType.HORIZONTAL_SLIDER,
+                label = "How do we feel about the screen time today?",
+                type = InputType.HORIZONTAL_SLIDER,
+                required = false,  // Optional - defaults to neutral if not set
                 min = 0f,
                 max = 100f,
-                step = 1f,
                 defaultValue = 50f,
-                showValue = false,  // Hide the numeric value
-                leftLabel = "😔",   // Not great about it
-                rightLabel = "😊",  // Good about it
-                centerLabel = "😐"  // Neutral (optional)
+                topLabel = "😊",    // topLabel for positive (top of scale)
+                bottomLabel = "😔"  // bottomLabel for negative (bottom of scale)
+                // numeric value display controlled by dialog
             )
         ),
+        showValue = false,  // Hide numeric value on feeling slider
         primaryColor = "#6B46C1",    // Purple for digital wellness
         secondaryColor = "#9F7AEA"   // Lighter purple
     )
@@ -145,7 +146,7 @@ class ScreenTimePlugin : Plugin {
     }
     
     override suspend fun createManualEntry(data: Map<String, Any>): DataPoint? {
-        // Extract the multi-stage input data
+        // Extract the composite input data
         val device = data["device"] as? String ?: return null
         val hours = (data["hours"] as? Number)?.toFloat() ?: return null
         val feeling = (data["feeling"] as? Number)?.toFloat() ?: 50f  // Default to neutral
@@ -231,7 +232,7 @@ class ScreenTimePlugin : Plugin {
             "Hours" to (dataPoint.value["hours"]?.toString() ?: ""),
             "Feeling Score" to (dataPoint.value["feeling"]?.toString() ?: ""),
             "Feeling Category" to (dataPoint.value["feeling_category"]?.toString() ?: ""),
-            "Day of Week" to (dataPoint.metadata["dayOfWeek"]?.toString() ?: "")
+            "Day of Week" to (dataPoint.metadata?.get("dayOfWeek") ?: "")  // Fixed: safe null access
         )
     }
     
@@ -272,23 +273,3 @@ class ScreenTimePlugin : Plugin {
         val sessionCount: Int = 0
     )
 }
-
-/**
- * Extension for QuickAddStage to support feeling slider
- */
-data class QuickAddStage(
-    val id: String,
-    val title: String,
-    val inputType: InputType,
-    val options: List<QuickOption>? = null,
-    val min: Float? = null,
-    val max: Float? = null,
-    val step: Float? = null,
-    val defaultValue: Any? = null,
-    val unit: String? = null,
-    val showValue: Boolean = true,
-    val leftLabel: String? = null,    // For slider endpoints
-    val rightLabel: String? = null,   // For slider endpoints
-    val centerLabel: String? = null,  // Optional center label
-    val allowCustom: Boolean = false
-)
