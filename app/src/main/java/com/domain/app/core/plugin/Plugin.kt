@@ -168,7 +168,8 @@ data class QuickAddConfig(
     val primaryColor: String? = null,  // Primary color as hex string (e.g., "#6B46C1")
     val secondaryColor: String? = null, // Secondary color for gradients as hex string
     // NEW: For multiple inputs on one screen
-    val inputs: List<QuickAddInput>? = null
+    val inputs: List<QuickAddInput>? = null,
+    val metadata: Map<String, Any>? = null
 )
 
 /**

@@ -1,7 +1,7 @@
 package com.domain.app.ui.components.plugin.quickadd
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.clickable  // FIXED: Added missing import
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -259,8 +259,8 @@ private fun VerticalSliderQuickAddContent(
                     steps = if (config.step != null) {
                         ((range.endInclusive - range.start) / config.step.toFloat()).toInt() - 1
                     } else 0,
-                    showValue = config.showValue,
-                    formatValue = { v ->
+                    showLabel = config.showValue,  // FIX 1: Changed from showValue to showLabel
+                    labelFormatter = { v ->  // FIX 2: Changed from formatValue to labelFormatter
                         when {
                             config.topLabel != null && v >= range.endInclusive - 0.5f -> config.topLabel!!
                             config.bottomLabel != null && v <= range.start + 0.5f -> config.bottomLabel!!
@@ -699,6 +699,10 @@ private fun TimeRangeQuickAddContent(
                     Text("$endLabel: ${formatTimeDisplay(endTime, timeFormat)}")
                 }
                 
+                // FIX 3: Declare variables BEFORE RangeSlider
+                val minValue = (config.min as? Number)?.toFloat() ?: 0f
+                val maxValue = (config.max as? Number)?.toFloat() ?: 48f
+                
                 // RangeSlider for time selection
                 RangeSlider(
                     startValue = startTime,
@@ -707,9 +711,9 @@ private fun TimeRangeQuickAddContent(
                         startTime = start % 24
                         endTime = if (end > 24) end % 24 else end
                     },
-                    valueRange = (config.min as? Number)?.toFloat() ?: 0f..(config.max as? Number)?.toFloat() ?: 48f,
+                    valueRange = minValue..maxValue,  // Now using the pre-declared variables
                     steps = if (config.step != null && config.step.toFloat() > 0) {
-                        val range = ((config.max as? Number)?.toFloat() ?: 48f) - ((config.min as? Number)?.toFloat() ?: 0f)
+                        val range = maxValue - minValue
                         (range / config.step.toFloat()).toInt()
                     } else {
                         47  // Default to hourly steps
@@ -808,9 +812,9 @@ private fun MultiStageQuickAddContent(
         title = {
             Column {
                 Text(currentStage.title)
-                // Progress indicator
+                // FIX 4: LinearProgressIndicator needs lambda syntax
                 LinearProgressIndicator(
-                    progress = (currentStageIndex + 1f) / stages.size,
+                    progress = { (currentStageIndex + 1f) / stages.size },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 8.dp)

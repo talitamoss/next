@@ -78,7 +78,7 @@ class WorkPlugin : Plugin {
         title = "Log Work Session",
         inputType = InputType.TIME_RANGE,
         min = 0f,        // 0:00 (midnight)
-        max = 48f,       // 48 hours to handle crossing midnight
+        max = 24f,       // 24 hours to handle 
         step = 0.25f,    // 15-minute increments for more precise tracking
         defaultValue = mapOf(
             "start_time" to 9f,   // 9 AM default start
