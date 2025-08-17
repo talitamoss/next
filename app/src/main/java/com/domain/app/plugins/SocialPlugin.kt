@@ -7,6 +7,7 @@ import com.domain.app.core.plugin.security.*
 import com.domain.app.core.validation.ValidationResult
 import java.time.Instant
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 /**
  * Social interaction tracking plugin
@@ -27,7 +28,7 @@ class SocialPlugin : Plugin {
         category = PluginCategory.LIFESTYLE,
         tags = listOf("social", "interaction", "people", "energy", "battery"),
         dataPattern = DataPattern.COMPOSITE,
-        inputType = InputType.CAROUSEL,  // Primary input type for the UI
+        inputType = InputType.CAROUSEL,
         supportsMultiStage = false,
         relatedPlugins = listOf("mood", "movement", "location", "productivity"),
         exportFormat = ExportFormat.CSV,
@@ -103,9 +104,9 @@ class SocialPlugin : Plugin {
     override fun getQuickAddConfig() = QuickAddConfig(
         id = "social_entry",
         title = "Log Social Interaction",
-        inputType = InputType.CAROUSEL,  // Primary type, but composite handled by inputs field
-        primaryColor = "#7B68EE",  // Medium Purple
-        secondaryColor = "#E8E4FF",  // Light Lavender
+        inputType = InputType.CAROUSEL,
+        primaryColor = "#7B68EE",
+        secondaryColor = "#E8E4FF",
         inputs = listOf(
             // Group size carousel
             QuickAddInput(
@@ -194,14 +195,18 @@ class SocialPlugin : Plugin {
         socialData["setting_category"] = getSettingCategory(setting)
         
         return DataPoint(
+            id = UUID.randomUUID().toString(),
             pluginId = id,
             timestamp = timestamp,
-            data = socialData,
+            type = "social_interaction",
+            value = socialData,
             metadata = mapOf(
                 "data_version" to "1.0",
                 "entry_method" to "manual",
-                "has_notes" to (notes != null)
-            )
+                "has_notes" to (notes != null).toString()
+            ),
+            source = "manual",
+            version = 1
         )
     }
     
@@ -236,9 +241,9 @@ class SocialPlugin : Plugin {
         }
         
         return if (errors.isEmpty()) {
-            ValidationResult.Valid
+            ValidationResult.Success
         } else {
-            ValidationResult.Invalid(errors)
+            ValidationResult.Error(errors.joinToString("; "))
         }
     }
     
@@ -258,20 +263,20 @@ class SocialPlugin : Plugin {
     }
     
     override fun formatForExport(dataPoint: DataPoint): Map<String, String> {
-        val data = dataPoint.data
+        val data = dataPoint.value
         val formatter = DateTimeFormatter.ISO_INSTANT
         
         return mapOf(
             "timestamp" to formatter.format(dataPoint.timestamp),
-            "group_size" to (data["group_size"] as? String ?: ""),
-            "setting" to (data["setting"] as? String ?: ""),
-            "social_battery" to (data["social_battery"] as? Number)?.toString() ?: "0",
-            "battery_label" to (data["battery_label"] as? String ?: ""),
-            "is_group" to (data["is_group"] as? Boolean)?.toString() ?: "false",
-            "is_draining" to (data["is_draining"] as? Boolean)?.toString() ?: "false",
-            "is_energizing" to (data["is_energizing"] as? Boolean)?.toString() ?: "false",
-            "setting_category" to (data["setting_category"] as? String ?: ""),
-            "notes" to (data["notes"] as? String ?: "")
+            "group_size" to (data["group_size"]?.toString() ?: ""),
+            "setting" to (data["setting"]?.toString() ?: ""),
+            "social_battery" to (data["social_battery"]?.toString() ?: "0"),
+            "battery_label" to (data["battery_label"]?.toString() ?: ""),
+            "is_group" to (data["is_group"]?.toString() ?: "false"),
+            "is_draining" to (data["is_draining"]?.toString() ?: "false"),
+            "is_energizing" to (data["is_energizing"]?.toString() ?: "false"),
+            "setting_category" to (data["setting_category"]?.toString() ?: ""),
+            "notes" to (data["notes"]?.toString() ?: "")
         )
     }
     
