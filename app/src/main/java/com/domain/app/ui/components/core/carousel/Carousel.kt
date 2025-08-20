@@ -91,49 +91,34 @@ fun Carousel(
         }
     }
     
-    // Create draggable state for smooth scrolling
+    // Create draggable state for gesture handling
     val draggableState = rememberDraggableState { delta ->
         coroutineScope.launch {
-            scrollState.scrollBy(-delta) // Negative because we want natural scrolling
+            scrollState.scrollBy(-delta)
         }
     }
     
-    // Function to snap to nearest item with velocity consideration
+    // Function to snap to the nearest item
     fun snapToNearestItem(velocity: Float = 0f) {
         coroutineScope.launch {
-            val currentScroll = scrollState.value.toFloat()
-            
-            // Calculate momentum-based scrolling
-            // Higher velocity = more items to skip
-            val velocityFactor = velocity / 2000f // Adjust divisor to tune sensitivity
-            val momentumItems = when {
-                abs(velocityFactor) < 0.5f -> 0 // Too slow, just snap to nearest
-                abs(velocityFactor) < 1.5f -> sign(velocityFactor).toInt() * 1 // Skip 1
-                abs(velocityFactor) < 2.5f -> sign(velocityFactor).toInt() * 2 // Skip 2
-                else -> sign(velocityFactor).toInt() * 3 // Skip 3 max
+            val currentScroll = scrollState.value
+            val targetIndex = if (abs(velocity) > 500) {
+                // If high velocity, go to next/previous item based on direction
+                val currentIndex = (currentScroll / itemWidthPx).roundToInt()
+                (currentIndex - sign(velocity).toInt()).coerceIn(0, options.size - 1)
+            } else {
+                // Otherwise snap to nearest
+                (currentScroll / itemWidthPx).roundToInt().coerceIn(0, options.size - 1)
             }
-            
-            // Calculate target index
-            val currentIndex = (currentScroll / itemWidthPx).roundToInt()
-            val targetIndex = (currentIndex + momentumItems).coerceIn(0, options.size - 1)
-            
-            // Animate to target with dynamic duration based on distance
-            val distance = abs(targetIndex - currentIndex)
-            val animationDuration = (200 + (distance * 100)).coerceAtMost(600) // 200-600ms
             
             val targetScroll = (targetIndex * itemWidthPx).toInt()
-            scrollState.animateScrollTo(
-                targetScroll,
-                animationSpec = tween(animationDuration)
-            )
+            scrollState.animateScrollTo(targetScroll)
             
-            // Update selection if needed
-            if (options.getOrNull(targetIndex) != selectedOption) {
-                if (hapticFeedback) {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                }
-                options.getOrNull(targetIndex)?.let { onOptionSelected(it) }
+            // Select the item we snapped to
+            if (hapticFeedback) {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
             }
+            options.getOrNull(targetIndex)?.let { onOptionSelected(it) }
         }
     }
     
@@ -302,7 +287,7 @@ private fun CarouselItem(
 data class CarouselOption(
     val label: String,
     val value: Any,
-    val icon: String? = null
+    val icon: String? = null  // Made optional with default null
 )
 
 /**
@@ -337,5 +322,17 @@ object CarouselDefaults {
     fun movementColors(): CarouselColors = colors(
         selectedTextColor = Color(0xFF9C27B0), // Purple for movement
         selectionIndicatorColor = Color(0xFF9C27B0).copy(alpha = 0.12f)
+    )
+    
+    @Composable
+    fun energyColors(): CarouselColors = colors(
+        selectedTextColor = Color(0xFFFF6B35), // Orange for energy
+        selectionIndicatorColor = Color(0xFFFF6B35).copy(alpha = 0.12f)
+    )
+    
+    @Composable
+    fun moodColors(): CarouselColors = colors(
+        selectedTextColor = Color(0xFF4CAF50), // Green for mood
+        selectionIndicatorColor = Color(0xFF4CAF50).copy(alpha = 0.12f)
     )
 }
