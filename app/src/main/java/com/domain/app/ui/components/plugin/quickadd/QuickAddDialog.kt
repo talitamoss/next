@@ -882,9 +882,6 @@ private fun MultiStageQuickAddContent(
  * Composite quick add for multiple inputs on one screen
  */
 
-// In app/src/main/java/com/domain/app/ui/components/plugin/quickadd/QuickAddDialog.kt
-// Replace the CompositeQuickAddContent function's HORIZONTAL_SLIDER case:
-
 @Composable
 private fun CompositeQuickAddContent(
     plugin: Plugin,
@@ -983,6 +980,49 @@ private fun CompositeQuickAddContent(
                                         } ?: "100"}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+			  InputType.CAROUSEL -> {
+                            var selectedOption by remember { 
+                                mutableStateOf(
+                                    input.options?.find { it.value == input.defaultValue }
+                                        ?: input.options?.firstOrNull()
+                                )
+                            }
+                            results[input.id] = selectedOption?.value ?: ""
+                            
+                            Column {
+                                Text(
+                                    text = input.label,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                input.options?.let { options ->
+                                    Carousel(
+                                        options = options.map { option ->
+                                            CarouselOption(
+                                                label = option.label,
+                                                icon = option.icon,
+                                                value = option.value
+                                            )
+                                        },
+                                        selectedOption = selectedOption?.let { selected ->
+                                            CarouselOption(
+                                                label = selected.label,
+                                                icon = selected.icon,
+                                                value = selected.value
+                                            )
+                                        },
+                                        onOptionSelected = { carouselOption ->
+                                            selectedOption = options.find { it.value == carouselOption.value }
+                                            results[input.id] = carouselOption.value
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        height = 80.dp  // Standard height for composite carousel
                                     )
                                 }
                             }
