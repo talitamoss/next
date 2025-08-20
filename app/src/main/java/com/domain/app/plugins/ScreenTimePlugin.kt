@@ -121,18 +121,20 @@ class ScreenTimePlugin : Plugin {
                 unit = "hours"
                 // showValue controlled by QuickAddDialog implementation
             ),
-            // Input 3: Feeling about screen time (horizontal slider with emoji labels)
+            // Input 3: Feeling about screen time (horizontal slider with custom labels)
             QuickAddInput(
                 id = "feeling",
                 label = "How do we feel about the screen time today?",
                 type = InputType.HORIZONTAL_SLIDER,
                 required = false,  // Optional - defaults to neutral if not set
                 min = 0f,
-                max = 100f,
-                defaultValue = 50f,
-                topLabel = "😊",    // topLabel for positive (top of scale)
-                bottomLabel = "😔"  // bottomLabel for negative (bottom of scale)
-                // numeric value display controlled by dialog
+                max = 10f,  // 0-10 scale for easier understanding
+                defaultValue = 5f,  // Middle of scale
+                unit = "",  // No unit for feeling scale
+                // Using bottomLabel for left side (low values) and topLabel for right side (high values)
+                // This makes semantic sense: bottom = low, top = high
+                bottomLabel = "nah",    // Left side of horizontal slider (low values)
+                topLabel = "yeah"       // Right side of horizontal slider (high values)
             )
         ),
         showValue = false,  // Hide numeric value on feeling slider
@@ -149,7 +151,7 @@ class ScreenTimePlugin : Plugin {
         // Extract the composite input data
         val device = data["device"] as? String ?: return null
         val hours = (data["hours"] as? Number)?.toFloat() ?: return null
-        val feeling = (data["feeling"] as? Number)?.toFloat() ?: 50f  // Default to neutral
+        val feeling = (data["feeling"] as? Number)?.toFloat() ?: 5f  // Default to neutral (5/10)
         
         // Validate the entry
         val validationResult = validateDataPoint(data)
@@ -157,12 +159,12 @@ class ScreenTimePlugin : Plugin {
             return null
         }
         
-        // Create feeling description for better data interpretation
+        // Create feeling description for better data interpretation (0-10 scale)
         val feelingDescription = when {
-            feeling < 20 -> "very_negative"
-            feeling < 40 -> "negative"
-            feeling < 60 -> "neutral"
-            feeling < 80 -> "positive"
+            feeling < 2 -> "very_negative"
+            feeling < 4 -> "negative"
+            feeling < 6 -> "neutral"
+            feeling < 8 -> "positive"
             else -> "very_positive"
         }
         
@@ -196,8 +198,8 @@ class ScreenTimePlugin : Plugin {
                 ValidationResult.Error("Invalid device type")
             hours == null -> ValidationResult.Error("Hours is required")
             hours < 0 || hours > 24 -> ValidationResult.Error("Hours must be between 0 and 24")
-            feeling != null && (feeling < 0 || feeling > 100) -> 
-                ValidationResult.Error("Feeling must be between 0 and 100")
+            feeling != null && (feeling < 0 || feeling > 10) -> 
+                ValidationResult.Error("Feeling must be between 0 and 10")
             else -> ValidationResult.Success
         }
     }
@@ -268,7 +270,7 @@ class ScreenTimePlugin : Plugin {
     
     data class ScreenTimeStats(
         val totalHours: Double = 0.0,
-        val averageFeeling: Float = 50f,
+        val averageFeeling: Float = 5f,  // Default to middle of 0-10 scale
         val deviceBreakdown: Map<Any?, Double> = emptyMap(),
         val sessionCount: Int = 0
     )

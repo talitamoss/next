@@ -12,6 +12,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.unit.sp
 import com.domain.app.core.plugin.InputType
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.QuickAddConfig
@@ -879,6 +881,10 @@ private fun MultiStageQuickAddContent(
 /**
  * Composite quick add for multiple inputs on one screen
  */
+
+// In app/src/main/java/com/domain/app/ui/components/plugin/quickadd/QuickAddDialog.kt
+// Replace the CompositeQuickAddContent function's HORIZONTAL_SLIDER case:
+
 @Composable
 private fun CompositeQuickAddContent(
     plugin: Plugin,
@@ -909,7 +915,26 @@ private fun CompositeQuickAddContent(
                             results[input.id] = value
                             
                             Column {
-                                Text(input.label ?: input.id)
+                                // Label for the slider
+                                Text(
+                                    text = input.label,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                // Show value for hours slider, hide for feeling slider
+                                if (input.id == "hours") {
+                                    Text(
+                                        text = "${String.format("%.1f", value)} ${input.unit ?: ""}",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
+                                
+                                // The slider itself
                                 Slider(
                                     value = value,
                                     onValueChange = { 
@@ -917,19 +942,139 @@ private fun CompositeQuickAddContent(
                                         results[input.id] = it
                                     },
                                     valueRange = (input.min?.toFloat() ?: 0f)..(input.max?.toFloat() ?: 100f),
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = MaterialTheme.colorScheme.primary,
+                                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                                        inactiveTrackColor = MaterialTheme.colorScheme.primaryContainer
+                                    )
                                 )
-                                if (input.unit != null) {
+                                
+                                // Labels for horizontal sliders
+                                // For horizontal sliders: bottomLabel = left, topLabel = right
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    // Left label (low values)
                                     Text(
-                                        "${value.roundToInt()} ${input.unit}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        modifier = Modifier.align(Alignment.End)
+                                        text = input.bottomLabel ?: "${input.min?.toFloat()?.let { 
+                                            if (it == it.toInt().toFloat()) it.toInt().toString() 
+                                            else String.format("%.1f", it)
+                                        } ?: "0"}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    
+                                    // Optional center value display (only if no custom labels)
+                                    if (input.bottomLabel == null && input.topLabel == null) {
+                                        Text(
+                                            text = "${value.roundToInt()}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                    
+                                    // Right label (high values)
+                                    Text(
+                                        text = input.topLabel ?: "${input.max?.toFloat()?.let { 
+                                            if (it == it.toInt().toFloat()) it.toInt().toString() 
+                                            else String.format("%.1f", it)
+                                        } ?: "100"}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
                         }
+                        
+                        InputType.CHOICE -> {
+                            var selectedOption by remember { 
+                                mutableStateOf(
+                                    input.options?.find { it.value == input.defaultValue }
+                                        ?: input.options?.firstOrNull()
+                                )
+                            }
+                            results[input.id] = selectedOption?.value ?: ""
+                            
+                            Column {
+                                Text(
+                                    text = input.label,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                // Choice tiles in a row
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    input.options?.forEach { option ->
+                                        Card(
+                                            onClick = { 
+                                                selectedOption = option
+                                                results[input.id] = option.value
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = if (selectedOption == option) {
+                                                    MaterialTheme.colorScheme.primaryContainer
+                                                } else {
+                                                    MaterialTheme.colorScheme.surface
+                                                }
+                                            ),
+                                            border = if (selectedOption == option) {
+                                                BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                                            } else {
+                                                BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                                            }
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(12.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally
+                                            ) {
+                                                option.icon?.let {
+                                                    Text(
+                                                        text = it,
+                                                        fontSize = 24.sp
+                                                    )
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                }
+                                                Text(
+                                                    text = option.label,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    textAlign = TextAlign.Center
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        InputType.TEXT -> {
+                            var textValue by remember { 
+                                mutableStateOf(input.defaultValue?.toString() ?: "")
+                            }
+                            results[input.id] = textValue
+                            
+                            OutlinedTextField(
+                                value = textValue,
+                                onValueChange = { 
+                                    textValue = it
+                                    results[input.id] = it
+                                },
+                                label = { Text(input.label) },
+                                placeholder = { Text(input.placeholder ?: "") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        
                         else -> {
-                            Text("${input.label}: Input type not supported in composite")
+                            // Fallback for unsupported types
+                            Text("Input type ${input.type} not supported in composite mode")
                         }
                     }
                 }
@@ -938,11 +1083,16 @@ private fun CompositeQuickAddContent(
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (results.isNotEmpty()) {
+                    // Ensure all required fields are filled
+                    val missingRequired = inputs.filter { it.required }
+                        .any { input -> !results.containsKey(input.id) }
+                    
+                    if (!missingRequired) {
                         onConfirm(results.toMap())
                     }
                 },
-                enabled = results.isNotEmpty()
+                enabled = inputs.filter { it.required }
+                    .all { input -> results.containsKey(input.id) }
             ) {
                 Text("Add")
             }
