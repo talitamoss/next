@@ -99,6 +99,9 @@ object AppIcons {
         val weight = Icons.Filled.MonitorWeight
         val note = Icons.Filled.Note
         val habit = Icons.Filled.CheckCircle
+        val alcohol = Icons.Filled.LocalBar
+        val screenTime = Icons.Filled.PhoneAndroid
+        val social = Icons.Filled.People
     }
     
     // Security Icons
@@ -166,7 +169,7 @@ object AppIcons {
         val notifications = Icons.Filled.Notifications
         val notificationActive = Icons.Filled.NotificationsActive
         val notificationOff = Icons.Filled.NotificationsOff
-        val email = Icons.Filled.Email  // FIX: Was incomplete "Icons.Filled."
+        val email = Icons.Filled.Email
         val message = Icons.Filled.Message
         val chat = Icons.Filled.Chat
         val send = Icons.Filled.Send
@@ -215,7 +218,7 @@ object AppIcons {
     
     // UI Control Icons
     object Control {
-        val expand = Icons.Filled.ExpandMore  // FIX: Was incomplete "Icons.Filled.ExpandMo"
+        val expand = Icons.Filled.ExpandMore
         val collapse = Icons.Filled.ExpandLess
         val chevronRight = Icons.Filled.ChevronRight
         val chevronLeft = Icons.Filled.ChevronLeft
