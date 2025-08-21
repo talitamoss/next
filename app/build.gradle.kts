@@ -40,6 +40,9 @@ android {
     buildFeatures {
         compose = true
     }
+    lint {
+	disable += "SuspiciousModifierThen"
+    }
 }
 
 dependencies {

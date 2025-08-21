@@ -1,6 +1,7 @@
 // app/src/main/java/com/domain/app/ui/components/core/carousel/Carousel.kt
 package com.domain.app.ui.components.core.carousel
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -35,9 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.ln
 import kotlin.math.roundToInt
 import kotlin.math.sign
-import kotlin.math.min
 
 /**
  * A horizontal carousel selector component for choosing from a list of options.
@@ -51,7 +52,7 @@ import kotlin.math.min
  * @param itemWidth Width of each item
  * @param colors Color configuration for the carousel
  * @param hapticFeedback Whether to provide haptic feedback on selection
- * @param velocityThreshold Base velocity threshold for skipping one item (default: 500f)
+ * @param velocityThreshold Base velocity threshold for sensitivity (default: 1000f)
  * @param maxItemsToSkip Maximum number of items that can be skipped in one swipe (default: 5)
  * @param minVelocity Minimum velocity required to trigger any movement (default: 50f)
  */
@@ -65,7 +66,7 @@ fun Carousel(
     itemWidth: Dp = 120.dp,
     colors: CarouselColors = CarouselDefaults.colors(),
     hapticFeedback: Boolean = true,
-    velocityThreshold: Float = 500f,  // NEW: Base velocity for one item
+    velocityThreshold: Float = 1000f,  // NEW: Base velocity for sensitivity
     maxItemsToSkip: Int = 5,          // NEW: Maximum items to skip in one swipe
     minVelocity: Float = 50f          // NEW: Minimum velocity to trigger movement
 ) {
@@ -110,50 +111,54 @@ fun Carousel(
     fun snapToNearestItem(velocity: Float = 0f) {
         coroutineScope.launch {
             val currentScroll = scrollState.value
-            val currentIndex = (currentScroll / itemWidthPx).roundToInt()
             
-            val targetIndex = when {
-                // If velocity is below minimum threshold, just snap to nearest
-                abs(velocity) < minVelocity -> {
-                    currentIndex.coerceIn(0, options.size - 1)
+            // Calculate target based on velocity and current position
+            val targetIndex = if (abs(velocity) < minVelocity) {
+                // Low velocity: snap to nearest item
+                (currentScroll / itemWidthPx).roundToInt()
+            } else {
+                // Use velocity to determine how far to scroll
+                // This creates a smooth, proportional response to swipe speed
+                val currentExactPosition = currentScroll / itemWidthPx
+                
+                // Calculate distance based on velocity (smooth curve, not steps)
+                // The faster the swipe, the more items we skip
+                val velocityFactor = (abs(velocity) / velocityThreshold).coerceIn(0.1f, maxItemsToSkip.toFloat())
+                
+                // Apply a smoothing function (logarithmic feels more natural than linear)
+                val smoothedFactor = if (velocityFactor > 1f) {
+                    1f + kotlin.math.ln(velocityFactor)
+                } else {
+                    velocityFactor
                 }
-                // Calculate items to skip based on velocity
-                else -> {
-                    // Calculate how many items to skip based on velocity
-                    // Each multiple of velocityThreshold adds one item to skip
-                    val velocityMultiplier = abs(velocity) / velocityThreshold
-                    val itemsToSkip = min(
-                        velocityMultiplier.toInt() + 1,  // +1 because we always move at least 1 item
-                        maxItemsToSkip
-                    ).coerceAtLeast(1)
-                    
-                    // Calculate target index based on swipe direction
-                    val direction = -sign(velocity).toInt()  // Negative velocity = forward swipe
-                    val proposedIndex = currentIndex + (direction * itemsToSkip)
-                    
-                    // Constrain to valid range
-                    proposedIndex.coerceIn(0, options.size - 1)
-                }
-            }
+                
+                // Calculate the target position
+                val direction = -sign(velocity) // Negative velocity = forward swipe
+                val targetPosition = currentExactPosition + (direction * smoothedFactor)
+                
+                // Round to nearest item and constrain to bounds
+                targetPosition.roundToInt()
+            }.coerceIn(0, options.size - 1)
             
             // Calculate target scroll position
             val targetScroll = (targetIndex * itemWidthPx).toInt()
             
-            // Determine animation spec based on distance
-            val distance = abs(targetIndex - currentIndex)
-            val animationSpec = when (distance) {
-                0, 1 -> spring<Float>(stiffness = Spring.StiffnessMedium)
-                2, 3 -> spring<Float>(stiffness = Spring.StiffnessLow) 
-                else -> spring<Float>(stiffness = Spring.StiffnessVeryLow)
-            }
+            // Use a single smooth animation spec
+            // Duration adjusts based on distance for consistent feel
+            val distance = abs(targetScroll - currentScroll)
+            val baseDuration = 300 // milliseconds
+            val duration = (baseDuration + (distance / itemWidthPx * 50)).toInt().coerceIn(300, 600)
+            
+            val animationSpec = tween<Float>(
+                durationMillis = duration,
+                easing = FastOutSlowInEasing
+            )
             
             // Animate to target position
             scrollState.animateScrollTo(targetScroll, animationSpec)
             
-            // Provide haptic feedback based on distance traveled
-            if (hapticFeedback && distance > 0) {
-                // Could potentially use different haptic patterns for different distances
-                // For now, using the same haptic feedback
+            // Provide haptic feedback
+            if (hapticFeedback && targetIndex != (currentScroll / itemWidthPx).roundToInt()) {
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
             }
             

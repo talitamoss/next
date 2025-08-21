@@ -23,6 +23,7 @@ import com.domain.app.ui.components.core.carousel.CarouselOption
 import com.domain.app.ui.components.core.sliders.RangeSlider
 import com.domain.app.ui.components.core.sliders.RangeSliderDefaults
 import com.domain.app.ui.components.core.sliders.VerticalSlider
+import com.domain.app.ui.components.core.button.SingleTapButton
 import kotlin.math.roundToInt
 
 /**
@@ -110,6 +111,14 @@ fun QuickAddDialog(
                             onConfirm = onConfirm
                         )
                     }
+		    InputType.BUTTON -> {
+		        ButtonQuickAddContent(
+		            plugin = plugin,
+		            config = config,
+		            onDismiss = onDismiss,
+		            onConfirm = onConfirm
+		        )
+		    }
                     InputType.TEXT -> {
                         TextQuickAddContent(
                             plugin = plugin,
@@ -564,7 +573,60 @@ private fun BooleanQuickAddContent(
         }
     )
 }
-
+/**
+ * Button quick add for simple affirmative actions
+ */
+@Composable
+private fun ButtonQuickAddContent(
+    plugin: Plugin,
+    config: QuickAddConfig,
+    onDismiss: () -> Unit,
+    onConfirm: (Map<String, Any>) -> Unit
+) {
+    var buttonPressed by remember { mutableStateOf(false) }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(config.title)
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Just the button, no icon needed
+                SingleTapButton(
+                    text = config.buttonText ?: "Record",
+                    alreadyDone = buttonPressed,
+                    primaryColor = config.primaryColor?.let { 
+                        Color(android.graphics.Color.parseColor(it)) 
+                    } ?: MaterialTheme.colorScheme.primary,
+                    onClick = {
+                        if (!buttonPressed) {
+                            buttonPressed = true
+                            onConfirm(mapOf(config.id to true))
+                            onDismiss()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                )
+            }
+        },
+        confirmButton = {
+            // Empty - button handles its own action
+        },
+        dismissButton = {
+            if (!buttonPressed) {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+            }
+        }
+    )
+}
 /**
  * Time range quick add using RangeSlider
  * FULLY FLEXIBLE VERSION - All configuration comes from the plugin
