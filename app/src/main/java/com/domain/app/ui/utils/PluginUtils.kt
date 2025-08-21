@@ -1,3 +1,4 @@
+// app/src/main/java/com/domain/app/ui/utils/PluginUtils.kt
 package com.domain.app.ui.utils
 
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -25,14 +26,63 @@ fun getPluginIconById(pluginId: String): ImageVector {
         "mood" -> AppIcons.Plugin.mood
         "sleep" -> AppIcons.Plugin.sleep
         "movement" -> AppIcons.Plugin.exercise
-	"work" -> AppIcons.Plugin.productivity
-	"caffeine" -> AppIcons.Plugin.energy
+        "work" -> AppIcons.Plugin.productivity
+        "caffeine" -> AppIcons.Plugin.energy
+        "alcohol" -> AppIcons.Plugin.alcohol
+        "screen_time" -> AppIcons.Plugin.screenTime
+        "social" -> AppIcons.Plugin.social  // ADDED: Social plugin icon mapping
         "counter" -> AppIcons.Plugin.counter
         "location" -> AppIcons.Plugin.location
         "health" -> AppIcons.Plugin.health
         "productivity" -> AppIcons.Plugin.productivity
         "food" -> AppIcons.Plugin.food
         else -> AppIcons.Plugin.custom
+    }
+}
+
+/**
+ * Get color for plugin based on its ID or category
+ */
+fun getPluginColor(plugin: Plugin): String {
+    return when (plugin.id) {
+        "water" -> "#2196F3"      // Blue
+        "mood" -> "#9C27B0"       // Purple
+        "sleep" -> "#3F51B5"      // Indigo
+        "movement" -> "#4CAF50"   // Green
+        "work" -> "#FF9800"       // Orange
+        "caffeine" -> "#795548"   // Brown
+        "alcohol" -> "#F44336"    // Red
+        "screen_time" -> "#00BCD4" // Cyan
+        "social" -> "#7B68EE"     // Medium Purple - ADDED
+        "counter" -> "#607D8B"    // Blue Grey
+        "location" -> "#009688"   // Teal
+        "health" -> "#E91E63"     // Pink
+        "productivity" -> "#FF9800" // Orange
+        "food" -> "#8BC34A"       // Light Green
+        else -> "#9E9E9E"         // Grey
+    }
+}
+
+/**
+ * Get plugin display priority (for dashboard ordering)
+ */
+fun getPluginPriority(plugin: Plugin): Int {
+    return when (plugin.id) {
+        "mood" -> 1
+        "water" -> 2
+        "sleep" -> 3
+        "movement" -> 4
+        "social" -> 5        // ADDED: High priority for social plugin
+        "work" -> 6
+        "caffeine" -> 7
+        "alcohol" -> 8
+        "screen_time" -> 9
+        "food" -> 10
+        "health" -> 11
+        "productivity" -> 12
+        "location" -> 13
+        "counter" -> 14
+        else -> 99
     }
 }
 

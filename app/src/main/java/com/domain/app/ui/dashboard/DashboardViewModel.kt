@@ -1,8 +1,10 @@
+// app/src/main/java/com/domain/app/ui/dashboard/DashboardViewModel.kt
 package com.domain.app.ui.dashboard
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.domain.app.core.data.DataPoint
 import com.domain.app.core.data.DataRepository
 import com.domain.app.core.event.Event
 import com.domain.app.core.event.EventBus
@@ -19,6 +21,19 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
+/**
+ * UI state for the dashboard screen
+ */
+data class DashboardUiState(
+    val allPlugins: List<Plugin> = emptyList(),
+    val dashboardPlugins: List<Plugin> = emptyList(),
+    val pluginDataCounts: Map<String, Int> = emptyMap(),
+    val isProcessing: Boolean = false,
+    val error: String? = null,
+    val showSuccessFeedback: Boolean = false,
+    val lastDataPoint: DataPoint? = null
+)
+
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val pluginManager: PluginManager,
@@ -30,7 +45,17 @@ class DashboardViewModel @Inject constructor(
     companion object {
         private const val TAG = "DashboardViewModel"
         // For MVP, we'll show these plugins by default
-        private val MVP_PLUGIN_IDS = listOf("water", "sleep", "movement", "work", "caffeine", "alcohol", "screen_time", "social_time")
+        // FIXED: Changed "social_time" to "social" to match plugin ID
+        private val MVP_PLUGIN_IDS = listOf(
+            "water", 
+            "sleep", 
+            "movement", 
+            "work", 
+            "caffeine", 
+            "alcohol", 
+            "screen_time", 
+            "social"  // FIXED: Was "social_time", now matches SocialPlugin id
+        )
     }
     
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -170,9 +195,17 @@ class DashboardViewModel @Inject constructor(
                 
                 // Create the data point
                 val dataPoint = pluginManager.createManualEntry(plugin.id, data)
+                
                 if (dataPoint != null) {
-                    Log.d(TAG, "Created data point for plugin: ${plugin.id}")
-                    _uiState.update { 
+                    // Save to repository
+                    dataRepository.insertDataPoint(dataPoint)
+                    
+                    Log.d(TAG, "Data point created and saved: ${dataPoint.id}")
+                    
+                    // Emit event for other parts of the app
+                    EventBus.emit(Event.DataCollected(dataPoint))
+                    
+                    _uiState.update {
                         it.copy(
                             isProcessing = false,
                             showSuccessFeedback = true,
@@ -183,21 +216,53 @@ class DashboardViewModel @Inject constructor(
                     Log.e(TAG, "Failed to create data point for plugin: ${plugin.id}")
                     _uiState.update {
                         it.copy(
-                            error = "Failed to create entry",
-                            isProcessing = false
+                            isProcessing = false,
+                            error = "Failed to create data entry"
                         )
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error creating manual entry", e)
+                Log.e(TAG, "Error during quick add", e)
                 _uiState.update {
                     it.copy(
-                        error = e.message,
-                        isProcessing = false
+                        isProcessing = false,
+                        error = "Error: ${e.message}"
                     )
                 }
             }
         }
+    }
+    
+    /**
+     * Handle plugin tile click
+     */
+    fun onPluginTileClick(plugin: Plugin) {
+        Log.d(TAG, "Plugin tile clicked: ${plugin.id}")
+        // This is handled by the UI to show the quick add dialog
+        // In the future, this could navigate to plugin details
+    }
+    
+    /**
+     * Refresh dashboard data
+     */
+    fun refresh() {
+        Log.d(TAG, "Refreshing dashboard")
+        loadPluginDataCounts()
+        initializeMVPDashboard()
+    }
+    
+    /**
+     * Clear error state
+     */
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
+    }
+    
+    /**
+     * Clear success feedback
+     */
+    fun clearSuccessFeedback() {
+        _uiState.update { it.copy(showSuccessFeedback = false) }
     }
     
     /**
@@ -235,7 +300,7 @@ class DashboardViewModel @Inject constructor(
     }
     
     /**
-     * Remove a plugin from the dashboard (for future use)
+     * Remove a plugin from the dashboard
      */
     fun removePluginFromDashboard(pluginId: String) {
         Log.d(TAG, "Removing plugin $pluginId from dashboard")
@@ -259,31 +324,4 @@ class DashboardViewModel @Inject constructor(
             }
         }
     }
-    
-    /**
-     * Clear error message
-     */
-    fun clearError() {
-        _uiState.update { it.copy(error = null) }
-    }
-    
-    /**
-     * Clear success feedback
-     */
-    fun clearSuccessFeedback() {
-        _uiState.update { it.copy(showSuccessFeedback = false) }
-    }
 }
-
-/**
- * UI state for the dashboard
- */
-data class DashboardUiState(
-    val allPlugins: List<Plugin> = emptyList(),
-    val dashboardPlugins: List<Plugin> = emptyList(),
-    val pluginDataCounts: Map<String, Int> = emptyMap(),
-    val isProcessing: Boolean = false,
-    val error: String? = null,
-    val lastDataPoint: com.domain.app.core.data.DataPoint? = null,
-    val showSuccessFeedback: Boolean = false
-)
