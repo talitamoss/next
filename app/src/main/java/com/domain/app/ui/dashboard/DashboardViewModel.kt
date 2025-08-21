@@ -54,7 +54,8 @@ class DashboardViewModel @Inject constructor(
             "caffeine", 
             "alcohol", 
             "screen_time", 
-            "social"  // FIXED: Was "social_time", now matches SocialPlugin id
+            "social",
+	    "meditation"
         )
     }
     

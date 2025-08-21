@@ -1,6 +1,7 @@
 // app/src/main/java/com/domain/app/ui/components/core/carousel/Carousel.kt
 package com.domain.app.ui.components.core.carousel
 
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -36,6 +37,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sign
+import kotlin.math.min
 
 /**
  * A horizontal carousel selector component for choosing from a list of options.
@@ -49,6 +51,9 @@ import kotlin.math.sign
  * @param itemWidth Width of each item
  * @param colors Color configuration for the carousel
  * @param hapticFeedback Whether to provide haptic feedback on selection
+ * @param velocityThreshold Base velocity threshold for skipping one item (default: 500f)
+ * @param maxItemsToSkip Maximum number of items that can be skipped in one swipe (default: 5)
+ * @param minVelocity Minimum velocity required to trigger any movement (default: 50f)
  */
 @Composable
 fun Carousel(
@@ -59,7 +64,10 @@ fun Carousel(
     height: Dp = 80.dp,
     itemWidth: Dp = 120.dp,
     colors: CarouselColors = CarouselDefaults.colors(),
-    hapticFeedback: Boolean = true
+    hapticFeedback: Boolean = true,
+    velocityThreshold: Float = 500f,  // NEW: Base velocity for one item
+    maxItemsToSkip: Int = 5,          // NEW: Maximum items to skip in one swipe
+    minVelocity: Float = 50f          // NEW: Minimum velocity to trigger movement
 ) {
     val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
@@ -98,26 +106,58 @@ fun Carousel(
         }
     }
     
-    // Function to snap to the nearest item
+    // Function to snap to the nearest item with velocity-based scrolling
     fun snapToNearestItem(velocity: Float = 0f) {
         coroutineScope.launch {
             val currentScroll = scrollState.value
-            val targetIndex = if (abs(velocity) > 500) {
-                // If high velocity, go to next/previous item based on direction
-                val currentIndex = (currentScroll / itemWidthPx).roundToInt()
-                (currentIndex - sign(velocity).toInt()).coerceIn(0, options.size - 1)
-            } else {
-                // Otherwise snap to nearest
-                (currentScroll / itemWidthPx).roundToInt().coerceIn(0, options.size - 1)
+            val currentIndex = (currentScroll / itemWidthPx).roundToInt()
+            
+            val targetIndex = when {
+                // If velocity is below minimum threshold, just snap to nearest
+                abs(velocity) < minVelocity -> {
+                    currentIndex.coerceIn(0, options.size - 1)
+                }
+                // Calculate items to skip based on velocity
+                else -> {
+                    // Calculate how many items to skip based on velocity
+                    // Each multiple of velocityThreshold adds one item to skip
+                    val velocityMultiplier = abs(velocity) / velocityThreshold
+                    val itemsToSkip = min(
+                        velocityMultiplier.toInt() + 1,  // +1 because we always move at least 1 item
+                        maxItemsToSkip
+                    ).coerceAtLeast(1)
+                    
+                    // Calculate target index based on swipe direction
+                    val direction = -sign(velocity).toInt()  // Negative velocity = forward swipe
+                    val proposedIndex = currentIndex + (direction * itemsToSkip)
+                    
+                    // Constrain to valid range
+                    proposedIndex.coerceIn(0, options.size - 1)
+                }
             }
             
+            // Calculate target scroll position
             val targetScroll = (targetIndex * itemWidthPx).toInt()
-            scrollState.animateScrollTo(targetScroll)
             
-            // Select the item we snapped to
-            if (hapticFeedback) {
+            // Determine animation spec based on distance
+            val distance = abs(targetIndex - currentIndex)
+            val animationSpec = when (distance) {
+                0, 1 -> spring<Float>(stiffness = Spring.StiffnessMedium)
+                2, 3 -> spring<Float>(stiffness = Spring.StiffnessLow) 
+                else -> spring<Float>(stiffness = Spring.StiffnessVeryLow)
+            }
+            
+            // Animate to target position
+            scrollState.animateScrollTo(targetScroll, animationSpec)
+            
+            // Provide haptic feedback based on distance traveled
+            if (hapticFeedback && distance > 0) {
+                // Could potentially use different haptic patterns for different distances
+                // For now, using the same haptic feedback
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
             }
+            
+            // Select the item we snapped to
             options.getOrNull(targetIndex)?.let { onOptionSelected(it) }
         }
     }
