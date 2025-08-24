@@ -71,8 +71,8 @@ class SleepPlugin : Plugin {
         id = "sleep",
         title = "Log Sleep",
         inputType = InputType.TIME_RANGE,
-        min = 0f,        // 0:00 (midnight)
-        max = 24f,       // 48 hours to handle crossing midnight
+        min = 12f,        // 0:00 (midnight)
+        max = 36f,       // 48 hours to handle crossing midnight
         step = 1f,       // 1-hour increments for simplicity
         defaultValue = mapOf(
             "bedtime" to 23f,   // 11 PM default
