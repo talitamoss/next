@@ -36,6 +36,7 @@ fun getPluginIconById(pluginId: String): ImageVector {
         "health" -> AppIcons.Plugin.health
         "productivity" -> AppIcons.Plugin.productivity
         "food" -> AppIcons.Plugin.food
+	"meditation" -> AppIcons.Plugin.meditation
         else -> AppIcons.Plugin.custom
     }
 }

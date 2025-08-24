@@ -102,6 +102,7 @@ object AppIcons {
         val alcohol = Icons.Filled.LocalBar
         val screenTime = Icons.Filled.PhoneAndroid
         val social = Icons.Filled.People
+	val meditation = Icons.Filled.SelfImprovement
     }
     
     // Security Icons
