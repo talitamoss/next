@@ -629,6 +629,7 @@ private fun ButtonQuickAddContent(
         }
     )
 }
+
 /**
  * Time range quick add using RangeSlider
  * FULLY FLEXIBLE VERSION - All configuration comes from the plugin

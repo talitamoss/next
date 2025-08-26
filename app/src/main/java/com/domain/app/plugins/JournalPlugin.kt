@@ -47,8 +47,7 @@ class JournalPlugin : Plugin {
         dataSensitivity = DataSensitivity.SENSITIVE,
         dataAccess = setOf(DataAccessScope.OWN_DATA_ONLY),
         privacyPolicy = "Journal entries are encrypted and stored locally.",
-        dataRetention = DataRetentionPolicy.USER_CONTROLLED,
-        encryptionRequired = true
+        dataRetention = DataRetentionPolicy.USER_CONTROLLED
     )
     
     override val trustLevel = PluginTrustLevel.OFFICIAL

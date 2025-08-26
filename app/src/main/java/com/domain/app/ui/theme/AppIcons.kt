@@ -103,6 +103,7 @@ object AppIcons {
         val screenTime = Icons.Filled.PhoneAndroid
         val social = Icons.Filled.People
 	val meditation = Icons.Filled.SelfImprovement
+	val journal = Icons.Filled.Book
     }
     
     // Security Icons
