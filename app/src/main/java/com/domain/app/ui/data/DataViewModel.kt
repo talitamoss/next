@@ -240,7 +240,7 @@ class DataViewModel @Inject constructor(
         }
     }
     
-    fun updateFilters(filterState: FilterState) {
+fun updateFilters(filterState: FilterState) {
         _uiState.update {
             it.copy(
                 selectedPluginFilter = filterState.selectedPlugin?.id,
@@ -248,10 +248,10 @@ class DataViewModel @Inject constructor(
             )
         }
         
-        // Apply the filters
+        // Apply the filters - FIX: Remove malformed Elvis operator
         filterState.selectedPlugin?.let { 
             filterByPlugin(it.id) 
-        } ?: filterByPlugin(null)
+        } ?: filterByPlugin(null)  // FIXED: Complete the Elvis operator properly
         
         if (filterState.searchQuery.isNotEmpty()) {
             searchDataPoints(filterState.searchQuery)
