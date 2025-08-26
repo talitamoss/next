@@ -803,7 +803,7 @@ private fun TimeRangeQuickAddContent(
                 ) {
                     // Allow plugins to customize time markers via metadata
                     val markers = metadata["timeMarkers"] as? List<String> ?: listOf(
-                        "12AM", "6AM", "12PM", "6PM", "12AM"
+                        "12PM", "6PM", "12AM", "6AM", "12PM"
                     )
                     markers.forEach { marker ->
                         Text(marker, style = MaterialTheme.typography.labelSmall)

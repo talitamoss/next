@@ -1,3 +1,4 @@
+// app/src/main/java/com/domain/app/ui/dashboard/DashboardScreen.kt
 package com.domain.app.ui.dashboard
 
 import androidx.compose.foundation.background
@@ -22,7 +23,7 @@ import com.domain.app.ui.utils.getPluginIcon
 import com.domain.app.ui.components.plugin.quickadd.QuickAddDialog
 
 /**
- * Main dashboard screen with clean 3x4 plugin grid
+ * Main collection screen with clean 3x4 plugin grid
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,7 +40,7 @@ fun DashboardScreen(
             TopAppBar(
                 title = { 
                     Text(
-                        text = "Dashboard",
+                        text = "Collect",  // CHANGED from "Dashboard"
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -56,16 +57,16 @@ fun DashboardScreen(
         }
     ) { paddingValues ->
         LazyVerticalGrid(
-            columns = GridCells.Fixed(3), // Changed to 3 columns
+            columns = GridCells.Fixed(3),  // 3 columns for a clean grid
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp), // Reduced spacing
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Generate exactly 12 tiles
+            // Generate exactly 12 tiles (3x4 grid)
             items(12) { index ->
                 val plugin = uiState.dashboardPlugins.getOrNull(index)
                 
@@ -111,8 +112,8 @@ private fun PluginTile(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1f) // Keep tiles square
-            .clickable { onClick() }, // Entire tile is clickable
+            .aspectRatio(1f)  // Keep tiles square
+            .clickable { onClick() },  // Entire tile is clickable
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -159,7 +160,7 @@ private fun EmptyPluginTile() {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1f),
+            .aspectRatio(1f),  // Keep tiles square
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)
