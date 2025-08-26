@@ -55,7 +55,8 @@ class DashboardViewModel @Inject constructor(
             "alcohol", 
             "screen_time", 
             "social",
-	    "meditation"
+	    "meditation",
+	    "food"
         )
     }
     

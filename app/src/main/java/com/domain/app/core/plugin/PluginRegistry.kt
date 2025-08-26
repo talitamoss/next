@@ -87,6 +87,7 @@ class PluginRegistry @Inject constructor() {
 	register(ScreenTimePlugin())
 	register(SocialPlugin())
 	register(MeditationPlugin())
+	register(FoodPlugin())
         
         // Future plugins will be added here
         // register(JournalPlugin())

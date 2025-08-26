@@ -14,6 +14,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.domain.app.core.plugin.InputType
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.QuickAddConfig
@@ -1089,72 +1091,170 @@ private fun CompositeQuickAddContent(
                                 }
                             }
                         }
-                        
-                        InputType.CHOICE -> {
-                            var selectedOption by remember { 
-                                mutableStateOf(
-                                    input.options?.find { it.value == input.defaultValue }
-                                        ?: input.options?.firstOrNull()
-                                )
+			
+			InputType.CHOICE -> {
+    // Special handling for food plugin's dynamic food categories
+    val dynamicOptions = if (plugin.id == "food" && input.id == "foodCategory") {
+        // Get the selected meal type from results
+        val mealType = results["mealType"] as? String ?: "snack"
+        
+        // Return appropriate food options based on meal type
+        when (mealType) {
+            "snack" -> listOf(
+                QuickOption("Nuts", "nuts"),
+                QuickOption("Fruit", "fruit"),
+                QuickOption("Baked Goods", "baked_goods"),
+                QuickOption("Protein Bar", "protein_bar"),
+                QuickOption("Chips", "chips"),
+                QuickOption("Candy", "candy"),
+                QuickOption("Yogurt", "yogurt"),
+                QuickOption("Vegetables", "vegetables"),
+                QuickOption("Cheese", "cheese")
+            )
+            "light_meal" -> listOf(
+                QuickOption("Carb Heavy", "carb_heavy"),
+                QuickOption("Protein Focused", "protein_focused"),
+                QuickOption("Salad", "salad"),
+                QuickOption("Soup", "soup"),
+                QuickOption("Sandwich", "sandwich"),
+                QuickOption("Smoothie", "smoothie"),
+                QuickOption("Leftovers", "leftovers"),
+                QuickOption("Fast Food", "fast_food")
+            )
+            "full_meal" -> listOf(
+                QuickOption("Balanced", "balanced"),
+                QuickOption("Protein Heavy", "protein_heavy"),
+                QuickOption("Vegetarian", "vegetarian"),
+                QuickOption("Vegan", "vegan"),
+                QuickOption("Pasta/Rice", "pasta_rice"),
+                QuickOption("Pizza", "pizza"),
+                QuickOption("Restaurant", "restaurant"),
+                QuickOption("Home Cooked", "home_cooked"),
+                QuickOption("Takeout", "takeout")
+            )
+            else -> input.options ?: emptyList()
+        }
+    } else {
+        input.options ?: emptyList()
+    }
+    
+    var selectedOption by remember(dynamicOptions) { 
+        mutableStateOf(
+            dynamicOptions.find { it.value == input.defaultValue }
+                ?: dynamicOptions.firstOrNull()
+        )
+    }
+    results[input.id] = selectedOption?.value ?: ""
+    
+    Column {
+        Text(
+            text = input.label,
+            style = MaterialTheme.typography.labelMedium
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Choice tiles in a row (or grid for many options)
+        if (dynamicOptions.size <= 3) {
+            // Single row for few options
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                dynamicOptions.forEach { option ->
+                    Card(
+                        onClick = { 
+                            selectedOption = option
+                            results[input.id] = option.value
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (selectedOption == option) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surface
                             }
-                            results[input.id] = selectedOption?.value ?: ""
-                            
-                            Column {
-                                Text(
-                                    text = input.label,
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                
-                                // Choice tiles in a row
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    input.options?.forEach { option ->
-                                        Card(
-                                            onClick = { 
-                                                selectedOption = option
-                                                results[input.id] = option.value
-                                            },
-                                            modifier = Modifier.weight(1f),
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = if (selectedOption == option) {
-                                                    MaterialTheme.colorScheme.primaryContainer
-                                                } else {
-                                                    MaterialTheme.colorScheme.surface
-                                                }
-                                            ),
-                                            border = if (selectedOption == option) {
-                                                BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-                                            } else {
-                                                BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-                                            }
-                                        ) {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(12.dp),
-                                                horizontalAlignment = Alignment.CenterHorizontally
-                                            ) {
-                                                option.icon?.let {
-                                                    Text(
-                                                        text = it,
-                                                        fontSize = 24.sp
-                                                    )
-                                                    Spacer(modifier = Modifier.height(4.dp))
-                                                }
-                                                Text(
-                                                    text = option.label,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    textAlign = TextAlign.Center
-                                                )
-                                            }
-                                        }
+                        ),
+                        border = if (selectedOption == option) {
+                            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                        } else {
+                            BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                        }
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = option.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            // Grid layout for many options - using Column with Rows
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 200.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                dynamicOptions.chunked(3).forEach { rowOptions ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        rowOptions.forEach { option ->
+                            Card(
+                                onClick = { 
+                                    selectedOption = option
+                                    results[input.id] = option.value
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (selectedOption == option) {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.surface
                                     }
+                                ),
+                                border = if (selectedOption == option) {
+                                    BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                                } else {
+                                    BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                                }
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = option.label,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        textAlign = TextAlign.Center,
+                                        fontSize = 11.sp
+                                    )
                                 }
                             }
                         }
+                        // Fill empty cells if needed
+                        repeat(3 - rowOptions.size) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}                        
+
                         
                         InputType.TEXT -> {
                             var textValue by remember { 
