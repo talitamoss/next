@@ -575,6 +575,7 @@ private fun BooleanQuickAddContent(
         }
     )
 }
+
 /**
  * Button quick add for simple affirmative actions
  */
@@ -585,13 +586,12 @@ private fun ButtonQuickAddContent(
     onDismiss: () -> Unit,
     onConfirm: (Map<String, Any>) -> Unit
 ) {
-    // Special handling for audio plugin
+    // Special handling for audio plugin - needs custom recording UI
     if (plugin.id == "audio") {
         var isRecording by remember { mutableStateOf(false) }
         
         AlertDialog(
             onDismissRequest = {
-                // Don't allow dismissal while recording
                 if (!isRecording) onDismiss()
             },
             title = {
@@ -602,19 +602,15 @@ private fun ButtonQuickAddContent(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // The RecordButton component
                     RecordButton(
                         isRecording = isRecording,
                         onToggle = {
                             if (!isRecording) {
-                                // Start recording
                                 onConfirm(mapOf("action" to "start"))
                                 isRecording = true
                             } else {
-                                // Stop recording
                                 onConfirm(mapOf("action" to "stop"))
                                 isRecording = false
-                                // Close dialog after stopping
                                 onDismiss()
                             }
                         }
@@ -622,7 +618,6 @@ private fun ButtonQuickAddContent(
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // Status text
                     Text(
                         text = if (isRecording) "Recording..." else "Tap to start recording",
                         style = MaterialTheme.typography.bodyMedium,
@@ -630,9 +625,8 @@ private fun ButtonQuickAddContent(
                     )
                 }
             },
-            confirmButton = {},  // No confirm button needed for audio
+            confirmButton = {},  // No standard button for audio
             dismissButton = {
-                // Only show cancel when not recording
                 if (!isRecording) {
                     TextButton(onClick = onDismiss) {
                         Text("Cancel")
@@ -640,38 +634,37 @@ private fun ButtonQuickAddContent(
                 }
             }
         )
-        return  // Exit early for audio plugin
+        return
     }
     
-    // Original implementation for all other plugins
-    var buttonPressed by remember { mutableStateOf(false) }
-    
+    // Standard implementation for all other BUTTON type plugins
+    // Follows same pattern as TextQuickAddContent, NumberQuickAddContent, etc.
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(config.title)
         },
         text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Use SingleTapButton for non-audio plugins (existing behavior)
-                SingleTapButton(
-                    text = config.buttonText ?: "Confirm",
-                    onClick = {
-                        if (!buttonPressed) {
-                            buttonPressed = true
-                            onConfirm(mapOf(config.id to true))
-                            onDismiss()
-                        }
-                    },
-                    enabled = !buttonPressed,
-                    alreadyDone = buttonPressed
+            // Optional description text if placeholder is provided
+            config.placeholder?.let { placeholder ->
+                Text(
+                    text = placeholder,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            // Standard Material3 button in correct location
+            Button(
+                onClick = {
+                    onConfirm(mapOf(config.id to true))
+                    onDismiss()
+                }
+            ) {
+                Text(config.buttonText ?: "Confirm")
+            }
+        },
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Cancel")
@@ -679,6 +672,7 @@ private fun ButtonQuickAddContent(
         }
     )
 }
+
 /**
  * Time range quick add using RangeSlider
  * FULLY FLEXIBLE VERSION - All configuration comes from the plugin
