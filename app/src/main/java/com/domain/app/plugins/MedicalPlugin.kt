@@ -13,10 +13,10 @@ import java.time.format.DateTimeFormatter
 /**
  * Medical Tracker Plugin
  * Tracks medications with name, dosage, unit, and optional notes
- * Uses composite input for all fields on one screen
+ * Uses TEXT input type with composite inputs list for single-page display
  */
 class MedicalPlugin : Plugin {
-    override val id = "medical"
+    override val id = "medicine"
     
     override val metadata = PluginMetadata(
         name = "Medicine Tracker",
@@ -26,11 +26,11 @@ class MedicalPlugin : Plugin {
         category = PluginCategory.HEALTH,
         tags = listOf("medicine", "medication", "health", "prescription", "dosage", "pills", "tablets"),
         dataPattern = DataPattern.COMPOSITE,
-        inputType = InputType.COMPOSITE,  // All inputs on one screen
-        supportsMultiStage = false,       // Single page, not multi-stage
+        inputType = InputType.TEXT,           // FIX: Use TEXT (no MULTI_STAGE or COMPOSITE exists)
+        supportsMultiStage = false,           // Single page display
         relatedPlugins = listOf("health", "mood", "sleep"),
         exportFormat = ExportFormat.CSV,
-        dataSensitivity = DataSensitivity.SENSITIVE,  // Medical data is sensitive
+        dataSensitivity = DataSensitivity.SENSITIVE,
         naturalLanguageAliases = listOf(
             "medicine", "medication", "meds", "pills",
             "took medicine", "took medication", "took pills",
@@ -38,8 +38,7 @@ class MedicalPlugin : Plugin {
         ),
         contextualTriggers = listOf(
             ContextTrigger.TIME_OF_DAY,
-            ContextTrigger.AFTER_EVENT,
-            ContextTrigger.REMINDER_BASED
+            ContextTrigger.AFTER_EVENT        // FIX: Removed REMINDER_BASED (doesn't exist)
         )
     )
     
@@ -74,15 +73,15 @@ class MedicalPlugin : Plugin {
     override fun supportsAutomaticCollection() = false
     
     /**
-     * Configure composite quick add with all fields on one screen
+     * Configure quick add with all fields on one screen using inputs list
      */
     override fun getQuickAddConfig() = QuickAddConfig(
         id = "medicine_entry",
         title = "Add Medicine",
-        inputType = InputType.COMPOSITE,
-        primaryColor = "#4CAF50",       // Green for health/medical
-        secondaryColor = "#E8F5E9",      // Light green
-        // Define all inputs to appear on one screen
+        inputType = InputType.TEXT,         // FIX: Use TEXT as base type
+        primaryColor = "#4CAF50",           // Green for health/medical
+        secondaryColor = "#E8F5E9",          // Light green
+        // Use inputs list to show all fields on one screen
         inputs = listOf(
             // Medicine Name Input
             QuickAddInput(
@@ -207,10 +206,14 @@ class MedicalPlugin : Plugin {
             errors.add("Notes are too long (max 500 characters)")
         }
         
+        // FIX: Use actual ValidationResult sealed class structure
         return if (errors.isEmpty()) {
-            ValidationResult.Valid
+            ValidationResult.Success           // FIX: It's an object, not a function
         } else {
-            ValidationResult.Invalid(errors)
+            ValidationResult.Error(             // FIX: Use Error constructor properly
+                message = errors.joinToString(", "),
+                field = null
+            )
         }
     }
     
