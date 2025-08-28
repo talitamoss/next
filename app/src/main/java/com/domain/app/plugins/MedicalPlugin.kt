@@ -16,7 +16,7 @@ import java.time.format.DateTimeFormatter
  * Uses TEXT input type with composite inputs list for single-page display
  */
 class MedicalPlugin : Plugin {
-    override val id = "medicine"
+    override val id = "medical"
     
     override val metadata = PluginMetadata(
         name = "Medicine Tracker",
