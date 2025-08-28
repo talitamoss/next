@@ -95,7 +95,7 @@ class MedicalPlugin : Plugin {
             QuickAddInput(
                 id = "dosage_amount", 
                 label = "Dosage Amount",
-                type = InputType.NUMBER,
+                type = InputType.TEXT,
                 placeholder = "Enter amount",
                 required = true,
                 min = 0.0

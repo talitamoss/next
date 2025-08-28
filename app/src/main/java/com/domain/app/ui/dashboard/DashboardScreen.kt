@@ -66,8 +66,8 @@ fun DashboardScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Generate exactly 12 tiles (3x4 grid)
-            items(12) { index ->
+            // Generate exactly 15 tiles (3x5 grid)
+            items(15) { index ->
                 val plugin = uiState.dashboardPlugins.getOrNull(index)
                 
                 if (plugin != null) {
