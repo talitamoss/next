@@ -38,6 +38,7 @@ fun getPluginIconById(pluginId: String): ImageVector {
         "food" -> AppIcons.Plugin.food
 	"meditation" -> AppIcons.Plugin.meditation
 	"journal" -> AppIcons.Plugin.journal
+	"medical" -> AppIcons.Plugin.medication
         else -> AppIcons.Plugin.custom
     }
 }
@@ -61,6 +62,7 @@ fun getPluginColor(plugin: Plugin): String {
         "health" -> "#E91E63"     // Pink
         "productivity" -> "#FF9800" // Orange
         "food" -> "#8BC34A"       // Light Green
+	"medication" -> '#4CAF50" // Green
         else -> "#9E9E9E"         // Grey
     }
 }

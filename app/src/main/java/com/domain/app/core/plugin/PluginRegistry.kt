@@ -90,6 +90,7 @@ class PluginRegistry @Inject constructor() {
 	register(FoodPlugin())
 	register(JournalPlugin())
 	register(AudioPlugin())
+	register(MedicalPlugin())
         
         // Future plugins will be added here
         // register(JournalPlugin())
