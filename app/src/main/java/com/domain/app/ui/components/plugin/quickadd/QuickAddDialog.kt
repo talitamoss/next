@@ -25,7 +25,7 @@ import com.domain.app.ui.components.core.carousel.CarouselOption
 import com.domain.app.ui.components.core.sliders.RangeSlider
 import com.domain.app.ui.components.core.sliders.RangeSliderDefaults
 import com.domain.app.ui.components.core.sliders.VerticalSlider
-import com.domain.app.ui.components.core.button.SingleTapButton
+import com.domain.app.ui.components.core.button.RecordButton
 import kotlin.math.roundToInt
 
 /**
@@ -585,6 +585,65 @@ private fun ButtonQuickAddContent(
     onDismiss: () -> Unit,
     onConfirm: (Map<String, Any>) -> Unit
 ) {
+    // Special handling for audio plugin
+    if (plugin.id == "audio") {
+        var isRecording by remember { mutableStateOf(false) }
+        
+        AlertDialog(
+            onDismissRequest = {
+                // Don't allow dismissal while recording
+                if (!isRecording) onDismiss()
+            },
+            title = {
+                Text(config.title)
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // The RecordButton component
+                    RecordButton(
+                        isRecording = isRecording,
+                        onToggle = {
+                            if (!isRecording) {
+                                // Start recording
+                                onConfirm(mapOf("action" to "start"))
+                                isRecording = true
+                            } else {
+                                // Stop recording
+                                onConfirm(mapOf("action" to "stop"))
+                                isRecording = false
+                                // Close dialog after stopping
+                                onDismiss()
+                            }
+                        }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Status text
+                    Text(
+                        text = if (isRecording) "Recording..." else "Tap to start recording",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {},  // No confirm button needed for audio
+            dismissButton = {
+                // Only show cancel when not recording
+                if (!isRecording) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        )
+        return  // Exit early for audio plugin
+    }
+    
+    // Original implementation for all other plugins
     var buttonPressed by remember { mutableStateOf(false) }
     
     AlertDialog(
@@ -597,13 +656,9 @@ private fun ButtonQuickAddContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Just the button, no icon needed
+                // Use SingleTapButton for non-audio plugins (existing behavior)
                 SingleTapButton(
-                    text = config.buttonText ?: "Record",
-                    alreadyDone = buttonPressed,
-                    primaryColor = config.primaryColor?.let { 
-                        Color(android.graphics.Color.parseColor(it)) 
-                    } ?: MaterialTheme.colorScheme.primary,
+                    text = config.buttonText ?: "Confirm",
                     onClick = {
                         if (!buttonPressed) {
                             buttonPressed = true
@@ -611,25 +666,19 @@ private fun ButtonQuickAddContent(
                             onDismiss()
                         }
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
+                    enabled = !buttonPressed,
+                    alreadyDone = buttonPressed
                 )
             }
         },
-        confirmButton = {
-            // Empty - button handles its own action
-        },
+        confirmButton = {},
         dismissButton = {
-            if (!buttonPressed) {
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel")
-                }
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
             }
         }
     )
 }
-
 /**
  * Time range quick add using RangeSlider
  * FULLY FLEXIBLE VERSION - All configuration comes from the plugin
