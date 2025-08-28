@@ -99,7 +99,13 @@ class AudioPlugin : Plugin {
     
     override fun supportsAutomaticCollection() = false  // No automatic recording
     
-    override fun getQuickAddConfig(): QuickAddConfig? = null  // Uses custom UI (BUTTON type)
+    override fun getQuickAddConfig() = QuickAddConfig(
+        id = "audio",
+        title = "Record Audio Note",
+        inputType = InputType.BUTTON,
+        buttonText = "Start Recording",  // Not used by audio, but good to have
+        primaryColor = "#EF4444"  // Red theme for recording
+    )
     
     override suspend fun collectData(): DataPoint? {
         // Automatic collection not supported for audio
@@ -115,7 +121,7 @@ class AudioPlugin : Plugin {
             }
             
             // Case 2: Start recording request
-            data["action"] == "start_recording" -> {
+            data["action"] == "start" -> {
                 if (startRecording()) {
                     // Return a status DataPoint indicating recording started
                     DataPoint(
@@ -135,7 +141,7 @@ class AudioPlugin : Plugin {
             }
             
             // Case 3: Stop recording request
-            data["action"] == "stop_recording" -> {
+            data["action"] == "stop" -> {
                 stopRecording()
             }
             
@@ -166,7 +172,7 @@ class AudioPlugin : Plugin {
             // For action requests
             data.containsKey("action") -> {
                 val action = data["action"] as? String
-                if (action in listOf("start_recording", "stop_recording")) {
+                if (action in listOf("start", "stop")) {
                     ValidationResult.Success
                 } else {
                     ValidationResult.Error("Unknown action: $action")
