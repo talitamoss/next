@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -603,6 +604,7 @@ private fun ButtonQuickAddContent(
         var isRecording by remember { mutableStateOf(false) }
         var isProcessing by remember { mutableStateOf(false) }
         var showPermissionDenied by remember { mutableStateOf(false) }
+        var recordingSeconds by remember { mutableStateOf(0) }  // ← ADDED: Timer state
         
         // PLUGIN CASTING - Safe cast to AudioPlugin
         val audioPlugin = plugin as? AudioPlugin
@@ -634,6 +636,17 @@ private fun ButtonQuickAddContent(
         LaunchedEffect(audioPlugin) {
             audioPlugin?.let { plugin ->
                 plugin.initialize(context)
+            }
+        }
+        
+        // TIMER COUNTING EFFECT - ← ADDED: Counts seconds while recording
+        LaunchedEffect(isRecording) {
+            if (isRecording) {
+                recordingSeconds = 0  // Reset timer
+                while (isRecording) {
+                    delay(1000)  // Wait 1 second
+                    recordingSeconds++
+                }
             }
         }
         
@@ -681,7 +694,7 @@ private fun ButtonQuickAddContent(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // PERMISSION DENIED FEEDBACK UI
+                    // PERMISSION DENIED MESSAGE
                     if (showPermissionDenied) {
                         Card(
                             modifier = Modifier
@@ -698,6 +711,17 @@ private fun ButtonQuickAddContent(
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
+                    }
+                    
+                    // TIMER DISPLAY - ← ADDED: Shows MM:SS format when recording
+                    if (isRecording) {
+                        Text(
+                            text = String.format("%02d:%02d", recordingSeconds / 60, recordingSeconds % 60),
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
                     }
                     
                     // RECORD BUTTON WITH PERMISSION HANDLING
@@ -793,7 +817,6 @@ private fun ButtonQuickAddContent(
         }
     )
 }
-
 /**
  * Time range quick add using RangeSlider
  * FULLY FLEXIBLE VERSION - All configuration comes from the plugin
