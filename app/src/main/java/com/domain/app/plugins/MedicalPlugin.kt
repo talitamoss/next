@@ -19,7 +19,7 @@ class MedicalPlugin : Plugin {
     override val id = "medical"
     
     override val metadata = PluginMetadata(
-        name = "Medicine Tracker",
+        name = "Medical",
         description = "Track your medications and dosages",
         version = "1.0.0", 
         author = "System",

@@ -14,6 +14,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -597,6 +598,12 @@ private fun ButtonQuickAddContent(
         var isRecording by remember { mutableStateOf(false) }
         var isProcessing by remember { mutableStateOf(false) }
         val audioPlugin = plugin as? AudioPlugin
+
+	val context = LocalContext.current
+
+LaunchedEffect(audioPlugin) {
+    audioPlugin?.initialize(context)
+}
         
         // Handle the recording completion
         fun handleRecordingComplete() {
