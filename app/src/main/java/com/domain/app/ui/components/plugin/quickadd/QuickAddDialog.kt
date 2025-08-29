@@ -12,10 +12,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.Button
+import kotlinx.coroutines.delay
 import com.domain.app.core.plugin.InputType
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.QuickAddConfig
@@ -578,6 +582,7 @@ private fun BooleanQuickAddContent(
 
 /**
  * Button quick add for simple affirmative actions
+ * Permissions are already granted when this dialog opens (per the framework)
  */
 @Composable
 private fun ButtonQuickAddContent(
@@ -586,14 +591,30 @@ private fun ButtonQuickAddContent(
     onDismiss: () -> Unit,
     onConfirm: (Map<String, Any>) -> Unit
 ) {
-    // Special handling for audio plugin - needs custom recording UI
+    // Special handling for audio plugin - needs stateful recording UI
     if (plugin.id == "audio") {
         var isRecording by remember { mutableStateOf(false) }
+        var isProcessing by remember { mutableStateOf(false) }
+        
+        // Handle auto-dismiss after processing
+        if (isProcessing) {
+            LaunchedEffect(Unit) {
+                delay(1000) // Wait for save
+                onDismiss()
+            }
+        }
         
         AlertDialog(
             onDismissRequest = {
-                if (!isRecording) onDismiss()
+                // Prevent dismissal while recording or processing
+                if (!isRecording && !isProcessing) {
+                    onDismiss()
+                }
             },
+            properties = DialogProperties(
+                dismissOnBackPress = !isRecording && !isProcessing,
+                dismissOnClickOutside = !isRecording && !isProcessing
+            ),
             title = {
                 Text(config.title)
             },
@@ -604,14 +625,18 @@ private fun ButtonQuickAddContent(
                 ) {
                     RecordButton(
                         isRecording = isRecording,
+                        enabled = !isProcessing,
                         onToggle = {
                             if (!isRecording) {
-                                onConfirm(mapOf("action" to "start"))
+                                // Start recording - permissions already granted
                                 isRecording = true
+                                onConfirm(mapOf("action" to "start"))
                             } else {
-                                onConfirm(mapOf("action" to "stop"))
+                                // Stop recording and process
                                 isRecording = false
-                                onDismiss()
+                                isProcessing = true
+                                onConfirm(mapOf("action" to "stop"))
+                                // LaunchedEffect above will handle the dismiss
                             }
                         }
                     )
@@ -619,15 +644,19 @@ private fun ButtonQuickAddContent(
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     Text(
-                        text = if (isRecording) "Recording..." else "Tap to start recording",
+                        text = when {
+                            isProcessing -> "Saving recording..."
+                            isRecording -> "Recording... Tap to stop"
+                            else -> "Tap to start recording"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             },
-            confirmButton = {},  // No standard button for audio
+            confirmButton = {}, // No confirm button for audio
             dismissButton = {
-                if (!isRecording) {
+                if (!isRecording && !isProcessing) {
                     TextButton(onClick = onDismiss) {
                         Text("Cancel")
                     }
@@ -637,34 +666,28 @@ private fun ButtonQuickAddContent(
         return
     }
     
-    // Standard implementation for all other BUTTON type plugins
-    // Follows same pattern as TextQuickAddContent, NumberQuickAddContent, etc.
+    // Standard button implementation for other button-type plugins
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(config.title)
         },
         text = {
-            // Optional description text if placeholder is provided
-            config.placeholder?.let { placeholder ->
-                Text(
-                    text = placeholder,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            // Standard Material3 button in correct location
-            Button(
-                onClick = {
-                    onConfirm(mapOf(config.id to true))
-                    onDismiss()
-                }
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(config.buttonText ?: "Confirm")
+                Button(
+                    onClick = {
+                        onConfirm(mapOf("action" to "confirm"))
+                        onDismiss()
+                    }
+                ) {
+                    Text(config.buttonText ?: "Confirm")
+                }
             }
         },
+        confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Cancel")
