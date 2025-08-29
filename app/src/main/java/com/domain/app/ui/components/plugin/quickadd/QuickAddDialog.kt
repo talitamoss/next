@@ -30,6 +30,7 @@ import com.domain.app.ui.components.core.sliders.RangeSlider
 import com.domain.app.ui.components.core.sliders.RangeSliderDefaults
 import com.domain.app.ui.components.core.sliders.VerticalSlider
 import com.domain.app.ui.components.core.button.RecordButton
+import com.domain.app.plugins.AudioPlugin
 import kotlin.math.roundToInt
 
 /**
@@ -595,11 +596,28 @@ private fun ButtonQuickAddContent(
     if (plugin.id == "audio") {
         var isRecording by remember { mutableStateOf(false) }
         var isProcessing by remember { mutableStateOf(false) }
+        val audioPlugin = plugin as? AudioPlugin
+        
+        // Handle the recording completion
+        fun handleRecordingComplete() {
+            if (audioPlugin != null) {
+                val dataPoint = audioPlugin.stopRecording()
+                if (dataPoint != null) {
+                    isProcessing = true
+                    // Pass the completed DataPoint to onConfirm
+                    onConfirm(mapOf("recorded_data_point" to dataPoint))
+                    // The LaunchedEffect below will handle the dismiss
+                } else {
+                    // Recording failed, just close
+                    onDismiss()
+                }
+            }
+        }
         
         // Handle auto-dismiss after processing
         if (isProcessing) {
             LaunchedEffect(Unit) {
-                delay(1000) // Wait for save
+                delay(1000) // Wait for save animation
                 onDismiss()
             }
         }
@@ -628,15 +646,18 @@ private fun ButtonQuickAddContent(
                         enabled = !isProcessing,
                         onToggle = {
                             if (!isRecording) {
-                                // Start recording - permissions already granted
-                                isRecording = true
-                                onConfirm(mapOf("action" to "start"))
+                                // Start recording directly in the plugin
+                                if (audioPlugin != null && audioPlugin.startRecording()) {
+                                    isRecording = true
+                                    // DO NOT call onConfirm here - this would close the dialog!
+                                } else {
+                                    // Failed to start recording
+                                    // Could show an error toast/snackbar here
+                                }
                             } else {
-                                // Stop recording and process
+                                // Stop recording and save
                                 isRecording = false
-                                isProcessing = true
-                                onConfirm(mapOf("action" to "stop"))
-                                // LaunchedEffect above will handle the dismiss
+                                handleRecordingComplete()
                             }
                         }
                     )
@@ -695,7 +716,6 @@ private fun ButtonQuickAddContent(
         }
     )
 }
-
 /**
  * Time range quick add using RangeSlider
  * FULLY FLEXIBLE VERSION - All configuration comes from the plugin
