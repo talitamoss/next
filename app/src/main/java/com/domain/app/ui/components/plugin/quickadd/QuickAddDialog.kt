@@ -33,6 +33,14 @@ import com.domain.app.ui.components.core.sliders.VerticalSlider
 import com.domain.app.ui.components.core.button.RecordButton
 import com.domain.app.plugins.AudioPlugin
 import kotlin.math.roundToInt
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.delay
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 
 /**
  * Quick add dialog that adapts to different plugin input types
@@ -582,10 +590,6 @@ private fun BooleanQuickAddContent(
     )
 }
 
-/**
- * Button quick add for simple affirmative actions
- * Permissions are already granted when this dialog opens (per the framework)
- */
 @Composable
 private fun ButtonQuickAddContent(
     plugin: Plugin,
@@ -593,42 +597,71 @@ private fun ButtonQuickAddContent(
     onDismiss: () -> Unit,
     onConfirm: (Map<String, Any>) -> Unit
 ) {
-    // Special handling for audio plugin - needs stateful recording UI
+    // ========== AUDIO PLUGIN SPECIAL HANDLING ==========
     if (plugin.id == "audio") {
+        // STATE MANAGEMENT - All states needed for recording flow
         var isRecording by remember { mutableStateOf(false) }
         var isProcessing by remember { mutableStateOf(false) }
-        val audioPlugin = plugin as? AudioPlugin
-
-	val context = LocalContext.current
-
-LaunchedEffect(audioPlugin) {
-    audioPlugin?.initialize(context)
-}
+        var showPermissionDenied by remember { mutableStateOf(false) }
         
-        // Handle the recording completion
+        // PLUGIN CASTING - Safe cast to AudioPlugin
+        val audioPlugin = plugin as? AudioPlugin
+        
+        // CONTEXT ACQUISITION - Required for plugin initialization and permissions
+        val context = LocalContext.current
+        
+        // PERMISSION LAUNCHER - Handles system permission dialog
+        val permissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission()
+        ) { isGranted: Boolean ->
+            // PERMISSION CALLBACK - Handle user's permission choice
+            if (isGranted) {
+                // Permission granted - start recording
+                if (audioPlugin != null) {
+                    val recordingStarted = audioPlugin.startRecording()
+                    if (recordingStarted) {
+                        isRecording = true
+                        showPermissionDenied = false
+                    }
+                }
+            } else {
+                // Permission denied - show feedback
+                showPermissionDenied = true
+            }
+        }
+        
+        // PLUGIN INITIALIZATION - Must happen before any recording attempt
+        LaunchedEffect(audioPlugin) {
+            audioPlugin?.let { plugin ->
+                plugin.initialize(context)
+            }
+        }
+        
+        // RECORDING COMPLETION HANDLER
         fun handleRecordingComplete() {
             if (audioPlugin != null) {
                 val dataPoint = audioPlugin.stopRecording()
                 if (dataPoint != null) {
                     isProcessing = true
-                    // Pass the completed DataPoint to onConfirm
+                    // Pass completed DataPoint to parent
                     onConfirm(mapOf("recorded_data_point" to dataPoint))
-                    // The LaunchedEffect below will handle the dismiss
+                    // Auto-dismiss handled by LaunchedEffect below
                 } else {
-                    // Recording failed, just close
+                    // Recording failed to save
                     onDismiss()
                 }
             }
         }
         
-        // Handle auto-dismiss after processing
+        // AUTO-DISMISS AFTER PROCESSING
         if (isProcessing) {
             LaunchedEffect(Unit) {
-                delay(1000) // Wait for save animation
+                delay(1000) // Show "Saving..." briefly
                 onDismiss()
             }
         }
         
+        // ========== UI DIALOG ==========
         AlertDialog(
             onDismissRequest = {
                 // Prevent dismissal while recording or processing
@@ -648,21 +681,56 @@ LaunchedEffect(audioPlugin) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // PERMISSION DENIED FEEDBACK UI
+                    if (showPermissionDenied) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Text(
+                                text = "Microphone permission is required to record audio. Please tap START again and allow microphone access.",
+                                modifier = Modifier.padding(12.dp),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                    
+                    // RECORD BUTTON WITH PERMISSION HANDLING
                     RecordButton(
                         isRecording = isRecording,
                         enabled = !isProcessing,
                         onToggle = {
                             if (!isRecording) {
-                                // Start recording directly in the plugin
-                                if (audioPlugin != null && audioPlugin.startRecording()) {
-                                    isRecording = true
-                                    // DO NOT call onConfirm here - this would close the dialog!
+                                // === START RECORDING FLOW ===
+                                
+                                // CHECK PERMISSION STATUS
+                                val hasPermission = ContextCompat.checkSelfPermission(
+                                    context,
+                                    android.Manifest.permission.RECORD_AUDIO
+                                ) == PackageManager.PERMISSION_GRANTED
+                                
+                                if (hasPermission) {
+                                    // PERMISSION ALREADY GRANTED - Start recording
+                                    if (audioPlugin != null) {
+                                        val recordingStarted = audioPlugin.startRecording()
+                                        if (recordingStarted) {
+                                            isRecording = true
+                                            showPermissionDenied = false
+                                        }
+                                        // If startRecording returns false, MediaRecorder failed
+                                        // This could happen if mic is in use by another app
+                                    }
                                 } else {
-                                    // Failed to start recording
-                                    // Could show an error toast/snackbar here
+                                    // NO PERMISSION - Request it
+                                    permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
                                 }
                             } else {
-                                // Stop recording and save
+                                // === STOP RECORDING FLOW ===
                                 isRecording = false
                                 handleRecordingComplete()
                             }
@@ -671,6 +739,7 @@ LaunchedEffect(audioPlugin) {
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
+                    // STATUS TEXT
                     Text(
                         text = when {
                             isProcessing -> "Saving recording..."
@@ -684,6 +753,7 @@ LaunchedEffect(audioPlugin) {
             },
             confirmButton = {}, // No confirm button for audio
             dismissButton = {
+                // Only show cancel when not recording/processing
                 if (!isRecording && !isProcessing) {
                     TextButton(onClick = onDismiss) {
                         Text("Cancel")
@@ -691,10 +761,10 @@ LaunchedEffect(audioPlugin) {
                 }
             }
         )
-        return
+        return // Early return for audio plugin
     }
     
-    // Standard button implementation for other button-type plugins
+    // ========== STANDARD BUTTON IMPLEMENTATION FOR OTHER PLUGINS ==========
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -723,6 +793,7 @@ LaunchedEffect(audioPlugin) {
         }
     )
 }
+
 /**
  * Time range quick add using RangeSlider
  * FULLY FLEXIBLE VERSION - All configuration comes from the plugin
