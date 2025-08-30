@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.data.DataPoint
 import com.domain.app.core.data.DataRepository
+import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -11,18 +12,20 @@ import kotlinx.coroutines.launch
 import java.time.*
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
-import kotlin.math.min
 
 // Data Models
 data class ReflectUiState(
     val currentYearMonth: YearMonth = YearMonth.now(),
     val currentMonthYear: String = "",
-    val selectedDate: LocalDate? = LocalDate.now(),
+    val selectedDate: LocalDate? = null,
     val dayActivityMap: Map<LocalDate, DayActivity> = emptyMap(),
+    val filteredDayActivityMap: Map<LocalDate, DayActivity> = emptyMap(),
     val selectedDayData: DayData = DayData(),
     val currentStreak: Int = 0,
     val monthlyTotal: Int = 0,
     val mostActiveDay: String = "None",
+    val availablePlugins: List<Plugin> = emptyList(),
+    val selectedFilterPlugin: Plugin? = null,
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -30,13 +33,16 @@ data class ReflectUiState(
 data class DayActivity(
     val date: LocalDate,
     val entryCount: Int,
-    val intensity: ActivityIntensity
+    val intensity: ActivityIntensity,
+    val pluginCounts: Map<String, Int> = emptyMap()
 )
 
 enum class ActivityIntensity {
-    LOW,    // 1-2 entries
-    MEDIUM, // 3-5 entries
-    HIGH    // 6+ entries
+    NONE,     // 0 entries
+    LOW,      // 1-3 entries
+    MEDIUM,   // 4-6 entries
+    HIGH,     // 7-10 entries
+    VERY_HIGH // 10+ entries
 }
 
 data class DayData(
@@ -67,9 +73,18 @@ class ReflectViewModel @Inject constructor(
     private val monthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
     private val timeFormatter = DateTimeFormatter.ofPattern("h:mm a")
     
+    private var allMonthDataPoints: List<DataPoint> = emptyList()
+    
     init {
+        loadAvailablePlugins()
         loadCurrentMonth()
-        selectDate(LocalDate.now())
+    }
+    
+    private fun loadAvailablePlugins() {
+        viewModelScope.launch {
+            val plugins = pluginManager.getAllActivePlugins()
+            _uiState.update { it.copy(availablePlugins = plugins) }
+        }
     }
     
     fun previousMonth() {
@@ -97,6 +112,54 @@ class ReflectViewModel @Inject constructor(
         loadDayDetails(date)
     }
     
+    fun setPluginFilter(plugin: Plugin?) {
+        _uiState.update { it.copy(selectedFilterPlugin = plugin) }
+        applyFilter()
+    }
+    
+    private fun applyFilter() {
+        val selectedPlugin = _uiState.value.selectedFilterPlugin
+        val allActivityMap = _uiState.value.dayActivityMap
+        
+        val filteredMap = if (selectedPlugin == null) {
+            // Show all data
+            allActivityMap
+        } else {
+            // Filter by selected plugin
+            allActivityMap.mapNotNull { (date, activity) ->
+                val pluginCount = activity.pluginCounts[selectedPlugin.id] ?: 0
+                if (pluginCount > 0) {
+                    date to activity.copy(
+                        entryCount = pluginCount,
+                        intensity = getIntensityForCount(pluginCount)
+                    )
+                } else {
+                    null
+                }
+            }.toMap()
+        }
+        
+        // Recalculate stats for filtered data
+        val filteredDataPoints = if (selectedPlugin == null) {
+            allMonthDataPoints
+        } else {
+            allMonthDataPoints.filter { it.pluginId == selectedPlugin.id }
+        }
+        
+        val monthTotal = filteredDataPoints.size
+        val mostActive = calculateMostActiveDay(filteredMap)
+        val streak = calculateStreak(filteredDataPoints)
+        
+        _uiState.update {
+            it.copy(
+                filteredDayActivityMap = filteredMap,
+                monthlyTotal = monthTotal,
+                mostActiveDay = mostActive,
+                currentStreak = streak
+            )
+        }
+    }
+    
     private fun loadCurrentMonth() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
@@ -106,16 +169,17 @@ class ReflectViewModel @Inject constructor(
                 val startOfMonth = yearMonth.atDay(1).atStartOfDay()
                 val endOfMonth = yearMonth.atEndOfMonth().atTime(23, 59, 59)
                 
-                // Get all data points for the month
                 dataRepository.getDataInRange(
                     startTime = startOfMonth.toInstant(ZoneOffset.UTC),
                     endTime = endOfMonth.toInstant(ZoneOffset.UTC)
                 ).first().let { dataPoints ->
                     
-                    // Group by date and create activity map
-                    val activityMap = createActivityMap(dataPoints)
+                    allMonthDataPoints = dataPoints
                     
-                    // Calculate stats
+                    // Create activity map with plugin counts
+                    val activityMap = createActivityMapWithPluginCounts(dataPoints)
+                    
+                    // Calculate initial stats (unfiltered)
                     val streak = calculateStreak(dataPoints)
                     val monthTotal = dataPoints.size
                     val mostActive = calculateMostActiveDay(activityMap)
@@ -124,6 +188,7 @@ class ReflectViewModel @Inject constructor(
                         it.copy(
                             currentMonthYear = yearMonth.format(monthFormatter),
                             dayActivityMap = activityMap,
+                            filteredDayActivityMap = activityMap,
                             currentStreak = streak,
                             monthlyTotal = monthTotal,
                             mostActiveDay = mostActive,
@@ -188,23 +253,33 @@ class ReflectViewModel @Inject constructor(
         }
     }
     
-    private fun createActivityMap(dataPoints: List<DataPoint>): Map<LocalDate, DayActivity> {
+    private fun createActivityMapWithPluginCounts(dataPoints: List<DataPoint>): Map<LocalDate, DayActivity> {
         return dataPoints
             .groupBy { dp ->
                 dp.timestamp.atZone(ZoneId.systemDefault()).toLocalDate()
             }
             .mapValues { (date, points) ->
-                val count = points.size
+                val pluginCounts = points.groupBy { it.pluginId }
+                    .mapValues { it.value.size }
+                val totalCount = points.size
+                
                 DayActivity(
                     date = date,
-                    entryCount = count,
-                    intensity = when {
-                        count >= 6 -> ActivityIntensity.HIGH
-                        count >= 3 -> ActivityIntensity.MEDIUM
-                        else -> ActivityIntensity.LOW
-                    }
+                    entryCount = totalCount,
+                    intensity = getIntensityForCount(totalCount),
+                    pluginCounts = pluginCounts
                 )
             }
+    }
+    
+    private fun getIntensityForCount(count: Int): ActivityIntensity {
+        return when {
+            count == 0 -> ActivityIntensity.NONE
+            count in 1..3 -> ActivityIntensity.LOW
+            count in 4..6 -> ActivityIntensity.MEDIUM
+            count in 7..10 -> ActivityIntensity.HIGH
+            else -> ActivityIntensity.VERY_HIGH
+        }
     }
     
     private fun calculateStreak(dataPoints: List<DataPoint>): Int {
@@ -234,7 +309,6 @@ class ReflectViewModel @Inject constructor(
     private fun calculateMostActiveDay(activityMap: Map<LocalDate, DayActivity>): String {
         if (activityMap.isEmpty()) return "None"
         
-        // Group by day of week and sum entry counts
         val dayOfWeekCounts = activityMap.values
             .groupBy { it.date.dayOfWeek }
             .mapValues { (_, activities) ->
@@ -250,7 +324,6 @@ class ReflectViewModel @Inject constructor(
     }
     
     private fun formatDataPointValue(dataPoint: DataPoint): String {
-        // Format the main value from the data point
         val value = dataPoint.value
         
         return when {
@@ -290,7 +363,6 @@ class ReflectViewModel @Inject constructor(
                 }
             }
             else -> {
-                // Try to find the first meaningful value
                 value.entries.firstOrNull { 
                     it.key !in listOf("note", "metadata", "timestamp", "source")
                 }?.let { "${it.value}" } ?: "Recorded"
@@ -310,9 +382,3 @@ class ReflectViewModel @Inject constructor(
         _uiState.update { it.copy(error = null) }
     }
 }
-
-// Add this extension function to DataRepository if the getDataInRange method doesn't exist:
-// fun getDataInRange(startTime: Instant, endTime: Instant): Flow<List<DataPoint>> {
-//     return dataPointDao.getDataInRange(startTime, endTime)
-//         .map { entities -> entities.map { entityToDataPoint(it) } }
-// }

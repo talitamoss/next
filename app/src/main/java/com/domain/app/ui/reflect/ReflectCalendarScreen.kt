@@ -112,9 +112,10 @@ fun ReflectScreen(
             Divider()
             
             // Selected Day Details
-            if (uiState.selectedDate != null) {
+            val selectedDate = uiState.selectedDate
+            if (selectedDate != null) {
                 SelectedDayDetails(
-                    date = uiState.selectedDate,
+                    date = selectedDate,
                     dayData = uiState.selectedDayData,
                     modifier = Modifier
                         .fillMaxWidth()

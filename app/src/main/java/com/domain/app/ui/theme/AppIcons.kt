@@ -108,6 +108,7 @@ object AppIcons {
 	val meditation = Icons.Filled.SelfImprovement
 	val journal = Icons.Filled.Book
 	val poo = Icons.Filled.Wc
+	val audio = Icons.Filled.Mic
     }
     
     // Security Icons
