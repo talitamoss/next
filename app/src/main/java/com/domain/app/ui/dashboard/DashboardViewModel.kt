@@ -59,7 +59,8 @@ class DashboardViewModel @Inject constructor(
 	    "food",
 	    "journal",
 	    "audio",
-	    "medical"
+	    "medical",
+	    "poo"
         )
     }
     

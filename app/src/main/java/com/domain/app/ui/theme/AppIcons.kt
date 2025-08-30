@@ -104,6 +104,7 @@ object AppIcons {
         val social = Icons.Filled.People
 	val meditation = Icons.Filled.SelfImprovement
 	val journal = Icons.Filled.Book
+	val poo = Icons.Filled.Wc
     }
     
     // Security Icons
