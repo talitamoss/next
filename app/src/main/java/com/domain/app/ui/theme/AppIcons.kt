@@ -99,6 +99,12 @@ object AppIcons {
         val weight = Icons.Filled.MonitorWeight
         val note = Icons.Filled.Note
         val habit = Icons.Filled.CheckCircle
+        val alcohol = Icons.Filled.LocalBar
+        val screenTime = Icons.Filled.PhoneAndroid
+        val social = Icons.Filled.People
+	val meditation = Icons.Filled.SelfImprovement
+	val journal = Icons.Filled.Book
+	val poo = Icons.Filled.Wc
     }
     
     // Security Icons
@@ -183,7 +189,7 @@ object AppIcons {
         val sms = Icons.Filled.Sms
     }
     
-    // Device Icons (NEW - was missing)
+    // Device Icons
     object Device {
         val camera = Icons.Filled.CameraAlt
         val cameraFront = Icons.Filled.CameraFront

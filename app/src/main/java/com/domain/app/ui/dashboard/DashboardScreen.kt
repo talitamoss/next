@@ -1,26 +1,30 @@
+// app/src/main/java/com/domain/app/ui/dashboard/DashboardScreen.kt
 package com.domain.app.ui.dashboard
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.ui.theme.AppIcons
 import com.domain.app.ui.utils.getPluginIcon
-import com.domain.app.ui.components.plugin.quickadd.UnifiedQuickAddDialog
+import com.domain.app.ui.components.plugin.quickadd.QuickAddDialog
 
+/**
+ * Main collection screen with clean 3x4 plugin grid
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
@@ -29,8 +33,6 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var showPluginSelector by remember { mutableStateOf(false) }
-    var showQuickAddDialog by remember { mutableStateOf(false) }
     var selectedPlugin by remember { mutableStateOf<Plugin?>(null) }
     
     Scaffold(
@@ -38,7 +40,7 @@ fun DashboardScreen(
             TopAppBar(
                 title = { 
                     Text(
-                        text = "Dashboard",
+                        text = "Collect",  // CHANGED from "Dashboard"
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -55,270 +57,130 @@ fun DashboardScreen(
         }
     ) { paddingValues ->
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Fixed(3),  // 3 columns for a clean grid
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Header section
-            item(span = { GridItemSpan(2) }) {
-                DashboardHeader(
-                    totalPlugins = uiState.dashboardPlugins.size,
-                    // FIX 1: Calculate activeToday from pluginDataCounts
-                    activeToday = uiState.pluginDataCounts.count { it.value > 0 }
-                )
-            }
-            
-            // Plugin tiles
-            items(uiState.dashboardPlugins) { plugin ->
-                PluginTile(
-                    plugin = plugin,
-                    dataCount = uiState.pluginDataCounts[plugin.id] ?: 0,
-                    onClick = { onNavigateToPlugin(plugin) },
-                    onQuickAdd = {
-                        selectedPlugin = plugin
-                        showQuickAddDialog = true
-                    }
-                )
-            }
-            
-            // Add plugin tile
-            item {
-                AddPluginTile(
-                    onClick = { showPluginSelector = true }
-                )
-            }
-            
-            // Empty tiles for layout balance
-            val pluginCount = uiState.dashboardPlugins.size
-            val remainingTiles = (4 - (pluginCount + 1) % 4) % 4
-            repeat(remainingTiles) {
-                item {
+            // Generate exactly 15 tiles (3x5 grid)
+            items(15) { index ->
+                val plugin = uiState.dashboardPlugins.getOrNull(index)
+                
+                if (plugin != null) {
+                    // Active plugin tile
+                    PluginTile(
+                        plugin = plugin,
+                        onClick = {
+                            selectedPlugin = plugin
+                        }
+                    )
+                } else {
+                    // Empty placeholder tile
                     EmptyPluginTile()
                 }
             }
         }
     }
     
-    // Quick add dialog - Using UnifiedQuickAddDialog
-    if (showQuickAddDialog && selectedPlugin != null) {
-        UnifiedQuickAddDialog(
-            plugin = selectedPlugin!!,
-            onDismiss = {
-                showQuickAddDialog = false
-                selectedPlugin = null
+    // Quick add dialog
+    selectedPlugin?.let { plugin ->
+        QuickAddDialog(
+            plugin = plugin,
+            onDismiss = { 
+                selectedPlugin = null 
             },
             onConfirm = { data ->
-                viewModel.onQuickAdd(selectedPlugin!!, data)
-                showQuickAddDialog = false
+                viewModel.onQuickAdd(plugin, data)
                 selectedPlugin = null
             }
         )
     }
-    
-    // Plugin selector bottom sheet
-    if (showPluginSelector) {
-        PluginSelectorBottomSheet(
-            plugins = uiState.allPlugins,
-            // FIX 2: Explicit type annotation for lambda parameter
-            onPluginSelected = { plugin: Plugin ->
-                viewModel.addPluginToDashboard(plugin.id)
-                showPluginSelector = false
-            },
-            onDismiss = {
-                showPluginSelector = false
-            }
-        )
-    }
 }
 
+/**
+ * Simplified plugin tile - just icon and name, fully clickable
+ */
 @Composable
-fun DashboardHeader(
-    totalPlugins: Int,
-    activeToday: Int
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp)
-        ) {
-            Text(
-                text = "Welcome back!",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                StatItem(
-                    label = "Active Plugins",
-                    value = totalPlugins.toString()
-                )
-                StatItem(
-                    label = "Tracked Today",
-                    value = activeToday.toString()
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun StatItem(
-    label: String,
-    value: String
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-fun PluginTile(
+private fun PluginTile(
     plugin: Plugin,
-    dataCount: Int,
-    onClick: () -> Unit,
-    onQuickAdd: () -> Unit,
-    modifier: Modifier = Modifier
+    onClick: () -> Unit
 ) {
     Card(
-        modifier = modifier
-            .aspectRatio(1f)
-            .clickable { onClick() },
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)  // Keep tiles square
+            .clickable { onClick() },  // Entire tile is clickable
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
         )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            // Icon and count
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Icon(
-                    imageVector = getPluginIcon(plugin),
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                if (dataCount > 0) {
-                    Badge {
-                        Text(
-                            text = dataCount.toString(),
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                }
-            }
+            // Plugin icon
+            Icon(
+                imageVector = getPluginIcon(plugin),
+                contentDescription = plugin.metadata.name,
+                modifier = Modifier.size(32.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
             
             // Plugin name
             Text(
                 text = plugin.metadata.name,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            
-            // Quick add button
-            Button(
-                onClick = onQuickAdd,
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-            ) {
-                Icon(
-                    imageVector = AppIcons.Action.add,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "Quick Add",
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
         }
     }
 }
 
+/**
+ * Empty placeholder tile for unused plugin slots
+ */
 @Composable
-fun AddPluginTile(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+private fun EmptyPluginTile() {
     Card(
-        modifier = modifier
-            .aspectRatio(1f)
-            .clickable { onClick() },
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f),  // Keep tiles square
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)
         ),
-        border = CardDefaults.outlinedCardBorder()
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 0.dp
+        )
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = AppIcons.Action.add,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                        .padding(4.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Add Plugin",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Icon(
+                imageVector = AppIcons.Action.add,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(24.dp)
+                    .alpha(0.3f),
+                tint = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
-
-@Composable
-fun EmptyPluginTile(
-    modifier: Modifier = Modifier
-) {
-    Spacer(
-        modifier = modifier.aspectRatio(1f)
-    )
-}
-
-// FIX 3: REMOVED duplicate PluginSelectorBottomSheet
-// This function already exists in PluginSelectorBottomSheet.kt

@@ -1,13 +1,17 @@
 // app/src/main/java/com/domain/app/ui/components/core/carousel/Carousel.kt
 package com.domain.app.ui.components.core.carousel
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.ScrollableDefaults
-import androidx.compose.foundation.gestures.animateScrollBy
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -22,7 +26,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -32,6 +35,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.ln
+import kotlin.math.roundToInt
+import kotlin.math.sign
 
 /**
  * A horizontal carousel selector component for choosing from a list of options.
@@ -45,6 +52,9 @@ import kotlinx.coroutines.launch
  * @param itemWidth Width of each item
  * @param colors Color configuration for the carousel
  * @param hapticFeedback Whether to provide haptic feedback on selection
+ * @param velocityThreshold Base velocity threshold for sensitivity (default: 1000f)
+ * @param maxItemsToSkip Maximum number of items that can be skipped in one swipe (default: 5)
+ * @param minVelocity Minimum velocity required to trigger any movement (default: 50f)
  */
 @Composable
 fun Carousel(
@@ -55,7 +65,10 @@ fun Carousel(
     height: Dp = 80.dp,
     itemWidth: Dp = 120.dp,
     colors: CarouselColors = CarouselDefaults.colors(),
-    hapticFeedback: Boolean = true
+    hapticFeedback: Boolean = true,
+    velocityThreshold: Float = 1000f,  // NEW: Base velocity for sensitivity
+    maxItemsToSkip: Int = 5,          // NEW: Maximum items to skip in one swipe
+    minVelocity: Float = 50f          // NEW: Minimum velocity to trigger movement
 ) {
     val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
@@ -69,14 +82,88 @@ fun Carousel(
     // Calculate padding to center items
     val sidePadding = maxOf(0.dp, (containerWidthDp - itemWidth) / 2)
     
-    // Auto-scroll to selected item
+    // Track if we're currently dragging
+    var isDragging by remember { mutableStateOf(false) }
+    var dragStartX by remember { mutableStateOf(0f) }
+    var dragStartTime by remember { mutableStateOf(0L) }
+    
+    // Auto-scroll to selected item when it changes (but not while dragging)
     LaunchedEffect(selectedOption) {
-        selectedOption?.let { selected ->
-            val index = options.indexOf(selected)
-            if (index >= 0) {
-                val targetScroll = (index * itemWidthPx).toInt()
-                scrollState.animateScrollTo(targetScroll)
+        if (!isDragging) {
+            selectedOption?.let { selected ->
+                val index = options.indexOf(selected)
+                if (index >= 0) {
+                    val targetScroll = (index * itemWidthPx).toInt()
+                    scrollState.animateScrollTo(targetScroll)
+                }
             }
+        }
+    }
+    
+    // Create draggable state for gesture handling
+    val draggableState = rememberDraggableState { delta ->
+        coroutineScope.launch {
+            scrollState.scrollBy(-delta)
+        }
+    }
+    
+    // Function to snap to the nearest item with velocity-based scrolling
+    fun snapToNearestItem(velocity: Float = 0f) {
+        coroutineScope.launch {
+            val currentScroll = scrollState.value
+            
+            // Calculate target based on velocity and current position
+            val targetIndex = if (abs(velocity) < minVelocity) {
+                // Low velocity: snap to nearest item
+                (currentScroll / itemWidthPx).roundToInt()
+            } else {
+                // Use velocity to determine how far to scroll
+                // This creates a smooth, proportional response to swipe speed
+                val currentExactPosition = currentScroll / itemWidthPx
+                
+                // Calculate distance based on velocity (smooth curve, not steps)
+                // The faster the swipe, the more items we skip
+                val velocityFactor = (abs(velocity) / velocityThreshold).coerceIn(0.1f, maxItemsToSkip.toFloat())
+                
+                // Apply a smoothing function (logarithmic feels more natural than linear)
+                val smoothedFactor = if (velocityFactor > 1f) {
+                    1f + kotlin.math.ln(velocityFactor)
+                } else {
+                    velocityFactor
+                }
+                
+                // Calculate the target position
+                val direction = -sign(velocity) // Negative velocity = forward swipe
+                val targetPosition = currentExactPosition + (direction * smoothedFactor)
+                
+                // Round to nearest item and constrain to bounds
+                targetPosition.roundToInt()
+            }.coerceIn(0, options.size - 1)
+            
+            // Calculate target scroll position
+            val targetScroll = (targetIndex * itemWidthPx).toInt()
+            
+            // Use a single smooth animation spec
+            // Duration adjusts based on distance for consistent feel
+            val distance = abs(targetScroll - currentScroll)
+            val baseDuration = 300 // milliseconds
+            val duration = (baseDuration + (distance / itemWidthPx * 50)).toInt().coerceIn(300, 600)
+            
+            val animationSpec = tween<Float>(
+                durationMillis = duration,
+                easing = FastOutSlowInEasing
+            )
+            
+            // Animate to target position
+            scrollState.animateScrollTo(targetScroll, animationSpec)
+            
+            // Provide haptic feedback
+            if (hapticFeedback && targetIndex != (currentScroll / itemWidthPx).roundToInt()) {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            }
+            
+            // Select the item we snapped to
+            options.getOrNull(targetIndex)?.let { onOptionSelected(it) }
         }
     }
     
@@ -86,60 +173,25 @@ fun Carousel(
             .height(height)
             .onSizeChanged { containerWidth = it.width }
     ) {
-        // Gradient overlays for fade effect
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .width(60.dp)
-                .fillMaxHeight()
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            colors.backgroundColor,
-                            colors.backgroundColor.copy(alpha = 0f)
-                        )
-                    )
-                )
-        )
-        
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .width(60.dp)
-                .fillMaxHeight()
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            colors.backgroundColor.copy(alpha = 0f),
-                            colors.backgroundColor
-                        )
-                    )
-                )
-        )
-        
-        // Carousel items
+        // Carousel items with improved scrolling
         Row(
             modifier = Modifier
                 .fillMaxSize()
                 .horizontalScroll(scrollState)
-                .pointerInput(Unit) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            // Snap to nearest item
-                            val currentScroll = scrollState.value.toFloat()
-                            val nearestIndex = (currentScroll / itemWidthPx + 0.5f).toInt()
-                                .coerceIn(0, options.size - 1)
-                            
-                            coroutineScope.launch {
-                                scrollState.animateScrollTo((nearestIndex * itemWidthPx).toInt())
-                                if (hapticFeedback && options[nearestIndex] != selectedOption) {
-                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                }
-                                onOptionSelected(options[nearestIndex])
-                            }
-                        }
-                    ) { _, _ -> }
-                },
+                .draggable(
+                    state = draggableState,
+                    orientation = Orientation.Horizontal,
+                    onDragStarted = { startPos ->
+                        isDragging = true
+                        dragStartX = startPos.x
+                        dragStartTime = System.currentTimeMillis()
+                    },
+                    onDragStopped = { velocity ->
+                        isDragging = false
+                        // Use velocity for momentum-based scrolling
+                        snapToNearestItem(-velocity) // Negative to match scroll direction
+                    }
+                ),
             horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -147,12 +199,16 @@ fun Carousel(
             Spacer(modifier = Modifier.width(sidePadding))
             
             // Items
-            options.forEach { option ->
+            options.forEachIndexed { index, option ->
+                val distanceFromCenter = abs(scrollState.value - (index * itemWidthPx))
+                val scale = (1f - (distanceFromCenter / (itemWidthPx * 3f))).coerceIn(0.8f, 1f)
+                
                 CarouselItem(
                     option = option,
                     isSelected = option == selectedOption,
                     width = itemWidth,
                     colors = colors,
+                    scale = scale,
                     onClick = {
                         if (hapticFeedback) {
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -161,7 +217,6 @@ fun Carousel(
                         
                         // Scroll to center the selected item
                         coroutineScope.launch {
-                            val index = options.indexOf(option)
                             scrollState.animateScrollTo((index * itemWidthPx).toInt())
                         }
                     }
@@ -172,20 +227,50 @@ fun Carousel(
             Spacer(modifier = Modifier.width(sidePadding))
         }
         
-        // Selection indicator
+        // Gradient overlays for fade effect (optional, for visual polish)
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Left fade
+            Box(
+                modifier = Modifier
+                    .width(40.dp)
+                    .fillMaxHeight()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                colors.backgroundColor,
+                                colors.backgroundColor.copy(alpha = 0f)
+                            )
+                        )
+                    )
+            )
+            
+            // Right fade
+            Box(
+                modifier = Modifier
+                    .width(40.dp)
+                    .fillMaxHeight()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                colors.backgroundColor.copy(alpha = 0f),
+                                colors.backgroundColor
+                            )
+                        )
+                    )
+            )
+        }
+        
+        // Optional: Selection indicator (a subtle line or box around selected item area)
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
                 .width(itemWidth + 8.dp)
-                .height(52.dp)
+                .height(height - 16.dp)
                 .clip(RoundedCornerShape(26.dp))
                 .background(Color.Transparent)
-                .then(
-                    Modifier.background(
-                        color = colors.selectionIndicatorColor,
-                        shape = RoundedCornerShape(26.dp)
-                    )
-                )
         )
     }
 }
@@ -199,16 +284,17 @@ private fun CarouselItem(
     isSelected: Boolean,
     width: Dp,
     colors: CarouselColors,
+    scale: Float = 1f,
     onClick: () -> Unit
 ) {
-    val scale by animateFloatAsState(
-        targetValue = if (isSelected) 1.1f else 1f,
+    val animatedScale by animateFloatAsState(
+        targetValue = if (isSelected) 1.15f else scale,
         animationSpec = spring(),
         label = "scale"
     )
     
     val alpha by animateFloatAsState(
-        targetValue = if (isSelected) 1f else 0.6f,
+        targetValue = if (isSelected) 1f else 0.7f,
         animationSpec = spring(),
         label = "alpha"
     )
@@ -216,9 +302,13 @@ private fun CarouselItem(
     Box(
         modifier = Modifier
             .width(width)
-            .scale(scale)
+            .scale(animatedScale)
             .alpha(alpha)
             .clip(RoundedCornerShape(20.dp))
+            .background(
+                if (isSelected) colors.selectionIndicatorColor 
+                else Color.Transparent
+            )
             .clickable { onClick() }
             .padding(vertical = 8.dp),
         contentAlignment = Alignment.Center
@@ -242,7 +332,7 @@ private fun CarouselItem(
 data class CarouselOption(
     val label: String,
     val value: Any,
-    val icon: String? = null
+    val icon: String? = null  // Made optional with default null
 )
 
 /**
@@ -265,7 +355,7 @@ object CarouselDefaults {
         backgroundColor: Color = MaterialTheme.colorScheme.surface,
         selectedTextColor: Color = MaterialTheme.colorScheme.primary,
         unselectedTextColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
-        selectionIndicatorColor: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+        selectionIndicatorColor: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
     ): CarouselColors = CarouselColors(
         backgroundColor = backgroundColor,
         selectedTextColor = selectedTextColor,
@@ -274,8 +364,20 @@ object CarouselDefaults {
     )
     
     @Composable
-    fun exerciseColors(): CarouselColors = colors(
-        selectedTextColor = Color(0xFF764BA2),
-        selectionIndicatorColor = Color(0xFF764BA2).copy(alpha = 0.08f)
+    fun movementColors(): CarouselColors = colors(
+        selectedTextColor = Color(0xFF9C27B0), // Purple for movement
+        selectionIndicatorColor = Color(0xFF9C27B0).copy(alpha = 0.12f)
+    )
+    
+    @Composable
+    fun energyColors(): CarouselColors = colors(
+        selectedTextColor = Color(0xFFFF6B35), // Orange for energy
+        selectionIndicatorColor = Color(0xFFFF6B35).copy(alpha = 0.12f)
+    )
+    
+    @Composable
+    fun moodColors(): CarouselColors = colors(
+        selectedTextColor = Color(0xFF4CAF50), // Green for mood
+        selectionIndicatorColor = Color(0xFF4CAF50).copy(alpha = 0.12f)
     )
 }

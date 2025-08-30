@@ -110,7 +110,9 @@ enum class InputType {
     COLOR_PICKER,              // Color selection (future)
     LOCATION_PICKER,           // Location selection (future)
     IMAGE_PICKER,              // Image selection (future)
-    MULTI_CHOICE               // Multiple choice selection (future)
+    MULTI_CHOICE,               // Multiple choice selection (future)
+    
+    BUTTON
 }
 
 /**
@@ -161,6 +163,7 @@ data class QuickAddConfig(
     val stages: List<QuickAddStage>? = null,
     val presets: List<QuickOption>? = null,
     val placeholder: String? = null,
+    val buttonText: String? = null,
     // UI customization fields:
     val topLabel: String? = null,      // Label for top of vertical slider (e.g., "Yeah")
     val bottomLabel: String? = null,   // Label for bottom of vertical slider (e.g., "Nah")
@@ -168,7 +171,8 @@ data class QuickAddConfig(
     val primaryColor: String? = null,  // Primary color as hex string (e.g., "#6B46C1")
     val secondaryColor: String? = null, // Secondary color for gradients as hex string
     // NEW: For multiple inputs on one screen
-    val inputs: List<QuickAddInput>? = null
+    val inputs: List<QuickAddInput>? = null,
+    val metadata: Map<String, Any>? = null
 )
 
 /**

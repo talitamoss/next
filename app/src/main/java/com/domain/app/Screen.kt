@@ -9,27 +9,15 @@ sealed class Screen(
     val title: String,
     val icon: ImageVector
 ) {
-    object Dashboard : Screen(
-        route = "dashboard",
-        title = "Dashboard",
+    object Collect : Screen(
+        route = "collect",
+        title = "Collect",
         icon = AppIcons.Navigation.dashboard
     )
     
-    object Data : Screen(
-        route = "data",
-        title = "Data",
+    object Reflect : Screen(
+        route = "reflect",
+        title = "Reflect",
         icon = AppIcons.Navigation.data
-    )
-    
-    object Social : Screen(
-        route = "social",
-        title = "Social",
-        icon = AppIcons.Plugin.health // TODO: Add dedicated social icon to AppIcons
-    )
-    
-    object Settings : Screen(
-        route = "settings",
-        title = "Settings",
-        icon = AppIcons.Navigation.settings
     )
 }
