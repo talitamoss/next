@@ -4,6 +4,8 @@ package com.domain.app.ui.theme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -25,7 +27,8 @@ object AppIcons {
         val data = Icons.Filled.Analytics
         val settings = Icons.Filled.Settings
         val social = Icons.Filled.People
-        val back = Icons.Filled.ArrowBack
+        val back = Icons.AutoMirrored.Filled.ArrowBack
+	val forward = Icons.AutoMirrored.Filled.ArrowForward
         val close = Icons.Filled.Close
         val menu = Icons.Filled.Menu
         val moreVert = Icons.Filled.MoreVert
@@ -105,6 +108,7 @@ object AppIcons {
 	val meditation = Icons.Filled.SelfImprovement
 	val journal = Icons.Filled.Book
 	val poo = Icons.Filled.Wc
+	val audio = Icons.Filled.Mic
     }
     
     // Security Icons

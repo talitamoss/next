@@ -196,6 +196,18 @@ class DataRepository @Inject constructor(
             entities.map { entityToDataPoint(it) }
         }
     }
+
+/**
+ * Get ALL data points in a time range (not filtered by plugin)
+ * Used by: ReflectViewModel for calendar view
+ */
+fun getDataInRange(
+    startTime: Instant,
+    endTime: Instant
+): Flow<List<DataPoint>> {
+    return dataPointDao.getDataInRange(startTime, endTime)
+        .map { entities -> entities.map { entityToDataPoint(it) } }
+}
     
     /**
      * Get recent data with limit (generic)

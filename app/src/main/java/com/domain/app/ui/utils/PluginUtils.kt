@@ -40,6 +40,7 @@ fun getPluginIconById(pluginId: String): ImageVector {
 	"journal" -> AppIcons.Plugin.journal
 	"medical" -> AppIcons.Plugin.medication
 	"poo" -> AppIcons.Plugin.poo
+	"audio" -> AppIcons.Plugin.audio
         else -> AppIcons.Plugin.custom
     }
 }
