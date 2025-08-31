@@ -254,7 +254,6 @@ private fun CalendarView(
                     if (date != null) {
                         DayCell(
                             date = date,
-                            isSelected = date == selectedDate,
                             isToday = date == LocalDate.now(),
                             activity = dayActivityMap[date],
                             onClick = { onDateSelected(date) },
@@ -272,29 +271,25 @@ private fun CalendarView(
 @Composable
 private fun DayCell(
     date: LocalDate,
-    isSelected: Boolean,
     isToday: Boolean,
     activity: DayActivity?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val entryCount = activity?.entryCount ?: 0
+    val backgroundColor = getIntensityColor(entryCount)
+    
     Box(
         modifier = modifier
             .aspectRatio(1f)
             .padding(2.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(
-                when {
-                    isSelected -> MaterialTheme.colorScheme.primaryContainer
-                    isToday -> MaterialTheme.colorScheme.secondaryContainer
-                    else -> Color.Transparent
-                }
-            )
+            .background(backgroundColor)
             .clickable(onClick = onClick)
             .then(
-                if (isToday && !isSelected) {
+                if (isToday) {
                     Modifier.border(
-                        width = 1.dp,
+                        width = 2.dp,
                         color = MaterialTheme.colorScheme.primary,
                         shape = RoundedCornerShape(8.dp)
                     )
@@ -302,48 +297,18 @@ private fun DayCell(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = date.dayOfMonth.toString(),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal,
-                color = when {
-                    isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
-                    isToday -> MaterialTheme.colorScheme.onSecondaryContainer
-                    else -> MaterialTheme.colorScheme.onSurface
-                }
-            )
-            
-            // Activity indicator dots
-            if (activity != null && activity.entryCount > 0) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    val dotCount = minOf(activity.entryCount, 5)
-                    repeat(dotCount) {
-                        Box(
-                            modifier = Modifier
-                                .size(4.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    when (activity.intensity) {
-                                        ActivityIntensity.LOW -> MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                                        ActivityIntensity.MEDIUM -> MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-                                        ActivityIntensity.HIGH -> MaterialTheme.colorScheme.primary
-                                    }
-                                )
-                        )
-                    }
-                }
+        Text(
+            text = date.dayOfMonth.toString(),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+            color = if (entryCount == 0) {
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+            } else {
+                MaterialTheme.colorScheme.onSurface
             }
-        }
+        )
     }
 }
-
 @Composable
 private fun SelectedDayDetails(
     date: LocalDate,
@@ -381,6 +346,18 @@ private fun SelectedDayDetails(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun getIntensityColor(entryCount: Int): Color {
+    val baseColor = MaterialTheme.colorScheme.primary
+    return when {
+        entryCount == 0 -> MaterialTheme.colorScheme.surface
+        entryCount in 1..3 -> baseColor.copy(alpha = 0.2f)
+        entryCount in 4..6 -> baseColor.copy(alpha = 0.4f)
+        entryCount in 7..10 -> baseColor.copy(alpha = 0.6f)
+        else -> baseColor.copy(alpha = 0.8f)  // 10+
     }
 }
 
