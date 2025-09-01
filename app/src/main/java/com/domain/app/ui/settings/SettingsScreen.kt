@@ -1,14 +1,22 @@
+// app/src/main/java/com/domain/app/ui/settings/SettingsScreen.kt
 package com.domain.app.ui.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -18,9 +26,16 @@ import com.domain.app.ui.theme.AppIcons
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToPlugins: () -> Unit,
+    onNavigateToProfile: () -> Unit,
+    onNavigateToAesthetic: () -> Unit,
+    onNavigateToPrivacy: () -> Unit,
     onNavigateToSecurity: () -> Unit,
+    onNavigateToDataManagement: () -> Unit,
+    onNavigateToPlugins: () -> Unit,
+    onNavigateToPluginSecurity: () -> Unit,
+    onNavigateToNotifications: () -> Unit,
     onNavigateToAbout: () -> Unit,
+    onNavigateToLicenses: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -32,8 +47,16 @@ fun SettingsScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = AppIcons.Navigation.back,
+                            imageVector = Icons.Default.ArrowBack,
                             contentDescription = "Back"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { /* TODO: Search */ }) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search Settings"
                         )
                     }
                 }
@@ -46,175 +69,145 @@ fun SettingsScreen(
                 .padding(paddingValues),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
-            // User section
+            // Profile Card
             item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Text(
-                            text = "User",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
-                        
-                        SettingsItem(
-                            icon = Icons.Default.AccountCircle,  // FIX: Using correct icon
-                            title = "Profile",
-                            subtitle = uiState.userName ?: "Not set",
-                            onClick = { /* Navigate to profile */ }
-                        )
-                        
-                        Divider(modifier = Modifier.padding(vertical = 8.dp))
-                        
-                        SettingsItem(
-                            icon = AppIcons.Security.shield,
-                            title = "Privacy",
-                            subtitle = "Manage your data privacy",
-                            onClick = { /* Navigate to privacy */ }
-                        )
-                    }
+                ProfileCard(
+                    userName = uiState.userName ?: "User",
+                    userEmail = uiState.userEmail ?: "user@example.com",
+                    onClick = onNavigateToProfile,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+            
+            // Aesthetic Section
+            item {
+                SettingsSection(title = "Aesthetic") {
+                    SettingsItem(
+                        icon = Icons.Default.Palette,
+                        title = "Theme & Style",
+                        subtitle = "Colors, dark mode, fonts",
+                        value = uiState.themeMode,
+                        onClick = onNavigateToAesthetic
+                    )
+                    
+                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                    
+                    SettingsItemWithSwitch(
+                        icon = Icons.Default.DarkMode,
+                        title = "Dark Mode",
+                        subtitle = "Easier on the eyes",
+                        checked = uiState.isDarkMode,
+                        onCheckedChange = { viewModel.toggleDarkMode() }
+                    )
                 }
             }
             
-            // Plugins section
+            // Privacy & Security Section
             item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Text(
-                            text = "Plugins",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
-                        
-                        SettingsItem(
-                            icon = AppIcons.Plugin.custom,
-                            title = "Manage Plugins",
-                            subtitle = "${uiState.enabledPluginCount} enabled",
-                            onClick = onNavigateToPlugins
-                        )
-                        
-                        Divider(modifier = Modifier.padding(vertical = 8.dp))
-                        
-                        SettingsItem(
-                            icon = AppIcons.Security.lock,
-                            title = "Plugin Security",
-                            subtitle = "Permissions and access control",
-                            onClick = onNavigateToSecurity
-                        )
-                    }
+                SettingsSection(title = "Privacy & Security") {
+                    SettingsItem(
+                        icon = Icons.Default.Lock,
+                        title = "Privacy",
+                        subtitle = "Data collection, analytics",
+                        onClick = onNavigateToPrivacy
+                    )
+                    
+                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                    
+                    SettingsItem(
+                        icon = Icons.Default.Security,
+                        title = "Security",
+                        subtitle = "Encryption, local storage",
+                        badge = "AES-256",
+                        onClick = onNavigateToSecurity
+                    )
                 }
             }
             
-            // Data section
+            // Plugins Section
             item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Text(
-                            text = "Data",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        )
-                        
-                        SettingsItem(
-                            icon = AppIcons.Data.upload,
-                            title = "Export Data",
-                            subtitle = "Download your data",
-                            onClick = { viewModel.exportData() }
-                        )
-                        
-                        Divider(modifier = Modifier.padding(vertical = 8.dp))
-                        
-                        SettingsItem(
-                            icon = AppIcons.Data.download,
-                            title = "Import Data",
-                            subtitle = "Restore from backup",
-                            onClick = { viewModel.importData() }
-                        )
-                        
-                        Divider(modifier = Modifier.padding(vertical = 8.dp))
-                        
-                        SettingsItem(
-                            icon = AppIcons.Action.delete,
-                            title = "Clear All Data",
-                            subtitle = "Delete all stored data",
-                            onClick = { viewModel.clearAllData() },
-                            contentColor = MaterialTheme.colorScheme.error
-                        )
-                    }
+                SettingsSection(title = "Plugins") {
+                    SettingsItem(
+                        icon = Icons.Default.Extension,
+                        title = "Manage Plugins",
+                        subtitle = "${uiState.enabledPluginCount} plugins enabled",
+                        onClick = onNavigateToPlugins
+                    )
+                    
+                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                    
+                    SettingsItem(
+                        icon = Icons.Default.AdminPanelSettings,
+                        title = "Plugin Security",
+                        subtitle = "Permissions & access",
+                        onClick = onNavigateToPluginSecurity
+                    )
                 }
             }
             
-            // App section
+            // Data Management Section
             item {
-                Card(
+                SettingsSection(title = "Data Management") {
+                    SettingsItem(
+                        icon = Icons.Default.Storage,
+                        title = "Manage Data",
+                        subtitle = "Export, import, backup",
+                        onClick = onNavigateToDataManagement
+                    )
+                }
+            }
+            
+            // Notifications Section
+            item {
+                SettingsSection(title = "Notifications") {
+                    SettingsItem(
+                        icon = Icons.Default.Notifications,
+                        title = "Notification Settings",
+                        subtitle = "Types, frequency, channels",
+                        onClick = onNavigateToNotifications
+                    )
+                }
+            }
+            
+            // About Section
+            item {
+                SettingsSection(title = "About") {
+                    SettingsItem(
+                        icon = Icons.Default.Info,
+                        title = "About",
+                        subtitle = "Version ${uiState.appVersion}",
+                        onClick = onNavigateToAbout
+                    )
+                    
+                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                    
+                    SettingsItem(
+                        icon = Icons.Default.Description,
+                        title = "Open Source Licenses",
+                        subtitle = "Third-party software",
+                        onClick = onNavigateToLicenses
+                    )
+                }
+            }
+            
+            // Footer
+            item {
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(vertical = 24.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "App",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 12.dp)
+                            text = "Made with ❤️ by Your Team",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            SettingsItem(
-                                icon = Icons.Default.Palette,  // FIX: Using correct icon for theme
-                                title = "Dark Mode",
-                                subtitle = if (uiState.isDarkMode) "Enabled" else "Disabled",
-                                onClick = null,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Switch(
-                                checked = uiState.isDarkMode,
-                                onCheckedChange = { viewModel.toggleDarkMode() }
-                            )
-                        }
-                        
-                        Divider(modifier = Modifier.padding(vertical = 8.dp))
-                        
-                        SettingsItem(
-                            icon = AppIcons.Communication.notifications,
-                            title = "Notifications",
-                            subtitle = if (uiState.notificationsEnabled) "Enabled" else "Disabled",
-                            onClick = { /* Navigate to notifications */ }
-                        )
-                        
-                        Divider(modifier = Modifier.padding(vertical = 8.dp))
-                        
-                        SettingsItem(
-                            icon = AppIcons.Status.info,
-                            title = "About",
-                            subtitle = "Version ${uiState.appVersion}",
-                            onClick = onNavigateToAbout
+                        Text(
+                            text = "Version ${uiState.appVersion} (Build ${uiState.buildNumber})",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     }
                 }
@@ -224,46 +217,198 @@ fun SettingsScreen(
 }
 
 @Composable
+private fun ProfileCard(
+    userName: String,
+    userEmail: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Avatar
+            Box(
+                modifier = Modifier
+                    .size(60.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFF667EEA),
+                                Color(0xFF764BA2)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = userName.take(2).uppercase(),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            // User Info
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = userName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = userEmail,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            // Arrow
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            Text(
+                text = title.uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+            content()
+        }
+    }
+}
+
+@Composable
 private fun SettingsItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     title: String,
     subtitle: String,
-    onClick: (() -> Unit)?,
-    modifier: Modifier = Modifier,
-    contentColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface
+    value: String? = null,
+    badge: String? = null,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable { onClick() }
-                } else {
-                    Modifier
-                }
-            )
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             modifier = Modifier.size(24.dp),
-            tint = contentColor
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        
+        Spacer(modifier = Modifier.width(16.dp))
         
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = contentColor
+                style = MaterialTheme.typography.bodyLarge
             )
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = contentColor.copy(alpha = 0.7f)
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        
+        value?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        
+        badge?.let {
+            Badge(
+                modifier = Modifier.padding(horizontal = 8.dp),
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Text(it)
+            }
+        }
+        
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun SettingsItemWithSwitch(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        
+        Spacer(modifier = Modifier.width(16.dp))
+        
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
     }
 }
