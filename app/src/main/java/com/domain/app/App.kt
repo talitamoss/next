@@ -1,35 +1,43 @@
+// app/src/main/java/com/domain/app/App.kt
 package com.domain.app
 
 import android.app.Application
-import com.domain.app.core.storage.encryption.EncryptionManager
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
+/**
+ * Application class for app-wide initialization
+ */
 @HiltAndroidApp
-class App : Application() {
+class App : Application(), Configuration.Provider {
     
-    lateinit var encryptionManager: EncryptionManager
-        private set
+    @Inject
+    lateinit var workerFactory: HiltWorkerFactory
     
     override fun onCreate() {
         super.onCreate()
         
-        // Initialize encryption manager
-        encryptionManager = EncryptionManager(this)
-        
-        // Initialize other app-wide components here
-        initializeLogging()
+        // Initialize any app-wide components here
+        initializeApp()
     }
     
-    private fun initializeLogging() {
-        // In production, initialize crash reporting and logging
-    }
+    /**
+     * Provide WorkManager configuration with Hilt integration
+     */
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(workerFactory)
+            .build()
     
-    companion object {
-        lateinit var instance: App
-            private set
-    }
-    
-    init {
-        instance = this
+    private fun initializeApp() {
+        // Initialize crash reporting, analytics, etc.
+        // This is where you'd initialize any third-party SDKs
     }
 }
+
+// Don't forget to add this to AndroidManifest.xml:
+// <application
+//     android:name=".App"
+//     ... >

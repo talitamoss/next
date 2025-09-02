@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     id("kotlin-kapt")
     id("com.google.dagger.hilt.android")
+    id("kotlinx-serialization") version "1.9.0"
 }
 
 android {
@@ -106,6 +107,19 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+     // WorkManager for scheduled backups
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    
+    // Hilt integration with WorkManager
+    implementation("androidx.hilt:hilt-work:1.1.0")
+    kapt("androidx.hilt:hilt-compiler:1.1.0")
+    
+    // Serialization for backup data (if not already included)
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+    
+    // DocumentFile for file operations (if not already included)
+    implementation("androidx.documentfile:documentfile:1.0.1")
 }
 
 kapt {
