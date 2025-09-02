@@ -495,9 +495,9 @@ class UserPreferences @Inject constructor(
     /**
      * Check if this is the first time the app is launched
      */
-    val isFirstLaunch: Flow<Boolean> = dataStore.data
-        .map { preferences ->
-            !preferences[KEY_FIRST_LAUNCH] ?: true
+val isFirstLaunch: Flow<Boolean> = dataStore.data
+    .map { preferences ->
+        preferences[KEY_FIRST_LAUNCH] != true
         }
     
     /**

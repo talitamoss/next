@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.domain.app.ui.settings.DataManagementViewModel
+import com.domain.app.ui.settings.sections.ExportFormat
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -385,10 +386,12 @@ private fun BackupSettingItem(
             )
         }
         
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange
-        )
+		Switch(
+                        checked = uiState.autoBackupEnabled,
+                        onCheckedChange = { enabled ->
+                            viewModel.toggleAutoBackup(enabled)  // Pass the enabled parameter
+                        }
+                    )
     }
 }
 
@@ -590,10 +593,4 @@ private fun BackupProgressDialog(
             }
         }
     )
-}
-
-enum class ExportFormat(val displayName: String, val description: String) {
-    JSON("JSON", "Complete backup"),
-    CSV("CSV", "Spreadsheet compatible"),
-    ZIP("ZIP", "All data + attachments")
 }

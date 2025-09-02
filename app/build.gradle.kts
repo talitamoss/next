@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     id("kotlin-kapt")
     id("com.google.dagger.hilt.android")
-    id("kotlinx-serialization") version "1.9.0"
+    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.0"
 }
 
 android {
@@ -120,6 +120,7 @@ dependencies {
     
     // DocumentFile for file operations (if not already included)
     implementation("androidx.documentfile:documentfile:1.0.1")
+
 }
 
 kapt {

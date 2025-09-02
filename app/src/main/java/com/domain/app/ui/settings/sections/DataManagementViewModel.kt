@@ -1,19 +1,28 @@
-// app/src/main/java/com/domain/app/ui/settings/DataManagementViewModel.kt
-package com.domain.app.ui.settings
+// app/src/main/java/com/domain/app/ui/settings/sections/DataManagementViewModel.kt
+package com.domain.app.ui.settings.sections
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.domain.app.core.backup.*
 import com.domain.app.core.data.DataRepository
 import com.domain.app.core.preferences.UserPreferences
-import com.domain.app.ui.settings.sections.ExportFormat
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
+
+// Export format enum
+enum class ExportFormat {
+    JSON,
+    CSV,
+    ZIP
+}
 
 data class DataManagementUiState(
     val totalDataPoints: Int = 0,
@@ -22,9 +31,13 @@ data class DataManagementUiState(
     val autoBackupEnabled: Boolean = false,
     val backupTime: String = "2:00 AM",
     val backupLocation: String = "Local storage",
+    val backupFrequency: String = "daily",
+    val backupWifiOnly: Boolean = true,
     val isExporting: Boolean = false,
     val isImporting: Boolean = false,
+    val isBackingUp: Boolean = false,
     val exportProgress: Float = 0f,
+    val availableBackups: List<File> = emptyList(),
     val message: String? = null
 )
 
@@ -32,27 +45,34 @@ data class DataManagementUiState(
 class DataManagementViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dataRepository: DataRepository,
-    private val userPreferences: UserPreferences
+    private val userPreferences: UserPreferences,
+    private val backupManager: BackupManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(DataManagementUiState())
     val uiState: StateFlow<DataManagementUiState> = _uiState.asStateFlow()
     
     init {
-        loadDataStatistics()
+        loadDataStats()
         observeBackupSettings()
+        loadAvailableBackups()
     }
     
-    private fun loadDataStatistics() {
+    private fun loadDataStats() {
         viewModelScope.launch {
-            // Get total data points
+            // Count total data points using Flow
             dataRepository.getAllDataPoints().collect { dataPoints ->
                 _uiState.update { state ->
-                    state.copy(
-                        totalDataPoints = dataPoints.size,
-                        storageUsedMB = calculateStorageUsed(dataPoints.size)
-                    )
+                    state.copy(totalDataPoints = dataPoints.size)
                 }
+            }
+        }
+        
+        // Calculate storage used
+        viewModelScope.launch {
+            val storageSize = calculateStorageUsed()
+            _uiState.update { state ->
+                state.copy(storageUsedMB = formatStorageSize(storageSize))
             }
         }
         
@@ -78,46 +98,102 @@ class DataManagementViewModel @Inject constructor(
                 _uiState.update { it.copy(autoBackupEnabled = enabled) }
             }
         }
+        
+        viewModelScope.launch {
+            userPreferences.backupFrequency.collect { frequency ->
+                _uiState.update { it.copy(backupFrequency = frequency) }
+            }
+        }
+        
+        viewModelScope.launch {
+            userPreferences.backupWifiOnly.collect { wifiOnly ->
+                _uiState.update { it.copy(backupWifiOnly = wifiOnly) }
+            }
+        }
     }
     
-    fun toggleAutoBackup() {
+    private fun loadAvailableBackups() {
         viewModelScope.launch {
-            val newState = !_uiState.value.autoBackupEnabled
-            userPreferences.setAutoBackupEnabled(newState)
+            val backups = backupManager.listBackups()
+            _uiState.update { state ->
+                state.copy(availableBackups = backups.map { File(it.uri.path ?: "") })
+            }
+        }
+    }
+    
+    private fun calculateStorageUsed(): Long {
+        // Calculate database size + backup size
+        val dbFile = context.getDatabasePath("app_database")
+        val dbSize = if (dbFile.exists()) dbFile.length() else 0L
+        val backupSize = backupManager.getBackupStorageSize()
+        return dbSize + backupSize
+    }
+    
+    private fun formatStorageSize(bytes: Long): String {
+        return when {
+            bytes < 1024 -> "$bytes B"
+            bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+            else -> "${bytes / (1024 * 1024)} MB"
+        }
+    }
+    
+    private fun formatBackupTime(timestamp: Long): String {
+        val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+        return dateFormat.format(Date(timestamp))
+    }
+    
+    fun toggleAutoBackup(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferences.setAutoBackupEnabled(enabled)
             
-            if (newState) {
-                // Schedule automatic backups
+            if (enabled) {
                 scheduleAutoBackup()
             } else {
-                // Cancel scheduled backups
                 cancelAutoBackup()
             }
         }
     }
     
-    fun exportData(format: ExportFormat, encrypt: Boolean) {
+    fun updateBackupFrequency(frequency: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isExporting = true, exportProgress = 0f) }
+            userPreferences.setBackupFrequency(frequency)
+            if (_uiState.value.autoBackupEnabled) {
+                // Reschedule with new frequency
+                cancelAutoBackup()
+                scheduleAutoBackup()
+            }
+        }
+    }
+    
+    fun updateBackupWifiOnly(wifiOnly: Boolean) {
+        viewModelScope.launch {
+            userPreferences.setBackupWifiOnly(wifiOnly)
+            if (_uiState.value.autoBackupEnabled) {
+                // Reschedule with new settings
+                cancelAutoBackup()
+                scheduleAutoBackup()
+            }
+        }
+    }
+    
+    fun exportData(format: ExportFormat, encryptExport: Boolean) {
+        viewModelScope.launch {
+            _uiState.update { 
+                it.copy(isExporting = true, exportProgress = 0f)
+            }
             
             try {
-                // Simulate export progress
-                for (i in 1..10) {
-                    _uiState.update { it.copy(exportProgress = i * 0.1f) }
-                    kotlinx.coroutines.delay(100)
-                }
-                
-                // Perform actual export
                 when (format) {
-                    ExportFormat.JSON -> exportAsJson(encrypt)
-                    ExportFormat.CSV -> exportAsCsv(encrypt)
-                    ExportFormat.ZIP -> exportAsZip(encrypt)
+                    ExportFormat.JSON -> exportAsJson(encryptExport)
+                    ExportFormat.CSV -> exportAsCsv(encryptExport)
+                    ExportFormat.ZIP -> exportAsZip(encryptExport)
                 }
                 
                 _uiState.update { 
                     it.copy(
                         isExporting = false,
-                        exportProgress = 0f,
-                        message = "Data exported successfully!"
+                        exportProgress = 100f,
+                        message = "Export completed successfully!"
                     )
                 }
             } catch (e: Exception) {
@@ -142,22 +218,43 @@ class DataManagementViewModel @Inject constructor(
     fun backupNow() {
         viewModelScope.launch {
             try {
+                _uiState.update { it.copy(isBackingUp = true) }
+                
                 // Create backup
-                createBackup()
+                val result = backupManager.createBackup(encrypt = true)
                 
-                // Update last backup time
-                val currentTime = System.currentTimeMillis()
-                userPreferences.setLastBackupTime(currentTime)
-                
-                _uiState.update { 
-                    it.copy(
-                        lastBackupTime = formatBackupTime(currentTime),
-                        message = "Backup created successfully!"
-                    )
+                when (result) {
+                    is BackupResult.Success -> {
+                        // Update last backup time
+                        val currentTime = System.currentTimeMillis()
+                        userPreferences.setLastBackupTime(currentTime)
+                        
+                        _uiState.update { 
+                            it.copy(
+                                isBackingUp = false,
+                                lastBackupTime = formatBackupTime(currentTime),
+                                message = "Backup created successfully! ${result.itemCount} items backed up."
+                            )
+                        }
+                        
+                        // Reload available backups
+                        loadAvailableBackups()
+                    }
+                    is BackupResult.Error -> {
+                        _uiState.update { 
+                            it.copy(
+                                isBackingUp = false,
+                                message = "Backup failed: ${result.message}"
+                            )
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.update { 
-                    it.copy(message = "Backup failed: ${e.message}")
+                    it.copy(
+                        isBackingUp = false,
+                        message = "Backup failed: ${e.message}"
+                    )
                 }
             }
         }
@@ -189,72 +286,47 @@ class DataManagementViewModel @Inject constructor(
     }
     
     private suspend fun exportAsJson(encrypt: Boolean) {
-        // TODO: Implement JSON export
-        val data = dataRepository.getAllDataPointsList()
+        // Get all data points using Flow
+        val dataPoints = dataRepository.getAllDataPoints().first()
+        
+        // TODO: Implement actual JSON export
+        // For now, just simulate progress
+        _uiState.update { it.copy(exportProgress = 50f) }
         // Convert to JSON and save to file
         // If encrypt = true, encrypt the JSON before saving
+        _uiState.update { it.copy(exportProgress = 100f) }
     }
     
     private suspend fun exportAsCsv(encrypt: Boolean) {
-        // TODO: Implement CSV export
-        val data = dataRepository.getAllDataPointsList()
+        // Get all data points using Flow
+        val dataPoints = dataRepository.getAllDataPoints().first()
+        
+        // TODO: Implement actual CSV export
+        _uiState.update { it.copy(exportProgress = 50f) }
         // Convert to CSV format and save
+        _uiState.update { it.copy(exportProgress = 100f) }
     }
     
     private suspend fun exportAsZip(encrypt: Boolean) {
-        // TODO: Implement ZIP export with all data and attachments
-        val data = dataRepository.getAllDataPointsList()
+        // Get all data points using Flow
+        val dataPoints = dataRepository.getAllDataPoints().first()
+        
+        // TODO: Implement actual ZIP export
+        _uiState.update { it.copy(exportProgress = 50f) }
         // Create ZIP archive with all data
-    }
-    
-    private suspend fun createBackup() {
-        // TODO: Implement backup creation
-        // This would typically:
-        // 1. Export all data to JSON
-        // 2. Encrypt with user's key
-        // 3. Save to designated backup location
-        // 4. Optionally sync to cloud if enabled
+        _uiState.update { it.copy(exportProgress = 100f) }
     }
     
     private fun scheduleAutoBackup() {
-        // TODO: Use WorkManager to schedule daily backups
-        // This would schedule a PeriodicWorkRequest
+        // Use extension function from BackupWorker
+        context.scheduleAutoBackup(
+            frequency = _uiState.value.backupFrequency,
+            wifiOnly = _uiState.value.backupWifiOnly
+        )
     }
     
     private fun cancelAutoBackup() {
-        // TODO: Cancel WorkManager scheduled backups
-    }
-    
-    private fun calculateStorageUsed(dataPoints: Int): String {
-        // Rough estimate: assume each data point is ~1KB
-        val sizeInKB = dataPoints
-        return when {
-            sizeInKB < 1024 -> "$sizeInKB KB"
-            else -> String.format("%.1f MB", sizeInKB / 1024.0)
-        }
-    }
-    
-    private fun formatBackupTime(timestamp: Long): String {
-        val now = System.currentTimeMillis()
-        val diff = now - timestamp
-        
-        return when {
-            diff < 60_000 -> "Just now"
-            diff < 3600_000 -> "${diff / 60_000} minutes ago"
-            diff < 86400_000 -> "${diff / 3600_000} hours ago"
-            diff < 604800_000 -> "${diff / 86400_000} days ago"
-            else -> {
-                val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-                formatter.format(Date(timestamp))
-            }
-        }
+        // Use extension function from BackupWorker
+        context.cancelAutoBackup()
     }
 }
-
-// Extension to add missing UserPreferences functions
-suspend fun UserPreferences.setLastBackupTime(timestamp: Long) {
-    // TODO: Implement in UserPreferences
-}
-
-val UserPreferences.lastBackupTime: Flow<Long>
-    get() = flowOf(0L) // TODO: Implement in UserPreferences

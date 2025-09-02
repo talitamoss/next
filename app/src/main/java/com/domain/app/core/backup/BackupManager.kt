@@ -6,96 +6,15 @@ import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import com.domain.app.core.data.DataPoint
 import com.domain.app.core.data.DataRepository
-import com.domain.app.core.encryption.EncryptionManager
-import com.domain.app.core.plugin.PluginManager
-import com.domain.app.core.preferences.UserPreferences
+import com.domain.app.core.storage.encryption.EncryptionManager
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import kotlinx.coroutines.flow.first
 import java.io.*
 import java.text.SimpleDateFormat
+import java.time.Instant
 import java.util.*
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
-
-/**
- * Result of a backup operation
- */
-sealed class BackupResult {
-    data class Success(
-        val backupFile: File,
-        val itemCount: Int,
-        val sizeBytes: Long,
-        val timestamp: Long = System.currentTimeMillis()
-    ) : BackupResult()
-    
-    data class Failure(val error: String) : BackupResult()
-}
-
-/**
- * Result of a restore operation
- */
-sealed class RestoreResult {
-    data class Success(
-        val itemsRestored: Int,
-        val timestamp: Long = System.currentTimeMillis()
-    ) : RestoreResult()
-    
-    data class Failure(val error: String) : RestoreResult()
-}
-
-/**
- * Backup file format
- */
-enum class BackupFormat {
-    JSON,
-    CSV,
-    ZIP
-}
-
-/**
- * Data structure for backup metadata
- */
-@Serializable
-data class BackupMetadata(
-    val version: Int = 1,
-    val appVersion: String,
-    val timestamp: Long,
-    val deviceName: String,
-    val dataPointCount: Int,
-    val pluginDataIncluded: Boolean,
-    val encrypted: Boolean
-)
-
-/**
- * Complete backup data structure
- */
-@Serializable
-data class BackupData(
-    val metadata: BackupMetadata,
-    val dataPoints: List<SerializableDataPoint>,
-    val preferences: Map<String, String>,
-    val pluginData: Map<String, String>? = null
-)
-
-/**
- * Serializable version of DataPoint
- */
-@Serializable
-data class SerializableDataPoint(
-    val id: String,
-    val pluginId: String,
-    val type: String,
-    val data: Map<String, String>,
-    val timestamp: Long,
-    val synced: Boolean = false,
-    val encrypted: Boolean = false
-)
 
 /**
  * Manages backup and restore operations for app data
@@ -104,206 +23,66 @@ data class SerializableDataPoint(
 class BackupManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dataRepository: DataRepository,
-    private val encryptionManager: EncryptionManager,
-    private val pluginManager: PluginManager,
-    private val userPreferences: UserPreferences
+    private val encryptionManager: EncryptionManager
 ) {
     
-    private val json = Json {
-        prettyPrint = true
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-    }
-    
-    private val backupDir: File by lazy {
-        File(context.filesDir, "backups").apply {
-            if (!exists()) mkdirs()
-        }
-    }
-    
-    private val exportDir: File by lazy {
-        File(context.getExternalFilesDir(null), "exports").apply {
-            if (!exists()) mkdirs()
-        }
+    companion object {
+        private const val BACKUP_VERSION = 1
+        private const val BACKUP_FILE_PREFIX = "app_backup"
+        private const val BACKUP_FILE_EXTENSION = ".bak"
+        private const val ENCRYPTED_EXTENSION = ".enc"
+        private const val BACKUP_DIR = "backups"
+        private const val MAX_BACKUPS = 10
     }
     
     /**
-     * Create a backup of all app data
+     * Create a complete backup of all app data
      */
     suspend fun createBackup(
-        format: BackupFormat = BackupFormat.JSON,
-        includePluginData: Boolean = true,
+        location: Uri? = null,
         encrypt: Boolean = true
-    ): BackupResult = withContext(Dispatchers.IO) {
-        try {
-            // Collect all data
-            val dataPoints = dataRepository.getAllDataPointsList()
-            val preferences = userPreferences.exportPreferences()
-            
-            // Collect plugin data if requested
-            val pluginData = if (includePluginData) {
-                collectPluginData()
-            } else null
+    ): BackupResult {
+        return try {
+            // Get all data from repository - using Flow
+            val dataPoints = dataRepository.getAllDataPoints().first()
             
             // Create backup data structure
             val backupData = BackupData(
-                metadata = BackupMetadata(
-                    appVersion = getAppVersion(),
-                    timestamp = System.currentTimeMillis(),
-                    deviceName = android.os.Build.MODEL,
-                    dataPointCount = dataPoints.size,
-                    pluginDataIncluded = includePluginData,
-                    encrypted = encrypt
-                ),
-                dataPoints = dataPoints.map { it.toSerializable() },
-                preferences = preferences.mapValues { it.value.toString() },
-                pluginData = pluginData
+                version = BACKUP_VERSION,
+                timestamp = System.currentTimeMillis(),
+                dataPoints = dataPoints,
+                metadata = createBackupMetadata()
             )
             
-            // Create backup file based on format
-            val backupFile = when (format) {
-                BackupFormat.JSON -> createJsonBackup(backupData, encrypt)
-                BackupFormat.CSV -> createCsvBackup(dataPoints, encrypt)
-                BackupFormat.ZIP -> createZipBackup(backupData, encrypt)
+            // Serialize to JSON
+            val jsonData = serializeBackupData(backupData)
+            
+            // Encrypt if requested
+            val finalData = if (encrypt) {
+                encryptBackupData(jsonData)
+            } else {
+                jsonData.toByteArray()
             }
             
-            // Update last backup time
-            userPreferences.setLastBackupTime(System.currentTimeMillis())
+            // Save to file
+            val backupFile = if (location != null) {
+                saveToExternalLocation(location, finalData, encrypt)
+            } else {
+                saveToInternalStorage(finalData, encrypt)
+            }
+            
+            // Clean up old backups
+            cleanupOldBackups()
             
             BackupResult.Success(
                 backupFile = backupFile,
                 itemCount = dataPoints.size,
-                sizeBytes = backupFile.length()
+                sizeBytes = finalData.size.toLong(),
+                encrypted = encrypt
             )
         } catch (e: Exception) {
-            BackupResult.Failure("Backup failed: ${e.message}")
+            BackupResult.Error(e.message ?: "Unknown error during backup")
         }
-    }
-    
-    /**
-     * Create a JSON backup file
-     */
-    private suspend fun createJsonBackup(
-        backupData: BackupData,
-        encrypt: Boolean
-    ): File {
-        val fileName = generateBackupFileName("json")
-        val backupFile = File(backupDir, fileName)
-        
-        val jsonContent = json.encodeToString(backupData)
-        
-        if (encrypt) {
-            val encryptedContent = encryptionManager.encryptString(jsonContent)
-            backupFile.writeText(encryptedContent)
-        } else {
-            backupFile.writeText(jsonContent)
-        }
-        
-        return backupFile
-    }
-    
-    /**
-     * Create a CSV backup file
-     */
-    private suspend fun createCsvBackup(
-        dataPoints: List<DataPoint>,
-        encrypt: Boolean
-    ): File {
-        val fileName = generateBackupFileName("csv")
-        val backupFile = File(exportDir, fileName)
-        
-        val csvContent = buildString {
-            // Header
-            appendLine("ID,Plugin,Type,Data,Timestamp,Synced")
-            
-            // Data rows
-            dataPoints.forEach { point ->
-                append("\"${point.id}\",")
-                append("\"${point.pluginId}\",")
-                append("\"${point.type}\",")
-                append("\"${point.data}\",")
-                append("${point.timestamp},")
-                appendLine(point.synced)
-            }
-        }
-        
-        if (encrypt) {
-            val encryptedContent = encryptionManager.encryptString(csvContent)
-            backupFile.writeText(encryptedContent)
-        } else {
-            backupFile.writeText(csvContent)
-        }
-        
-        return backupFile
-    }
-    
-    /**
-     * Create a ZIP backup file containing all data
-     */
-    private suspend fun createZipBackup(
-        backupData: BackupData,
-        encrypt: Boolean
-    ): File {
-        val fileName = generateBackupFileName("zip")
-        val backupFile = File(exportDir, fileName)
-        
-        ZipOutputStream(FileOutputStream(backupFile)).use { zipOut ->
-            // Add metadata
-            val metadataEntry = ZipEntry("metadata.json")
-            zipOut.putNextEntry(metadataEntry)
-            val metadataJson = json.encodeToString(backupData.metadata)
-            zipOut.write(
-                if (encrypt) {
-                    encryptionManager.encryptString(metadataJson).toByteArray()
-                } else {
-                    metadataJson.toByteArray()
-                }
-            )
-            zipOut.closeEntry()
-            
-            // Add data points
-            val dataEntry = ZipEntry("data.json")
-            zipOut.putNextEntry(dataEntry)
-            val dataJson = json.encodeToString(backupData.dataPoints)
-            zipOut.write(
-                if (encrypt) {
-                    encryptionManager.encryptString(dataJson).toByteArray()
-                } else {
-                    dataJson.toByteArray()
-                }
-            )
-            zipOut.closeEntry()
-            
-            // Add preferences
-            val prefsEntry = ZipEntry("preferences.json")
-            zipOut.putNextEntry(prefsEntry)
-            val prefsJson = json.encodeToString(backupData.preferences)
-            zipOut.write(
-                if (encrypt) {
-                    encryptionManager.encryptString(prefsJson).toByteArray()
-                } else {
-                    prefsJson.toByteArray()
-                }
-            )
-            zipOut.closeEntry()
-            
-            // Add plugin data if present
-            backupData.pluginData?.let { pluginData ->
-                val pluginEntry = ZipEntry("plugins.json")
-                zipOut.putNextEntry(pluginEntry)
-                val pluginJson = json.encodeToString(pluginData)
-                zipOut.write(
-                    if (encrypt) {
-                        encryptionManager.encryptString(pluginJson).toByteArray()
-                    } else {
-                        pluginJson.toByteArray()
-                    }
-                )
-                zipOut.closeEntry()
-            }
-        }
-        
-        return backupFile
     }
     
     /**
@@ -311,176 +90,367 @@ class BackupManager @Inject constructor(
      */
     suspend fun restoreBackup(
         backupUri: Uri,
-        overwriteExisting: Boolean = false
-    ): RestoreResult = withContext(Dispatchers.IO) {
-        try {
+        decrypt: Boolean = true
+    ): RestoreResult {
+        return try {
             // Read backup file
-            val inputStream = context.contentResolver.openInputStream(backupUri)
-                ?: return@withContext RestoreResult.Failure("Cannot open backup file")
-            
-            val content = inputStream.bufferedReader().use { it.readText() }
-            
-            // Try to decrypt if needed
-            val jsonContent = try {
-                encryptionManager.decryptString(content)
-            } catch (e: Exception) {
-                // Not encrypted or decryption failed, try as plain text
-                content
-            }
-            
-            // Parse backup data
-            val backupData = json.decodeFromString<BackupData>(jsonContent)
+            val backupData = readBackupFile(backupUri, decrypt)
             
             // Validate backup version
-            if (backupData.metadata.version > 1) {
-                return@withContext RestoreResult.Failure("Backup version not supported")
+            if (backupData.version > BACKUP_VERSION) {
+                return RestoreResult.Error("Backup version not supported")
             }
             
-            // Clear existing data if requested
-            if (overwriteExisting) {
-                dataRepository.clearAllData()
-            }
+            // Clear existing data (optional - could merge instead)
+            dataRepository.clearAllData()
             
             // Restore data points
             var restoredCount = 0
-            backupData.dataPoints.forEach { serializedPoint ->
-                val dataPoint = serializedPoint.toDataPoint()
+            backupData.dataPoints.forEach { dataPoint ->
                 dataRepository.insertDataPoint(dataPoint)
                 restoredCount++
             }
             
-            // Restore preferences
-            // Note: This would need implementation in UserPreferences to import preferences
-            
-            // Restore plugin data if present
-            backupData.pluginData?.let { pluginData ->
-                restorePluginData(pluginData)
-            }
-            
-            RestoreResult.Success(itemsRestored = restoredCount)
+            RestoreResult.Success(
+                itemCount = restoredCount,
+                timestamp = backupData.timestamp
+            )
         } catch (e: Exception) {
-            RestoreResult.Failure("Restore failed: ${e.message}")
+            RestoreResult.Error(e.message ?: "Unknown error during restore")
         }
     }
     
     /**
-     * Export data to external storage
+     * List available backup files
      */
-    suspend fun exportData(
-        format: BackupFormat,
-        encrypt: Boolean = false
-    ): File? = withContext(Dispatchers.IO) {
-        val result = createBackup(format, includePluginData = true, encrypt = encrypt)
-        when (result) {
-            is BackupResult.Success -> {
-                // Copy to exports directory for user access
-                val exportFile = File(exportDir, result.backupFile.name)
-                result.backupFile.copyTo(exportFile, overwrite = true)
-                exportFile
-            }
-            is BackupResult.Failure -> null
-        }
-    }
-    
-    /**
-     * Get list of available backups
-     */
-    fun getAvailableBackups(): List<File> {
+    fun listBackups(): List<BackupInfo> {
+        val backupDir = File(context.filesDir, BACKUP_DIR)
+        if (!backupDir.exists()) return emptyList()
+        
         return backupDir.listFiles { file ->
-            file.extension in listOf("json", "csv", "zip")
-        }?.sortedByDescending { it.lastModified() } ?: emptyList()
+            file.name.startsWith(BACKUP_FILE_PREFIX) && 
+            (file.name.endsWith(BACKUP_FILE_EXTENSION) || 
+             file.name.endsWith(ENCRYPTED_EXTENSION))
+        }?.map { file ->
+            BackupInfo(
+                filename = file.name,
+                timestamp = file.lastModified(),
+                sizeBytes = file.length(),
+                encrypted = file.name.endsWith(ENCRYPTED_EXTENSION),
+                uri = Uri.fromFile(file)
+            )
+        }?.sortedByDescending { it.timestamp } ?: emptyList()
     }
     
     /**
-     * Delete old backups to save space
+     * Delete a specific backup
      */
-    suspend fun cleanupOldBackups(keepCount: Int = 5) = withContext(Dispatchers.IO) {
-        val backups = getAvailableBackups()
-        if (backups.size > keepCount) {
-            backups.drop(keepCount).forEach { file ->
-                file.delete()
-            }
+    fun deleteBackup(backupUri: Uri): Boolean {
+        return try {
+            val file = File(backupUri.path ?: return false)
+            file.delete()
+        } catch (e: Exception) {
+            false
         }
     }
     
     /**
-     * Generate a backup file name with timestamp
+     * Get backup directory size
      */
-    private fun generateBackupFileName(extension: String): String {
-        val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-        val timestamp = dateFormat.format(Date())
-        return "backup_${timestamp}.$extension"
+    fun getBackupStorageSize(): Long {
+        val backupDir = File(context.filesDir, BACKUP_DIR)
+        if (!backupDir.exists()) return 0
+        
+        return backupDir.walkTopDown()
+            .filter { it.isFile }
+            .map { it.length() }
+            .sum()
     }
     
-    /**
-     * Get app version for backup metadata
-     */
+    // ========== PRIVATE HELPER METHODS ==========
+    
+    private fun createBackupMetadata(): BackupMetadata {
+        return BackupMetadata(
+            deviceModel = android.os.Build.MODEL,
+            androidVersion = android.os.Build.VERSION.SDK_INT,
+            appVersion = getAppVersion(),
+            createdBy = "App Backup System"
+        )
+    }
+    
     private fun getAppVersion(): String {
         return try {
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            packageInfo.versionName ?: "unknown"
+            packageInfo.versionName ?: "1.0"
         } catch (e: Exception) {
-            "unknown"
+            "1.0"
         }
     }
     
-    /**
-     * Collect plugin-specific data for backup
-     */
-    private suspend fun collectPluginData(): Map<String, String> {
-        val pluginData = mutableMapOf<String, String>()
-        
-        // Get all active plugins
-        val activePlugins = pluginManager.getAllActivePlugins()
-        
-        activePlugins.forEach { plugin ->
-            // Each plugin could implement a backup interface
-            // For now, we'll just store plugin states
-            pluginData[plugin.id] = "active"
+    private fun serializeBackupData(backupData: BackupData): String {
+        // Simple JSON serialization
+        // In production, use kotlinx.serialization or Gson
+        val dataPointsJson = backupData.dataPoints.joinToString(",", "[", "]") { dataPoint ->
+            """
+            {
+                "id": "${dataPoint.id}",
+                "pluginId": "${dataPoint.pluginId}",
+                "timestamp": ${dataPoint.timestamp.toEpochMilli()},
+                "type": "${dataPoint.type}",
+                "value": ${serializeValue(dataPoint.value)}
+            }
+            """.trimIndent()
         }
         
-        return pluginData
-    }
-    
-    /**
-     * Restore plugin-specific data from backup
-     */
-    private suspend fun restorePluginData(pluginData: Map<String, String>) {
-        pluginData.forEach { (pluginId, state) ->
-            if (state == "active") {
-                // Re-enable plugin if it was active in backup
-                pluginManager.enablePlugin(pluginId)
+        return """
+        {
+            "version": ${backupData.version},
+            "timestamp": ${backupData.timestamp},
+            "dataPoints": $dataPointsJson,
+            "metadata": {
+                "deviceModel": "${backupData.metadata.deviceModel}",
+                "androidVersion": ${backupData.metadata.androidVersion},
+                "appVersion": "${backupData.metadata.appVersion}",
+                "createdBy": "${backupData.metadata.createdBy}"
             }
         }
+        """.trimIndent()
     }
     
-    /**
-     * Convert DataPoint to SerializableDataPoint
-     */
-    private fun DataPoint.toSerializable(): SerializableDataPoint {
-        return SerializableDataPoint(
-            id = this.id,
-            pluginId = this.pluginId,
-            type = this.type,
-            data = this.data,
-            timestamp = this.timestamp,
-            synced = this.synced,
-            encrypted = this.encrypted
+    private fun serializeValue(value: Any): String {
+        return when (value) {
+            is String -> "\"$value\""
+            is Number -> value.toString()
+            is Boolean -> value.toString()
+            is Map<*, *> -> {
+                value.entries.joinToString(",", "{", "}") { (k, v) ->
+                    "\"$k\": ${serializeValue(v ?: "null")}"
+                }
+            }
+            is List<*> -> {
+                value.joinToString(",", "[", "]") { 
+                    serializeValue(it ?: "null")
+                }
+            }
+            else -> "\"${value}\""
+        }
+    }
+    
+    private fun encryptBackupData(data: String): ByteArray {
+        return encryptionManager.encrypt(data.toByteArray()).let { encryptedData ->
+            // Combine IV and encrypted data
+            encryptedData.iv + encryptedData.data
+        }
+    }
+    
+    private fun decryptBackupData(data: ByteArray): String {
+        // Split IV and encrypted data
+        val iv = data.sliceArray(0..11)
+        val encryptedBytes = data.sliceArray(12 until data.size)
+        
+        val decrypted = encryptionManager.decrypt(
+            com.domain.app.core.storage.encryption.EncryptedData(encryptedBytes, iv)
+        )
+        return String(decrypted)
+    }
+    
+    private fun saveToInternalStorage(data: ByteArray, encrypted: Boolean): Uri {
+        val backupDir = File(context.filesDir, BACKUP_DIR)
+        if (!backupDir.exists()) {
+            backupDir.mkdirs()
+        }
+        
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val extension = if (encrypted) ENCRYPTED_EXTENSION else BACKUP_FILE_EXTENSION
+        val filename = "${BACKUP_FILE_PREFIX}_$timestamp$extension"
+        
+        val file = File(backupDir, filename)
+        file.writeBytes(data)
+        
+        return Uri.fromFile(file)
+    }
+    
+    private fun saveToExternalLocation(uri: Uri, data: ByteArray, encrypted: Boolean): Uri {
+        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+            outputStream.write(data)
+        }
+        return uri
+    }
+    
+    private suspend fun readBackupFile(uri: Uri, decrypt: Boolean): BackupData {
+        val data = context.contentResolver.openInputStream(uri)?.use { inputStream ->
+            inputStream.readBytes()
+        } ?: throw IOException("Cannot read backup file")
+        
+        val jsonData = if (decrypt && uri.toString().endsWith(ENCRYPTED_EXTENSION)) {
+            decryptBackupData(data)
+        } else {
+            String(data)
+        }
+        
+        return parseBackupData(jsonData)
+    }
+    
+    private fun parseBackupData(json: String): BackupData {
+        // Simple JSON parsing - in production use proper JSON library
+        // This is a simplified version for the example
+        
+        // Extract version
+        val versionMatch = """"version":\s*(\d+)""".toRegex().find(json)
+        val version = versionMatch?.groupValues?.get(1)?.toInt() ?: 1
+        
+        // Extract timestamp
+        val timestampMatch = """"timestamp":\s*(\d+)""".toRegex().find(json)
+        val timestamp = timestampMatch?.groupValues?.get(1)?.toLong() ?: 0L
+        
+        // Parse data points (simplified)
+        val dataPoints = mutableListOf<DataPoint>()
+        val dataPointsMatch = """"dataPoints":\s*\[(.*?)\]""".toRegex(RegexOption.DOT_MATCHES_ALL).find(json)
+        val dataPointsJson = dataPointsMatch?.groupValues?.get(1) ?: ""
+        
+        // Parse each data point
+        val dataPointPattern = """\{[^}]*\}""".toRegex()
+        dataPointPattern.findAll(dataPointsJson).forEach { match ->
+            val dpJson = match.value
+            val id = """"id":\s*"([^"]+)"""".toRegex().find(dpJson)?.groupValues?.get(1) ?: ""
+            val pluginId = """"pluginId":\s*"([^"]+)"""".toRegex().find(dpJson)?.groupValues?.get(1) ?: ""
+            val dpTimestamp = """"timestamp":\s*(\d+)""".toRegex().find(dpJson)?.groupValues?.get(1)?.toLong() ?: 0L
+            val type = """"type":\s*"([^"]+)"""".toRegex().find(dpJson)?.groupValues?.get(1) ?: ""
+            val valueMatch = """"value":\s*(.+?)(?:,|\})""".toRegex().find(dpJson)
+            val value = parseJsonValue(valueMatch?.groupValues?.get(1) ?: "null")
+            
+            dataPoints.add(
+                DataPoint(
+                    id = id,
+                    pluginId = pluginId,
+                    timestamp = Instant.ofEpochMilli(dpTimestamp),
+                    type = type,
+                    value = value
+                )
+            )
+        }
+        
+        // Parse metadata
+        val deviceModel = """"deviceModel":\s*"([^"]+)"""".toRegex().find(json)?.groupValues?.get(1) ?: ""
+        val androidVersion = """"androidVersion":\s*(\d+)""".toRegex().find(json)?.groupValues?.get(1)?.toInt() ?: 0
+        val appVersion = """"appVersion":\s*"([^"]+)"""".toRegex().find(json)?.groupValues?.get(1) ?: ""
+        val createdBy = """"createdBy":\s*"([^"]+)"""".toRegex().find(json)?.groupValues?.get(1) ?: ""
+        
+        return BackupData(
+            version = version,
+            timestamp = timestamp,
+            dataPoints = dataPoints,
+            metadata = BackupMetadata(
+                deviceModel = deviceModel,
+                androidVersion = androidVersion,
+                appVersion = appVersion,
+                createdBy = createdBy
+            )
         )
     }
     
-    /**
-     * Convert SerializableDataPoint back to DataPoint
-     */
-    private fun SerializableDataPoint.toDataPoint(): DataPoint {
-        return DataPoint(
-            id = this.id,
-            pluginId = this.pluginId,
-            type = this.type,
-            data = this.data,
-            timestamp = this.timestamp,
-            synced = this.synced,
-            encrypted = this.encrypted
-        )
+ private fun parseJsonValue(jsonValue: String): Any {
+        val trimmed = jsonValue.trim()
+        return when {
+            trimmed == "null" -> ""
+            trimmed.startsWith("\"") && trimmed.endsWith("\"") -> 
+                trimmed.substring(1, trimmed.length - 1)
+            trimmed == "true" -> true
+            trimmed == "false" -> false
+            trimmed.toDoubleOrNull() != null -> trimmed.toDouble()
+            trimmed.startsWith("{") -> {
+                // Type cast fix - ensure we return Map<String, Any>
+                val result = parseJsonObject(trimmed)
+                result as Map<String, Any>
+            }
+            trimmed.startsWith("[") -> parseJsonArray(trimmed)
+            else -> trimmed
+        }
     }
+    
+    private fun parseJsonObject(json: String): Map<String, Any> {
+        // Simplified JSON object parsing
+        val map = mutableMapOf<String, Any>()
+        val content = json.trim().removePrefix("{").removeSuffix("}")
+        if (content.isEmpty()) return map
+        
+        // This is a very basic parser - in production use a proper JSON library
+        val pairs = content.split(",")
+        pairs.forEach { pair ->
+            val parts = pair.split(":")
+            if (parts.size == 2) {
+                val key = parts[0].trim().removeSurrounding("\"")
+                val value = parseJsonValue(parts[1].trim())
+                map[key] = value
+            }
+        }
+        return map
+    }
+    
+    private fun parseJsonArray(json: String): List<Any> {
+        // Simplified JSON array parsing
+        val content = json.trim().removePrefix("[").removeSuffix("]")
+        if (content.isEmpty()) return emptyList()
+        
+        return content.split(",").map { parseJsonValue(it.trim()) }
+    }
+    
+  fun cleanupOldBackups() {  // Changed from private to public
+        val backupDir = File(context.filesDir, BACKUP_DIR)
+        if (!backupDir.exists()) return
+        
+        val backups = backupDir.listFiles { file ->
+            file.name.startsWith(BACKUP_FILE_PREFIX)
+        }?.sortedByDescending { it.lastModified() } ?: return
+        
+        // Keep only MAX_BACKUPS most recent files
+        if (backups.size > MAX_BACKUPS) {
+            backups.drop(MAX_BACKUPS).forEach { it.delete() }
+        }
+    }
+
+}
+
+// ========== DATA CLASSES ==========
+
+data class BackupData(
+    val version: Int,
+    val timestamp: Long,
+    val dataPoints: List<DataPoint>,
+    val metadata: BackupMetadata
+)
+
+data class BackupMetadata(
+    val deviceModel: String,
+    val androidVersion: Int,
+    val appVersion: String,
+    val createdBy: String
+)
+
+data class BackupInfo(
+    val filename: String,
+    val timestamp: Long,
+    val sizeBytes: Long,
+    val encrypted: Boolean,
+    val uri: Uri
+)
+
+sealed class BackupResult {
+    data class Success(
+        val backupFile: Uri,
+        val itemCount: Int,
+        val sizeBytes: Long,
+        val encrypted: Boolean
+    ) : BackupResult()
+    
+    data class Error(val message: String) : BackupResult()
+}
+
+sealed class RestoreResult {
+    data class Success(
+        val itemCount: Int,
+        val timestamp: Long
+    ) : RestoreResult()
+    
+    data class Error(val message: String) : RestoreResult()
 }
