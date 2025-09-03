@@ -349,25 +349,20 @@ class BackupManager @Inject constructor(
         )
     }
     
- private fun parseJsonValue(jsonValue: String): Any {
-        val trimmed = jsonValue.trim()
-        return when {
-            trimmed == "null" -> ""
-            trimmed.startsWith("\"") && trimmed.endsWith("\"") -> 
-                trimmed.substring(1, trimmed.length - 1)
-            trimmed == "true" -> true
-            trimmed == "false" -> false
-            trimmed.toDoubleOrNull() != null -> trimmed.toDouble()
-            trimmed.startsWith("{") -> {
-                // Type cast fix - ensure we return Map<String, Any>
-                val result = parseJsonObject(trimmed)
-                result as Map<String, Any>
-            }
-            trimmed.startsWith("[") -> parseJsonArray(trimmed)
-            else -> trimmed
-        }
+private fun parseJsonValue(jsonValue: String): Any {
+    val trimmed = jsonValue.trim()
+    return when {
+        trimmed == "null" -> ""
+        trimmed.startsWith("\"") && trimmed.endsWith("\"") -> 
+            trimmed.substring(1, trimmed.length - 1)
+        trimmed == "true" -> true
+        trimmed == "false" -> false
+        trimmed.toDoubleOrNull() != null -> trimmed.toDouble()
+        trimmed.startsWith("{") -> parseJsonObject(trimmed)  // NO CAST!
+        trimmed.startsWith("[") -> parseJsonArray(trimmed)
+        else -> trimmed
     }
-    
+}    
     private fun parseJsonObject(json: String): Map<String, Any> {
         // Simplified JSON object parsing
         val map = mutableMapOf<String, Any>()

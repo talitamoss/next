@@ -19,9 +19,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.domain.app.ui.settings.DataManagementViewModel
+import com.domain.app.ui.settings.sections.DataManagementViewModel
 import com.domain.app.ui.settings.sections.ExportFormat
 import kotlinx.coroutines.launch
+
+val ExportFormat.displayName: String
+    get() = when (this) {
+        ExportFormat.JSON -> "JSON"
+        ExportFormat.CSV -> "CSV"
+        ExportFormat.ZIP -> "ZIP Archive"
+    }
+
+val ExportFormat.description: String
+    get() = when (this) {
+        ExportFormat.JSON -> "JavaScript Object Notation - Human readable"
+        ExportFormat.CSV -> "Comma Separated Values - Excel compatible"
+        ExportFormat.ZIP -> "Compressed archive with all data"
+    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,16 +121,13 @@ fun DataManagementScreen(
                             modifier = Modifier.padding(16.dp)
                         )
                         
-                        BackupSettingItem(
-                            title = "Auto Backup",
-                            subtitle = if (uiState.autoBackupEnabled) {
-                                "Daily at ${uiState.backupTime}"
-                            } else {
-                                "Disabled"
-                            },
-                            checked = uiState.autoBackupEnabled,
-                            onCheckedChange = { viewModel.toggleAutoBackup() }
-                        )
+			 BackupSettingItem(
+			    title = "Auto Backup",
+			    subtitle = "Backup data automatically",
+			    checked = uiState.autoBackupEnabled,
+			    onCheckedChange = { enabled -> viewModel.toggleAutoBackup(enabled) }
+			)
+
                         
                         Divider(modifier = Modifier.padding(horizontal = 16.dp))
                         
@@ -385,13 +396,10 @@ private fun BackupSettingItem(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        
-		Switch(
-                        checked = uiState.autoBackupEnabled,
-                        onCheckedChange = { enabled ->
-                            viewModel.toggleAutoBackup(enabled)  // Pass the enabled parameter
-                        }
-                    )
+        Switch(
+            checked = checked,  // Use the parameter, not uiState
+            onCheckedChange = onCheckedChange  // Use the parameter, not viewModel
+        )
     }
 }
 
