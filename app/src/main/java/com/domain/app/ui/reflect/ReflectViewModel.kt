@@ -1,3 +1,4 @@
+// app/src/main/java/com/domain/app/ui/reflect/ReflectViewModel.kt
 package com.domain.app.ui.reflect
 
 import androidx.lifecycle.ViewModel
@@ -13,7 +14,7 @@ import java.time.*
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
-// Data Models
+// Enhanced Data Models with raw data support
 data class ReflectUiState(
     val currentYearMonth: YearMonth = YearMonth.now(),
     val currentMonthYear: String = "",
@@ -26,6 +27,7 @@ data class ReflectUiState(
     val mostActiveDay: String = "None",
     val availablePlugins: List<Plugin> = emptyList(),
     val selectedFilterPlugin: Plugin? = null,
+    val expandedEntryIds: Set<String> = emptySet(),  // Track which cards are expanded
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -51,14 +53,18 @@ data class DayData(
     val totalCount: Int = 0
 )
 
+// Enhanced DataEntry with raw value data
 data class DataEntry(
     val id: String,
     val pluginId: String,
     val pluginName: String,
-    val displayValue: String,
-    val note: String? = null,
+    val displayValue: String,  // Formatted summary
+    val rawValue: Map<String, Any?>,  // Raw data from DataPoint
+    val metadata: Map<String, Any?>?,  // Additional metadata
+    val note: String?,
     val time: String,
-    val timestamp: Instant
+    val timestamp: Instant,
+    val source: String? = null  // Data source (manual/auto/import)
 )
 
 @HiltViewModel
@@ -70,21 +76,32 @@ class ReflectViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ReflectUiState())
     val uiState: StateFlow<ReflectUiState> = _uiState.asStateFlow()
     
-    private val monthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
-    private val timeFormatter = DateTimeFormatter.ofPattern("h:mm a")
-    
-    private var allMonthDataPoints: List<DataPoint> = emptyList()
+    private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+    private val monthYearFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
     
     init {
-        loadAvailablePlugins()
-        loadCurrentMonth()
+        loadInitialData()
+        observeDataChanges()
     }
     
-    private fun loadAvailablePlugins() {
+    private fun loadInitialData() {
         viewModelScope.launch {
-            val plugins = pluginManager.getAllActivePlugins()
-            _uiState.update { it.copy(availablePlugins = plugins) }
+            val currentMonth = YearMonth.now()
+            updateMonthDisplay(currentMonth)
+            loadMonthData(currentMonth)
+            loadAvailablePlugins()
         }
+    }
+    
+    private fun observeDataChanges() {
+        dataRepository.getAllDataPoints()
+            .onEach { dataPoints ->
+                val currentMonth = _uiState.value.currentYearMonth
+                val monthData = filterDataPointsForMonth(dataPoints, currentMonth)
+                updateActivityMap(monthData)
+                updateStats(monthData)
+            }
+            .launchIn(viewModelScope)
     }
     
     fun previousMonth() {
@@ -98,158 +115,216 @@ class ReflectViewModel @Inject constructor(
     }
     
     private fun updateMonth(yearMonth: YearMonth) {
+        viewModelScope.launch {
+            updateMonthDisplay(yearMonth)
+            loadMonthData(yearMonth)
+            // Clear selected date and expanded cards when changing months
+            _uiState.update { 
+                it.copy(
+                    selectedDate = null, 
+                    selectedDayData = DayData(),
+                    expandedEntryIds = emptySet()
+                )
+            }
+        }
+    }
+    
+    private fun updateMonthDisplay(yearMonth: YearMonth) {
+        val display = yearMonth.format(monthYearFormatter)
         _uiState.update {
             it.copy(
                 currentYearMonth = yearMonth,
-                currentMonthYear = yearMonth.format(monthFormatter)
+                currentMonthYear = display
             )
         }
-        loadCurrentMonth()
     }
     
     fun selectDate(date: LocalDate) {
-        _uiState.update { it.copy(selectedDate = date) }
-        loadDayDetails(date)
-    }
-    
-    fun setPluginFilter(plugin: Plugin?) {
-        _uiState.update { it.copy(selectedFilterPlugin = plugin) }
-        applyFilter()
-    }
-    
-    private fun applyFilter() {
-        val selectedPlugin = _uiState.value.selectedFilterPlugin
-        val allActivityMap = _uiState.value.dayActivityMap
-        
-        val filteredMap = if (selectedPlugin == null) {
-            // Show all data
-            allActivityMap
-        } else {
-            // Filter by selected plugin
-            allActivityMap.mapNotNull { (date, activity) ->
-                val pluginCount = activity.pluginCounts[selectedPlugin.id] ?: 0
-                if (pluginCount > 0) {
-                    date to activity.copy(
-                        entryCount = pluginCount,
-                        intensity = getIntensityForCount(pluginCount)
-                    )
-                } else {
-                    null
-                }
-            }.toMap()
-        }
-        
-        // Recalculate stats for filtered data
-        val filteredDataPoints = if (selectedPlugin == null) {
-            allMonthDataPoints
-        } else {
-            allMonthDataPoints.filter { it.pluginId == selectedPlugin.id }
-        }
-        
-        val monthTotal = filteredDataPoints.size
-        val mostActive = calculateMostActiveDay(filteredMap)
-        val streak = calculateStreak(filteredDataPoints)
-        
-        _uiState.update {
-            it.copy(
-                filteredDayActivityMap = filteredMap,
-                monthlyTotal = monthTotal,
-                mostActiveDay = mostActive,
-                currentStreak = streak
-            )
-        }
-    }
-    
-    private fun loadCurrentMonth() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            
+            _uiState.update { 
+                it.copy(
+                    selectedDate = date,
+                    expandedEntryIds = emptySet()  // Reset expanded cards when selecting new date
+                )
+            }
+            loadDayDetails(date)
+        }
+    }
+    
+    fun toggleEntryExpanded(entryId: String) {
+        _uiState.update { state ->
+            val expandedIds = if (state.expandedEntryIds.contains(entryId)) {
+                state.expandedEntryIds - entryId
+            } else {
+                state.expandedEntryIds + entryId
+            }
+            state.copy(expandedEntryIds = expandedIds)
+        }
+    }
+    
+    fun deleteEntry(entryId: String) {
+        viewModelScope.launch {
             try {
-                val yearMonth = _uiState.value.currentYearMonth
-                val startOfMonth = yearMonth.atDay(1).atStartOfDay()
-                val endOfMonth = yearMonth.atEndOfMonth().atTime(23, 59, 59)
-                
-                dataRepository.getDataInRange(
-                    startTime = startOfMonth.toInstant(ZoneOffset.UTC),
-                    endTime = endOfMonth.toInstant(ZoneOffset.UTC)
-                ).first().let { dataPoints ->
-                    
-                    allMonthDataPoints = dataPoints
-                    
-                    // Create activity map with plugin counts
-                    val activityMap = createActivityMapWithPluginCounts(dataPoints)
-                    
-                    // Calculate initial stats (unfiltered)
-                    val streak = calculateStreak(dataPoints)
-                    val monthTotal = dataPoints.size
-                    val mostActive = calculateMostActiveDay(activityMap)
-                    
-                    _uiState.update {
-                        it.copy(
-                            currentMonthYear = yearMonth.format(monthFormatter),
-                            dayActivityMap = activityMap,
-                            filteredDayActivityMap = activityMap,
-                            currentStreak = streak,
-                            monthlyTotal = monthTotal,
-                            mostActiveDay = mostActive,
-                            isLoading = false
-                        )
-                    }
+                dataRepository.deleteDataPoint(entryId)
+                // Refresh the current day's data
+                _uiState.value.selectedDate?.let { date ->
+                    loadDayDetails(date)
+                }
+                // Remove from expanded if it was expanded
+                _uiState.update { state ->
+                    state.copy(expandedEntryIds = state.expandedEntryIds - entryId)
                 }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        error = "Failed to load month data: ${e.message}"
-                    )
+                    it.copy(error = "Failed to delete entry: ${e.message}")
                 }
             }
         }
     }
     
-    private fun loadDayDetails(date: LocalDate) {
+    fun setFilterPlugin(plugin: Plugin?) {
+        _uiState.update { state ->
+            val filteredMap = if (plugin != null) {
+                state.dayActivityMap.filterValues { activity ->
+                    activity.pluginCounts.containsKey(plugin.id)
+                }
+            } else {
+                state.dayActivityMap
+            }
+            
+            state.copy(
+                selectedFilterPlugin = plugin,
+                filteredDayActivityMap = filteredMap
+            )
+        }
+    }
+    
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
+    }
+    
+    private suspend fun loadAvailablePlugins() {
+        // FIXED: Use getAllActivePlugins() instead of getEnabledPlugins()
+        val plugins = pluginManager.getAllActivePlugins()
+        _uiState.update { it.copy(availablePlugins = plugins) }
+    }
+    
+    private suspend fun loadMonthData(yearMonth: YearMonth) {
+        try {
+            _uiState.update { it.copy(isLoading = true) }
+            
+            val startOfMonth = yearMonth.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val endOfMonth = yearMonth.atEndOfMonth().atTime(23, 59, 59)
+                .atZone(ZoneId.systemDefault()).toInstant()
+            
+            // FIXED: Use getDataInRange() instead of getDataPointsForDateRange()
+            dataRepository.getDataInRange(startOfMonth, endOfMonth)
+                .collect { dataPoints: List<DataPoint> ->  // FIXED: Explicit type declaration
+                    updateActivityMap(dataPoints)
+                    updateStats(dataPoints)
+                    _uiState.update { it.copy(isLoading = false) }
+                }
+        } catch (e: Exception) {
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    error = "Failed to load month data: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    private fun updateActivityMap(dataPoints: List<DataPoint>) {
+        val activityMap = createActivityMapWithPluginCounts(dataPoints)
+        
+        _uiState.update { state ->
+            val filteredMap = if (state.selectedFilterPlugin != null) {
+                activityMap.filterValues { activity ->
+                    activity.pluginCounts.containsKey(state.selectedFilterPlugin.id)
+                }
+            } else {
+                activityMap
+            }
+            
+            state.copy(
+                dayActivityMap = activityMap,
+                filteredDayActivityMap = filteredMap
+            )
+        }
+    }
+    
+    private fun updateStats(dataPoints: List<DataPoint>) {
+        val streak = calculateStreak(dataPoints)
+        val monthTotal = dataPoints.size
+        val mostActiveDay = calculateMostActiveDay(
+            createActivityMapWithPluginCounts(dataPoints)
+        )
+        
+        _uiState.update {
+            it.copy(
+                currentStreak = streak,
+                monthlyTotal = monthTotal,
+                mostActiveDay = mostActiveDay
+            )
+        }
+    }
+    
+    private suspend fun loadDayDetails(date: LocalDate) {
         viewModelScope.launch {
             try {
-                val startOfDay = date.atStartOfDay()
+                val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
                 val endOfDay = date.atTime(23, 59, 59)
+                    .atZone(ZoneId.systemDefault()).toInstant()
                 
-                dataRepository.getDataInRange(
-                    startTime = startOfDay.toInstant(ZoneOffset.UTC),
-                    endTime = endOfDay.toInstant(ZoneOffset.UTC)
-                ).first().let { dataPoints ->
-                    
-                    val plugins = pluginManager.getAllActivePlugins()
-                    val pluginMap = plugins.associateBy { it.id }
-                    
-                    val entries = dataPoints.map { dp ->
-                        DataEntry(
-                            id = dp.id,
-                            pluginId = dp.pluginId,
-                            pluginName = pluginMap[dp.pluginId]?.metadata?.name ?: dp.pluginId,
-                            displayValue = formatDataPointValue(dp),
-                            note = dp.metadata?.get("note"),
-                            time = dp.timestamp.atZone(ZoneId.systemDefault())
-                                .toLocalTime()
-                                .format(timeFormatter),
-                            timestamp = dp.timestamp
-                        )
-                    }.sortedByDescending { it.timestamp }
-                    
-                    _uiState.update {
-                        it.copy(
-                            selectedDayData = DayData(
-                                date = date,
-                                entries = entries,
-                                totalCount = entries.size
+                // FIXED: Use getDataInRange() and explicit type declaration
+                dataRepository.getDataInRange(startOfDay, endOfDay)
+                    .collect { dataPoints: List<DataPoint> ->  // FIXED: Explicit type
+                        val entries = dataPoints.map { dp: DataPoint ->  // FIXED: Explicit type
+                            val plugin = pluginManager.getPlugin(dp.pluginId)
+                            DataEntry(
+                                id = dp.id,
+                                pluginId = dp.pluginId,
+                                pluginName = plugin?.metadata?.name ?: dp.pluginId,
+                                displayValue = formatDataPointValue(dp),
+                                rawValue = dp.value,  // Include raw value map
+                                metadata = dp.metadata,  // Include metadata
+                                note = dp.metadata?.get("note") as? String,
+                                time = dp.timestamp.atZone(ZoneId.systemDefault())
+                                    .toLocalTime()
+                                    .format(timeFormatter),
+                                timestamp = dp.timestamp,
+                                source = dp.metadata?.get("source") as? String
                             )
-                        )
+                        }.sortedByDescending { it.timestamp }
+                        
+                        _uiState.update {
+                            it.copy(
+                                selectedDayData = DayData(
+                                    date = date,
+                                    entries = entries,
+                                    totalCount = entries.size
+                                )
+                            )
+                        }
                     }
-                }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(error = "Failed to load day details: ${e.message}")
                 }
             }
+        }
+    }
+    
+    private fun filterDataPointsForMonth(
+        dataPoints: List<DataPoint>, 
+        yearMonth: YearMonth
+    ): List<DataPoint> {
+        val startOfMonth = yearMonth.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
+        val endOfMonth = yearMonth.atEndOfMonth().atTime(23, 59, 59)
+            .atZone(ZoneId.systemDefault()).toInstant()
+        
+        return dataPoints.filter { dp ->
+            dp.timestamp in startOfMonth..endOfMonth
         }
     }
     
@@ -365,20 +440,20 @@ class ReflectViewModel @Inject constructor(
             else -> {
                 value.entries.firstOrNull { 
                     it.key !in listOf("note", "metadata", "timestamp", "source")
-                }?.let { "${it.value}" } ?: "Recorded"
+                }?.let { "${it.value}" } ?: "Data entry"
             }
         }
     }
     
     private fun formatDuration(seconds: Long): String {
+        val hours = seconds / 3600
+        val minutes = (seconds % 3600) / 60
+        val secs = seconds % 60
+        
         return when {
-            seconds < 60 -> "${seconds}s"
-            seconds < 3600 -> "${seconds / 60}m ${seconds % 60}s"
-            else -> "${seconds / 3600}h ${(seconds % 3600) / 60}m"
+            hours > 0 -> String.format("%d:%02d:%02d", hours, minutes, secs)
+            minutes > 0 -> String.format("%d:%02d", minutes, secs)
+            else -> String.format("%ds", secs)
         }
-    }
-    
-    fun clearError() {
-        _uiState.update { it.copy(error = null) }
     }
 }

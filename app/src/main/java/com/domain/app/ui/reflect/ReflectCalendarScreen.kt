@@ -1,3 +1,4 @@
+// app/src/main/java/com/domain/app/ui/reflect/ReflectCalendarScreen.kt
 package com.domain.app.ui.reflect
 
 import androidx.compose.foundation.background
@@ -5,9 +6,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,10 +18,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.domain.app.ui.theme.AppIcons
+import com.domain.app.ui.reflect.components.ExpandableEntryCard
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -37,8 +36,12 @@ fun ReflectScreen(
     viewModel: ReflectViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var showDeleteDialog by remember { mutableStateOf<DataEntry?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
     
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
@@ -94,7 +97,7 @@ fun ReflectScreen(
                 mostActiveDay = uiState.mostActiveDay
             )
             
-            Divider()
+            HorizontalDivider()
             
             // Calendar Grid
             CalendarView(
@@ -109,14 +112,33 @@ fun ReflectScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             )
             
-            Divider()
+            HorizontalDivider()
             
-            // Selected Day Details
+            // Selected Day Details with Expandable Cards
             val selectedDate = uiState.selectedDate
             if (selectedDate != null) {
                 SelectedDayDetails(
                     date = selectedDate,
                     dayData = uiState.selectedDayData,
+                    expandedEntryIds = uiState.expandedEntryIds,
+                    onToggleExpand = { entryId ->
+                        viewModel.toggleEntryExpanded(entryId)
+                    },
+                    onEdit = { entry ->
+                        // TODO: Navigate to edit screen
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Edit feature coming soon")
+                        }
+                    },
+                    onDelete = { entry ->
+                        showDeleteDialog = entry
+                    },
+                    onShare = { entry ->
+                        // TODO: Implement share functionality
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Shared: ${entry.displayValue}")
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
@@ -137,6 +159,38 @@ fun ReflectScreen(
                 }
             }
         }
+    }
+    
+    // Delete confirmation dialog
+    showDeleteDialog?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = null },
+            title = { Text("Delete Entry") },
+            text = { 
+                Text("Are you sure you want to delete this ${entry.pluginName} entry?")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteEntry(entry.id)
+                        showDeleteDialog = null
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Entry deleted")
+                        }
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -222,7 +276,6 @@ private fun CalendarView(
         
         // Calendar grid
         val firstDayOfMonth = yearMonth.atDay(1)
-        val lastDayOfMonth = yearMonth.atEndOfMonth()
         val firstDayOfWeek = firstDayOfMonth.dayOfWeek.value
         val daysInMonth = yearMonth.lengthOfMonth()
         
@@ -255,6 +308,7 @@ private fun CalendarView(
                         DayCell(
                             date = date,
                             isToday = date == LocalDate.now(),
+                            isSelected = date == selectedDate,
                             activity = dayActivityMap[date],
                             onClick = { onDateSelected(date) },
                             modifier = Modifier.weight(1f)
@@ -272,6 +326,7 @@ private fun CalendarView(
 private fun DayCell(
     date: LocalDate,
     isToday: Boolean,
+    isSelected: Boolean,
     activity: DayActivity?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -284,7 +339,13 @@ private fun DayCell(
             .aspectRatio(1f)
             .padding(2.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(backgroundColor)
+            .background(
+                if (isSelected) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    backgroundColor
+                }
+            )
             .clickable(onClick = onClick)
             .then(
                 if (isToday) {
@@ -309,10 +370,16 @@ private fun DayCell(
         )
     }
 }
+
 @Composable
 private fun SelectedDayDetails(
     date: LocalDate,
     dayData: DayData,
+    expandedEntryIds: Set<String>,
+    onToggleExpand: (String) -> Unit,
+    onEdit: (DataEntry) -> Unit,
+    onDelete: (DataEntry) -> Unit,
+    onShare: (DataEntry) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -341,8 +408,18 @@ private fun SelectedDayDetails(
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(dayData.entries) { entry ->
-                    DataEntryCard(entry = entry)
+                items(
+                    items = dayData.entries,
+                    key = { it.id }
+                ) { entry ->
+                    ExpandableEntryCard(
+                        entry = entry,
+                        isExpanded = expandedEntryIds.contains(entry.id),
+                        onToggleExpand = { onToggleExpand(entry.id) },
+                        onEdit = { onEdit(entry) },
+                        onDelete = { onDelete(entry) },
+                        onShare = { onShare(entry) }
+                    )
                 }
             }
         }
@@ -358,46 +435,5 @@ private fun getIntensityColor(entryCount: Int): Color {
         entryCount in 4..6 -> baseColor.copy(alpha = 0.4f)
         entryCount in 7..10 -> baseColor.copy(alpha = 0.6f)
         else -> baseColor.copy(alpha = 0.8f)  // 10+
-    }
-}
-
-@Composable
-private fun DataEntryCard(entry: DataEntry) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = entry.pluginName,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = entry.displayValue,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                if (entry.note != null) {
-                    Text(
-                        text = entry.note,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            
-            Text(
-                text = entry.time,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }

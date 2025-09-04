@@ -9,7 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.domain.app.ui.dashboard.DashboardScreen
-import com.domain.app.ui.data.DataScreen
+import com.domain.app.ui.reflect.ReflectScreen  // CHANGED: Import ReflectScreen instead of DataScreen
 import com.domain.app.ui.settings.navigation.SettingsNavigation
 import com.domain.app.ui.theme.AppTheme
 import com.domain.app.ui.theme.AppIcons
@@ -83,7 +83,7 @@ fun MainScreen() {
                             showSettings = true
                         }
                     )
-                    1 -> DataScreen(
+                    1 -> ReflectScreen(  // CHANGED: Use ReflectScreen instead of DataScreen
                         onNavigateToSettings = {
                             showSettings = true
                         }
