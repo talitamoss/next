@@ -269,9 +269,6 @@ class ReflectViewModel @Inject constructor(
         }
     }
     
-// app/src/main/java/com/domain/app/ui/reflect/ReflectViewModel.kt
-// PARTIAL FILE - Only showing the loadDayDetails function that needs fixing
-
 private suspend fun loadDayDetails(date: LocalDate) {
     viewModelScope.launch {
         try {

@@ -136,7 +136,7 @@ interface DataPointDao {
     
     @Query("DELETE FROM data_points")
     suspend fun deleteAll()
-    
+
     // Transaction operations
     
     @Transaction
