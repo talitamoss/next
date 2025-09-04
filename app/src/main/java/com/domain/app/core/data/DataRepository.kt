@@ -6,8 +6,8 @@ import com.domain.app.core.storage.entity.DataPointEntity
 import com.domain.app.core.storage.encryption.EncryptionManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.*
 import kotlinx.serialization.encodeToString
 import javax.inject.Inject
@@ -222,6 +222,14 @@ class DataRepository @Inject constructor(
     }
     
     /**
+     * Insert a single data point (alias for saveDataPoint)
+     * Required by: BackupManager, DashboardViewModel
+     */
+    suspend fun insertDataPoint(dataPoint: DataPoint) {
+        saveDataPoint(dataPoint)
+    }
+    
+    /**
      * Delete a data point by ID
      */
     suspend fun deleteDataPoint(id: String) {
@@ -229,10 +237,75 @@ class DataRepository @Inject constructor(
     }
     
     /**
+     * Delete multiple data points by IDs
+     * Required by: DataViewModel
+     */
+    suspend fun deleteDataPointsByIds(ids: List<String>) {
+        ids.forEach { id ->
+            dataPointDao.deleteById(id)
+        }
+    }
+    
+    /**
+     * Clear all data from the database
+     * Required by: BackupManager, SettingsViewModel, DataManagementViewModel
+     */
+    suspend fun clearAllData() {
+        dataPointDao.deleteAll()
+    }
+    
+    /**
      * Get a single data point by ID
      */
     suspend fun getDataPoint(id: String): DataPoint? {
         return dataPointDao.getById(id)?.let { entityToDataPoint(it) }
+    }
+    
+    /**
+     * Get recent data as Flow (for ViewModels that use Flow operations)
+     * Required by: DashboardViewModel, DataViewModel (they call .filter{}.collect{})
+     * VERIFIED: Returns Flow for use with .filter{}.collect{}
+     */
+    fun getRecentData(limit: Int = 100): Flow<List<DataPoint>> {
+        return dataPointDao.getLatestDataPoints(limit).map { entities ->
+            entities.map { entityToDataPoint(it) }
+        }
+    }
+    
+    /**
+     * Get recent data as List (suspend version for direct access)
+     * Required by: ExportManager (needs List, but needs to make its function suspend)
+     * Required by: SecureDataRepository (needs to wrap in Result or make suspend)
+     */
+    suspend fun getRecentDataList(limit: Int = 100): List<DataPoint> {
+        return dataPointDao.getLatestDataPoints(limit).first().map { entityToDataPoint(it) }
+    }
+    
+    /**
+     * Get total count of all data points
+     * Required by: SecureDataRepository (but it passes pluginId!)
+     */
+    suspend fun getDataCount(): Int {
+        return dataPointDao.getTotalCount()
+    }
+    
+    /**
+     * Get count for specific plugin
+     * Required by: SecureDataRepository.kt:108 (calls with pluginId)
+     */
+    suspend fun getDataCount(pluginId: String): Int {
+        return dataPointDao.getPluginDataCount(pluginId)
+    }
+    
+    /**
+     * Search data points by query
+     * Required by: DataViewModel (expects Flow)
+     * VERIFIED: Returns Flow as expected
+     */
+    fun searchDataPoints(query: String): Flow<List<DataPoint>> {
+        return dataPointDao.searchDataPoints("%$query%").map { entities ->
+            entities.map { entityToDataPoint(it) }
+        }
     }
     
     /**
@@ -255,7 +328,7 @@ class DataRepository @Inject constructor(
     }
     
     /**
-     * Get data points in a time range
+     * Get data points in a time range (Flow version)
      */
     fun getDataPointsInRange(
         pluginId: String,
@@ -266,6 +339,21 @@ class DataRepository @Inject constructor(
         val endInstant = endTime.toInstant(ZoneOffset.UTC)
         return dataPointDao.getPluginDataInRange(pluginId, startInstant, endInstant)
             .map { entities -> entities.map { entityToDataPoint(it) } }
+    }
+    
+    /**
+     * Get plugin data in a specific time range (suspend version)
+     * Required by: ExportManager.kt:103 (needs suspend returning List)
+     * VERIFIED: Returns List<DataPoint> as expected
+     */
+    suspend fun getPluginDataInRange(
+        pluginId: String,
+        startTime: Instant,
+        endTime: Instant
+    ): List<DataPoint> {
+        return dataPointDao.getPluginDataInRange(pluginId, startTime, endTime)
+            .first()
+            .map { entityToDataPoint(it) }
     }
     
     // ========== COMPATIBILITY METHODS FOR UI LAYER ==========
