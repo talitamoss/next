@@ -269,51 +269,65 @@ class ReflectViewModel @Inject constructor(
         }
     }
     
-    private suspend fun loadDayDetails(date: LocalDate) {
-        viewModelScope.launch {
-            try {
-                val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
-                val endOfDay = date.atTime(23, 59, 59)
-                    .atZone(ZoneId.systemDefault()).toInstant()
-                
-                // FIXED: Use getDataInRange() and explicit type declaration
-                dataRepository.getDataInRange(startOfDay, endOfDay)
-                    .collect { dataPoints: List<DataPoint> ->  // FIXED: Explicit type
-                        val entries = dataPoints.map { dp: DataPoint ->  // FIXED: Explicit type
-                            val plugin = pluginManager.getPlugin(dp.pluginId)
-                            DataEntry(
-                                id = dp.id,
-                                pluginId = dp.pluginId,
-                                pluginName = plugin?.metadata?.name ?: dp.pluginId,
-                                displayValue = formatDataPointValue(dp),
-                                rawValue = dp.value,  // Include raw value map
-                                metadata = dp.metadata,  // Include metadata
-                                note = dp.metadata?.get("note") as? String,
-                                time = dp.timestamp.atZone(ZoneId.systemDefault())
-                                    .toLocalTime()
-                                    .format(timeFormatter),
-                                timestamp = dp.timestamp,
-                                source = dp.metadata?.get("source") as? String
-                            )
-                        }.sortedByDescending { it.timestamp }
+// app/src/main/java/com/domain/app/ui/reflect/ReflectViewModel.kt
+// PARTIAL FILE - Only showing the loadDayDetails function that needs fixing
+
+private suspend fun loadDayDetails(date: LocalDate) {
+    viewModelScope.launch {
+        try {
+            val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val endOfDay = date.atTime(23, 59, 59)
+                .atZone(ZoneId.systemDefault()).toInstant()
+            
+            dataRepository.getDataInRange(startOfDay, endOfDay)
+                .collect { dataPoints: List<DataPoint> ->
+                    val entries = dataPoints.map { dp: DataPoint ->
+                        val plugin = pluginManager.getPlugin(dp.pluginId)
                         
-                        _uiState.update {
-                            it.copy(
-                                selectedDayData = DayData(
-                                    date = date,
-                                    entries = entries,
-                                    totalCount = entries.size
-                                )
+                        // FIXED: Look for notes in value map first, then metadata
+                        val noteFromValue = dp.value["notes"] as? String 
+                            ?: dp.value["note"] as? String
+                        val noteFromMetadata = dp.metadata?.get("note")
+                        val finalNote = noteFromValue ?: noteFromMetadata
+                        
+                        // FIXED: Get source from either value or metadata
+                        val sourceFromValue = dp.value["source"] as? String
+                        val sourceFromMetadata = dp.metadata?.get("source")
+                        val finalSource = sourceFromValue ?: sourceFromMetadata ?: dp.source
+                        
+                        DataEntry(
+                            id = dp.id,
+                            pluginId = dp.pluginId,
+                            pluginName = plugin?.metadata?.name ?: dp.pluginId,
+                            displayValue = formatDataPointValue(dp),
+                            rawValue = dp.value,  // This contains the actual data
+                            metadata = dp.metadata?.mapValues { it.value as Any? },  // Convert String to Any?
+                            note = finalNote,  // FIXED: Now properly extracted
+                            time = dp.timestamp.atZone(ZoneId.systemDefault())
+                                .toLocalTime()
+                                .format(timeFormatter),
+                            timestamp = dp.timestamp,
+                            source = finalSource
+                        )
+                    }.sortedByDescending { it.timestamp }
+                    
+                    _uiState.update {
+                        it.copy(
+                            selectedDayData = DayData(
+                                date = date,
+                                entries = entries,
+                                totalCount = entries.size
                             )
-                        }
+                        )
                     }
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(error = "Failed to load day details: ${e.message}")
                 }
+        } catch (e: Exception) {
+            _uiState.update {
+                it.copy(error = "Failed to load day details: ${e.message}")
             }
         }
     }
+}
     
     private fun filterDataPointsForMonth(
         dataPoints: List<DataPoint>, 

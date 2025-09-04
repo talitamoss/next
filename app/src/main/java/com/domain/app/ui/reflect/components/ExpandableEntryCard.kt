@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.domain.app.ui.reflect.DataEntry
 import com.domain.app.ui.theme.AppIcons
+import com.domain.app.ui.utils.getPluginIconById  // FIXED: Added import
 import java.time.format.DateTimeFormatter
 import java.time.ZoneId
 
@@ -80,7 +81,7 @@ fun ExpandableEntryCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = getPluginIcon(entry.pluginId),
+                        imageVector = getPluginIconById(entry.pluginId),  // FIXED: Using utility function
                         contentDescription = null,
                         modifier = Modifier.size(20.dp),
                         tint = MaterialTheme.colorScheme.primary
@@ -151,7 +152,7 @@ fun ExpandableEntryCard(
                         bottom = 12.dp
                     )
                 ) {
-                    Divider(
+                    HorizontalDivider(  // FIXED: Changed from Divider to HorizontalDivider
                         modifier = Modifier.padding(vertical = 8.dp),
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                     )
@@ -299,7 +300,7 @@ private fun MetadataSection(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
         )
     ) {
         Column(
@@ -313,27 +314,25 @@ private fun MetadataSection(
                 fontWeight = FontWeight.Medium
             )
             
-            // Exact timestamp
-            val dateTime = timestamp.atZone(ZoneId.systemDefault()).toLocalDateTime()
-            val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-            Text(
-                text = "Recorded: ${dateTime.format(formatter)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            
-            // Source
-            if (source != null) {
+            source?.let {
                 Text(
-                    text = "Source: $source",
+                    text = "Source: $it",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             
-            // Additional metadata
+            // Format timestamp nicely
+            val localDateTime = timestamp.atZone(ZoneId.systemDefault()).toLocalDateTime()
+            Text(
+                text = "Recorded: ${localDateTime.format(DateTimeFormatter.ofPattern("MMM d, yyyy 'at' h:mm a"))}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            
+            // Display other metadata
             metadata?.forEach { (key, value) ->
-                if (key !in listOf("note", "source") && value != null) {
+                if (key !in listOf("version", "inputType", "sensitivity") && value != null) {
                     Text(
                         text = "${formatFieldName(key)}: $value",
                         style = MaterialTheme.typography.bodySmall,
@@ -371,28 +370,6 @@ private fun ActionButton(
     }
 }
 
-// Helper function to get appropriate icon for plugin
-private fun getPluginIcon(pluginId: String): androidx.compose.ui.graphics.vector.ImageVector {
-    return when (pluginId) {
-        "mood" -> Icons.Default.Mood
-        "exercise", "movement" -> Icons.Default.DirectionsRun
-        "sleep" -> Icons.Default.Bedtime
-        "medication", "medical" -> Icons.Default.MedicalServices
-        "screen_time" -> Icons.Default.PhoneAndroid
-        "water" -> Icons.Default.WaterDrop
-        "food" -> Icons.Default.Restaurant
-        "caffeine" -> Icons.Default.LocalCafe
-        "work" -> Icons.Default.Work
-        "social" -> Icons.Default.People
-        "meditation" -> Icons.Default.SelfImprovement
-        "journal" -> Icons.Default.Book
-        "audio" -> Icons.Default.Mic
-        "poo" -> Icons.Default.Wc
-        "alcohol" -> Icons.Default.LocalBar
-        else -> Icons.Default.Extension
-    }
-}
-
 // Format field names to be more user-friendly
 private fun formatFieldName(key: String): String {
     return when (key) {
@@ -407,6 +384,7 @@ private fun formatFieldName(key: String): String {
         "duration" -> "Duration"
         "intensity" -> "Intensity"
         "duration_seconds" -> "Duration"
+        "duration_minutes" -> "Duration"
         
         // Water fields
         "amount" -> "Amount"
@@ -419,6 +397,8 @@ private fun formatFieldName(key: String): String {
         
         // Sleep fields
         "hours" -> "Hours Slept"
+        "bedtime" -> "Bedtime"
+        "waketime" -> "Wake Time"
         "quality" -> "Sleep Quality"
         "dreams" -> "Dreams"
         
@@ -434,12 +414,10 @@ private fun formatFieldName(key: String): String {
         "deviceType" -> "Device"
         "hours" -> "Hours"
         "feeling" -> "Feeling"
+        "feeling_category" -> "Feeling"
         
         // Caffeine fields
         "caffeineType" -> "Type"
-        
-        // Alcohol fields
-        "drink_type" -> "Drink Type"
         "units" -> "Units"
         
         // Work fields
@@ -455,6 +433,7 @@ private fun formatFieldName(key: String): String {
         // Meditation fields
         "minutes" -> "Minutes"
         "technique" -> "Technique"
+        "completed" -> "Completed"
         
         // Journal fields
         "entry" -> "Journal Entry"
@@ -466,12 +445,15 @@ private fun formatFieldName(key: String): String {
         // Poo fields
         "bristol_type" -> "Bristol Type"
         
+        // Alcohol fields
+        "drink_type" -> "Drink Type"
+        
         // Generic fields
         "value" -> "Value"
         "notes" -> "Notes"
         "note" -> "Note"
         
-        // Default case - manually capitalize words instead of using replaceFirstChar
+        // Default case - manually capitalize words
         else -> key.split("_")
             .joinToString(" ") { word ->
                 if (word.isNotEmpty()) {
@@ -486,214 +468,151 @@ private fun formatFieldName(key: String): String {
 // Format field values for display based on the field key and plugin context
 private fun formatFieldValue(value: Any?, key: String = ""): String {
     return when {
+        // Boolean values
+        value is Boolean -> if (value) "Yes" else "No"
+        
+        // Time/Duration formatting
+        key.contains("duration_seconds") -> {
+            val seconds = (value as? Number)?.toLong() ?: 0
+            formatDuration(seconds)
+        }
+        key.contains("duration_minutes") -> {
+            val minutes = (value as? Number)?.toInt() ?: 0
+            "$minutes minutes"
+        }
+        key == "bedtime" || key == "waketime" -> {
+            val hour = (value as? Number)?.toFloat() ?: 0f
+            formatTimeFromHour(hour)
+        }
+        
         // Food-specific formatting
         key == "mealType" -> when(value?.toString()) {
             "snack" -> "Snack"
             "light_meal" -> "Light Meal"
             "full_meal" -> "Full Meal"
-            else -> value?.toString() ?: "N/A"
+            else -> value?.toString() ?: ""
         }
-        key == "foodCategory" -> formatFoodCategory(value?.toString())
-        key == "portion" -> formatPortionSize(value)
-        key == "satisfaction" -> formatSatisfactionLevel(value)
-        
-        // Movement/Exercise formatting
-        key == "type" && value is String -> value
-        key == "duration" && value is Number -> "${value.toInt()} minutes"
-        key == "intensity" -> formatIntensityLevel(value)
-        
-        // Water formatting - Fixed null safety
-        key == "amount" && value is Number -> value.toInt().toString()
-        key == "unit" -> {
-            val unitStr = value?.toString()
-            when (unitStr) {
-                "ml" -> "ml"
-                "oz" -> "oz"
-                "cups" -> "cups"
-                "liters" -> "liters"
-                null -> ""
-                else -> unitStr
+        key == "foodCategory" -> value?.toString()
+            ?.replace("_", " ")
+            ?.split(" ")
+            ?.joinToString(" ") { it.replaceFirstChar { char -> char.uppercase() } }
+            ?: ""
+        key == "portion" -> {
+            val portion = (value as? Number)?.toFloat() ?: 0f
+            when {
+                portion <= 0.5f -> "Small"
+                portion <= 1.5f -> "Medium"
+                portion <= 2.5f -> "Large"
+                else -> "Extra Large"
             }
         }
+        key == "satisfaction" -> formatSatisfaction(value)
+        
+        // Movement/Exercise formatting
+        key == "intensity" -> formatIntensity(value)
         
         // Mood formatting
         key == "mood" -> formatMood(value?.toString())
-        key == "score" && value is Number -> "${value.toInt()}/10"
-        key == "energy" && value is Number -> formatEnergyLevel(value)
+        key == "energy" -> formatEnergyLevel(value)
         
         // Sleep formatting
-        key == "hours" && value is Number -> {
-            val hours = value.toDouble()
-            if (hours == hours.toInt().toDouble()) {
-                "${hours.toInt()} hours"
-            } else {
-                String.format("%.1f hours", hours)
-            }
-        }
         key == "quality" -> formatSleepQuality(value)
-        key == "dreams" && value is Boolean -> if (value) "Yes, had dreams" else "No dreams"
+        
+        // Screen time formatting
+        key == "device" || key == "deviceType" -> formatDeviceType(value?.toString())
+        key == "feeling" -> formatFeeling(value)
+        key == "feeling_category" -> when(value?.toString()) {
+            "very_negative" -> "Very Negative"
+            "negative" -> "Negative"
+            "neutral" -> "Neutral"
+            "positive" -> "Positive"
+            "very_positive" -> "Very Positive"
+            else -> value?.toString() ?: ""
+        }
         
         // Medical formatting
-        key == "medicine_name" -> value?.toString() ?: "Unknown"
-        key == "dosage_amount" -> value?.toString() ?: "0"
-        key == "effectiveness" -> formatEffectiveness(value)
+        key == "dosage_amount" -> {
+            val amount = (value as? Number)?.toDouble() ?: 0.0
+            if (amount == amount.toInt().toDouble()) {
+                amount.toInt().toString()
+            } else {
+                amount.toString()
+            }
+        }
         
-        // Screen Time formatting
-        key in listOf("device", "deviceType") -> formatDeviceType(value?.toString())
-        key == "feeling" && value is Number -> formatFeeling(value)
-        
-        // Caffeine formatting
-        key == "caffeineType" || (key == "type" && value in listOf("Coffee", "Tea", "Energy Drink", "Soda", "Other")) -> 
-            value?.toString() ?: "Unknown"
+        // Poo formatting
+        key == "bristol_type" -> formatBristolType(value)
         
         // Work formatting
         key == "productivity" -> formatProductivity(value)
         key == "stress_level" -> formatStressLevel(value)
         
-        // Social formatting
-        key == "interaction_type" -> formatInteractionType(value?.toString())
-        key == "people_count" && value is Number -> "${value.toInt()} people"
-        key == "quality" -> formatQuality(value)
-        
-        // Meditation formatting
-        key == "minutes" && value is Number -> "${value.toInt()} minutes"
-        key == "technique" -> {
-            val tech = value?.toString()
-            if (tech != null) {
-                tech.replace("_", " ")
-                    .split(" ")
-                    .joinToString(" ") { word ->
-                        if (word.isNotEmpty()) {
-                            word[0].uppercase() + word.substring(1).lowercase()
-                        } else {
-                            ""
-                        }
-                    }
-            } else {
-                "Unknown"
-            }
+        // Percentage or scale values
+        key.contains("score") || key.contains("rating") -> {
+            val score = (value as? Number)?.toInt() ?: 0
+            "$score/10"
         }
         
-        // Bristol Stool Chart formatting
-        key == "bristol_type" -> formatBristolType(value)
+        // Numeric values with potential units
+        value is Number -> value.toString()
         
-        // Audio formatting
-        key == "duration_seconds" && value is Number -> formatDuration(value.toLong())
-        key == "file_name" -> "Audio Recording"
-        
-        // Journal formatting
-        key == "entry" && value is String -> if (value.length > 100) {
-            "${value.take(100)}..."
-        } else value
-        key == "tags" && value is List<*> -> value.joinToString(", ")
-        
-        // Default formatting
-        value is Number -> formatNumber(value)
-        value is Boolean -> if (value) "Yes" else "No"
-        value is List<*> -> value.joinToString(", ")
-        value is Map<*, *> -> value.entries.joinToString("\n") { "${it.key}: ${it.value}" }
-        else -> {
-            val str = value?.toString()
-            if (str != null) {
-                str.replace("_", " ")
-                    .split(" ")
-                    .joinToString(" ") { word ->
-                        if (word.isNotEmpty()) {
-                            word[0].uppercase() + word.substring(1).lowercase()
-                        } else {
-                            ""
-                        }
-                    }
-            } else {
-                "N/A"
-            }
-        }
+        // Default string handling
+        else -> value?.toString() ?: ""
     }
 }
 
 // Helper formatting functions
-private fun formatFoodCategory(category: String?): String {
-    return when (category) {
-        // Snacks
-        "nuts" -> "Nuts"
-        "fruit" -> "Fruit"
-        "baked_goods" -> "Baked Goods"
-        "protein_bar" -> "Protein Bar"
-        "chips" -> "Chips"
-        "candy" -> "Candy"
-        "yogurt" -> "Yogurt"
-        "vegetables" -> "Vegetables"
-        "cheese" -> "Cheese"
-        
-        // Light Meals
-        "carb_heavy" -> "Carb Heavy"
-        "protein_focused" -> "Protein Focused"
-        "salad" -> "Salad"
-        "soup" -> "Soup"
-        "sandwich" -> "Sandwich"
-        "smoothie" -> "Smoothie"
-        "leftovers" -> "Leftovers"
-        "fast_food" -> "Fast Food"
-        
-        // Full Meals
-        "balanced" -> "Balanced Meal"
-        "protein_heavy" -> "Protein Heavy"
-        "vegetarian" -> "Vegetarian"
-        "vegan" -> "Vegan"
-        "pasta_rice" -> "Pasta/Rice"
-        "pizza" -> "Pizza"
-        "restaurant" -> "Restaurant"
-        "home_cooked" -> "Home Cooked"
-        "takeout" -> "Takeout"
-        
+private fun formatDuration(seconds: Long): String {
+    val hours = seconds / 3600
+    val minutes = (seconds % 3600) / 60
+    val secs = seconds % 60
+    
+    return when {
+        hours > 0 -> String.format("%d:%02d:%02d", hours, minutes, secs)
+        minutes > 0 -> String.format("%d:%02d", minutes, secs)
+        else -> String.format("%ds", secs)
+    }
+}
+
+private fun formatTimeFromHour(hour: Float): String {
+    val actualHour = hour.toInt() % 24
+    val isPM = actualHour >= 12
+    val displayHour = when (actualHour) {
+        0 -> 12
+        in 13..23 -> actualHour - 12
+        else -> actualHour
+    }
+    return "$displayHour:00 ${if (isPM) "PM" else "AM"}"
+}
+
+private fun formatSatisfaction(value: Any?): String {
+    val satisfaction = (value as? Number)?.toFloat() ?: return "Unknown"
+    return when {
+        satisfaction <= 0.2f -> "Still Hungry"
+        satisfaction <= 0.4f -> "Somewhat Satisfied"
+        satisfaction <= 0.6f -> "Satisfied"
+        satisfaction <= 0.8f -> "Very Satisfied"
+        else -> "Completely Full"
+    }
+}
+
+private fun formatIntensity(value: Any?): String {
+    return when (val intensity = value?.toString()) {
+        "light" -> "Light"
+        "moderate" -> "Moderate"
+        "intense" -> "Intense"
+        "very_intense" -> "Very Intense"
         else -> {
-            if (category != null) {
-                category.replace("_", " ")
-                    .split(" ")
-                    .joinToString(" ") { word ->
-                        if (word.isNotEmpty()) {
-                            word[0].uppercase() + word.substring(1).lowercase()
-                        } else {
-                            ""
-                        }
-                    }
-            } else {
-                "Unknown"
+            // Handle numeric intensity
+            val numIntensity = (value as? Number)?.toFloat() ?: return intensity ?: "Moderate"
+            when {
+                numIntensity <= 0.2f -> "Very Light"
+                numIntensity <= 0.4f -> "Light"
+                numIntensity <= 0.6f -> "Moderate"
+                numIntensity <= 0.8f -> "Intense"
+                else -> "Extreme"
             }
         }
-    }
-}
-
-private fun formatPortionSize(value: Any?): String {
-    val portion = (value as? Number)?.toFloat() ?: return "Normal"
-    return when {
-        portion <= 0.5f -> "Very Small"
-        portion <= 0.75f -> "Small"
-        portion <= 1.25f -> "Normal"
-        portion <= 2.0f -> "Large"
-        else -> "Very Large"
-    }
-}
-
-private fun formatSatisfactionLevel(value: Any?): String {
-    val satisfaction = (value as? Number)?.toFloat() ?: return "Neutral"
-    return when {
-        satisfaction <= 0.2f -> "Still Very Hungry"
-        satisfaction <= 0.4f -> "Still Hungry"
-        satisfaction <= 0.6f -> "Neutral"
-        satisfaction <= 0.8f -> "Satisfied"
-        else -> "Very Satisfied"
-    }
-}
-
-private fun formatIntensityLevel(value: Any?): String {
-    val intensity = (value as? Number)?.toFloat() ?: return "Moderate"
-    return when {
-        intensity <= 0.2f -> "Very Light"
-        intensity <= 0.4f -> "Light"
-        intensity <= 0.6f -> "Moderate"
-        intensity <= 0.8f -> "Intense"
-        else -> "Extreme"
     }
 }
 
@@ -730,21 +649,17 @@ private fun formatDeviceType(device: String?): String {
     return when (device?.lowercase()) {
         "phone", "hand-held", "handheld" -> "Phone/Tablet"
         "laptop", "computer" -> "Laptop/Computer"
-        "tv", "large screen", "large_screen" -> "TV/Large Screen"
+        "tv", "large_screen" -> "TV/Large Screen"
         else -> {
-            if (device != null) {
-                device.replace("_", " ")
-                    .split(" ")
-                    .joinToString(" ") { word ->
-                        if (word.isNotEmpty()) {
-                            word[0].uppercase() + word.substring(1).lowercase()
-                        } else {
-                            ""
-                        }
+            device?.replace("_", " ")
+                ?.split(" ")
+                ?.joinToString(" ") { word ->
+                    if (word.isNotEmpty()) {
+                        word[0].uppercase() + word.substring(1).lowercase()
+                    } else {
+                        ""
                     }
-            } else {
-                "Unknown"
-            }
+                } ?: "Unknown"
         }
     }
 }
@@ -752,23 +667,23 @@ private fun formatDeviceType(device: String?): String {
 private fun formatFeeling(value: Any?): String {
     val feeling = (value as? Number)?.toFloat() ?: return "Neutral"
     return when {
-        feeling <= 0.2f -> "Very Negative"
-        feeling <= 0.4f -> "Negative"
-        feeling <= 0.6f -> "Neutral"
-        feeling <= 0.8f -> "Positive"
+        feeling <= 2f -> "Very Negative"
+        feeling <= 4f -> "Negative"
+        feeling <= 6f -> "Neutral"
+        feeling <= 8f -> "Positive"
         else -> "Very Positive"
     }
 }
 
 private fun formatBristolType(value: Any?): String {
     return when (value?.toString()) {
-        "1", "Type 1" -> "Type 1: Pebbles (Separate hard lumps)"
-        "2", "Type 2" -> "Type 2: Lumpy (Sausage-shaped but lumpy)"
-        "3", "Type 3" -> "Type 3: Dry (Sausage with cracks)"
-        "4", "Type 4" -> "Type 4: Smooth (Ideal)"
-        "5", "Type 5" -> "Type 5: Blobs (Soft with clear edges)"
-        "6", "Type 6" -> "Type 6: Mushy (Fluffy pieces)"
-        "7", "Type 7" -> "Type 7: Liquid (Watery)"
+        "1", "Type 1" -> "Type 1: Pebbles"
+        "2", "Type 2" -> "Type 2: Lumpy"
+        "3", "Type 3" -> "Type 3: Cracked"
+        "4", "Type 4" -> "Type 4: Smooth"
+        "5", "Type 5" -> "Type 5: Soft Blobs"
+        "6", "Type 6" -> "Type 6: Mushy"
+        "7", "Type 7" -> "Type 7: Liquid"
         else -> value?.toString() ?: "Unknown"
     }
 }
@@ -795,81 +710,4 @@ private fun formatStressLevel(value: Any?): String {
     }
 }
 
-private fun formatInteractionType(type: String?): String {
-    return when (type?.lowercase()) {
-        "in_person" -> "In Person"
-        "video_call" -> "Video Call"
-        "phone_call" -> "Phone Call"
-        "text" -> "Text/Chat"
-        "group" -> "Group"
-        else -> {
-            if (type != null) {
-                type.replace("_", " ")
-                    .split(" ")
-                    .joinToString(" ") { word ->
-                        if (word.isNotEmpty()) {
-                            word[0].uppercase() + word.substring(1).lowercase()
-                        } else {
-                            ""
-                        }
-                    }
-            } else {
-                "Unknown"
-            }
-        }
-    }
-}
-
-private fun formatQuality(value: Any?): String {
-    val quality = value?.toString()
-    return if (quality != null && quality.isNotEmpty()) {
-        quality[0].uppercase() + quality.substring(1).lowercase()
-    } else {
-        "Unknown"
-    }
-}
-
-private fun formatEffectiveness(value: Any?): String {
-    return when (value?.toString()?.lowercase()) {
-        "not_effective" -> "Not Effective"
-        "slightly_effective" -> "Slightly Effective"
-        "moderately_effective" -> "Moderately Effective"
-        "very_effective" -> "Very Effective"
-        else -> {
-            val eff = value?.toString()
-            if (eff != null) {
-                eff.replace("_", " ")
-                    .split(" ")
-                    .joinToString(" ") { word ->
-                        if (word.isNotEmpty()) {
-                            word[0].uppercase() + word.substring(1).lowercase()
-                        } else {
-                            ""
-                        }
-                    }
-            } else {
-                "Unknown"
-            }
-        }
-    }
-}
-
-private fun formatDuration(seconds: Long): String {
-    val hours = seconds / 3600
-    val minutes = (seconds % 3600) / 60
-    val secs = seconds % 60
-    
-    return when {
-        hours > 0 -> String.format("%d:%02d:%02d", hours, minutes, secs)
-        minutes > 0 -> String.format("%d:%02d", minutes, secs)
-        else -> String.format("%ds", secs)
-    }
-}
-
-private fun formatNumber(value: Number): String {
-    return if (value.toDouble() % 1 == 0.0) {
-        value.toInt().toString()
-    } else {
-        String.format("%.2f", value.toDouble())
-    }
-}
+// REMOVED duplicate getPluginIcon function - now using import from PluginUtils
