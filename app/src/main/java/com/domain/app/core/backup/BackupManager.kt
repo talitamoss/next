@@ -319,13 +319,25 @@ class BackupManager @Inject constructor(
             val valueMatch = """"value":\s*(.+?)(?:,|\})""".toRegex().find(dpJson)
             val value = parseJsonValue(valueMatch?.groupValues?.get(1) ?: "null")
             
+            // Ensure value is a Map<String, Any> as required by DataPoint
+            val valueMap = when (value) {
+                is Map<*, *> -> {
+                    @Suppress("UNCHECKED_CAST")
+                    value as Map<String, Any>
+                }
+                else -> {
+                    // If it's not a map, wrap it in a map with a single "value" key
+                    mapOf("value" to value)
+                }
+            }
+            
             dataPoints.add(
                 DataPoint(
                     id = id,
                     pluginId = pluginId,
                     timestamp = Instant.ofEpochMilli(dpTimestamp),
                     type = type,
-                    value = value
+                    value = valueMap
                 )
             )
         }
@@ -349,20 +361,21 @@ class BackupManager @Inject constructor(
         )
     }
     
-private fun parseJsonValue(jsonValue: String): Any {
-    val trimmed = jsonValue.trim()
-    return when {
-        trimmed == "null" -> ""
-        trimmed.startsWith("\"") && trimmed.endsWith("\"") -> 
-            trimmed.substring(1, trimmed.length - 1)
-        trimmed == "true" -> true
-        trimmed == "false" -> false
-        trimmed.toDoubleOrNull() != null -> trimmed.toDouble()
-        trimmed.startsWith("{") -> parseJsonObject(trimmed)  // NO CAST!
-        trimmed.startsWith("[") -> parseJsonArray(trimmed)
-        else -> trimmed
+    private fun parseJsonValue(jsonValue: String): Any {
+        val trimmed = jsonValue.trim()
+        return when {
+            trimmed == "null" -> ""
+            trimmed.startsWith("\"") && trimmed.endsWith("\"") -> 
+                trimmed.substring(1, trimmed.length - 1)
+            trimmed == "true" -> true
+            trimmed == "false" -> false
+            trimmed.toDoubleOrNull() != null -> trimmed.toDouble()
+            trimmed.startsWith("{") -> parseJsonObject(trimmed)
+            trimmed.startsWith("[") -> parseJsonArray(trimmed)
+            else -> trimmed
+        }
     }
-}    
+    
     private fun parseJsonObject(json: String): Map<String, Any> {
         // Simplified JSON object parsing
         val map = mutableMapOf<String, Any>()
@@ -390,7 +403,7 @@ private fun parseJsonValue(jsonValue: String): Any {
         return content.split(",").map { parseJsonValue(it.trim()) }
     }
     
-  fun cleanupOldBackups() {  // Changed from private to public
+    fun cleanupOldBackups() {  // Changed from private to public
         val backupDir = File(context.filesDir, BACKUP_DIR)
         if (!backupDir.exists()) return
         
@@ -403,7 +416,6 @@ private fun parseJsonValue(jsonValue: String): Any {
             backups.drop(MAX_BACKUPS).forEach { it.delete() }
         }
     }
-
 }
 
 // ========== DATA CLASSES ==========
