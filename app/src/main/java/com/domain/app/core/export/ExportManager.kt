@@ -1,3 +1,4 @@
+// app/src/main/java/com/domain/app/core/export/ExportManager.kt
 package com.domain.app.core.export
 
 import android.annotation.TargetApi
@@ -39,6 +40,7 @@ class ExportManager @Inject constructor(
     
     /**
      * Export all user data to CSV format in user-accessible Downloads folder
+     * VERIFIED: Uses Flow.first() correctly
      */
     suspend fun exportAllDataToCsv(context: Context): ExportResult = withContext(Dispatchers.IO) {
         Log.d(TAG, "=== EXPORT TO USER DOWNLOADS START ===")
@@ -49,6 +51,7 @@ class ExportManager @Inject constructor(
             Log.d(TAG, "Found ${plugins.size} active plugins")
             
             // Collect the Flow to get List<DataPoint>
+            // CORRECT: getRecentData() returns Flow<List<DataPoint>>, .first() gets the List
             val allData = dataRepository.getRecentData(24 * 365).first()
             Log.d(TAG, "Retrieved ${allData.size} total data points")
             
@@ -84,6 +87,7 @@ class ExportManager @Inject constructor(
     
     /**
      * Export data for a specific plugin
+     * FIXED: Handles Flow vs suspend function correctly
      */
     suspend fun exportPluginData(
         context: Context,
@@ -99,9 +103,14 @@ class ExportManager @Inject constructor(
                 return@withContext ExportResult.Error("Plugin not found: $pluginId")
             }
             
+            // FIXED: Handle different return types correctly
             val data: List<DataPoint> = if (startDate != null && endDate != null) {
-                dataRepository.getPluginDataInRange(pluginId, startDate, endDate).first()
+                // getPluginDataInRange returns List<DataPoint> directly (suspend function)
+                // NO .first() needed!
+                dataRepository.getPluginDataInRange(pluginId, startDate, endDate)
             } else {
+                // getPluginData returns Flow<List<DataPoint>>
+                // .first() IS needed to get the List from the Flow
                 dataRepository.getPluginData(pluginId).first()
             }
             
@@ -219,9 +228,11 @@ class ExportManager @Inject constructor(
     ): String {
         val csv = StringBuilder()
         
+        // Headers
         val headers = listOf("Date", "Time", "Plugin", "Type", "Value", "Source", "Plugin_Specific_Data")
         csv.appendLine(headers.joinToString(",") { "\"$it\"" })
         
+        // Group by plugin for better organization
         dataPoints.groupBy { it.pluginId }.forEach { (pluginId, pluginData) ->
             val plugin = plugins[pluginId]
             
@@ -259,9 +270,11 @@ class ExportManager @Inject constructor(
     ): String {
         val csv = StringBuilder()
         
+        // Use plugin-specific headers
         val headers = plugin.exportHeaders()
         csv.appendLine(headers.joinToString(",") { "\"$it\"" })
         
+        // Format each data point using plugin-specific formatting
         dataPoints.forEach { dataPoint ->
             val formatted = plugin.formatForExport(dataPoint)
             val row = headers.map { header ->
