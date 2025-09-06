@@ -90,8 +90,14 @@ class SleepPlugin : Plugin {
     }
     
     override suspend fun createManualEntry(data: Map<String, Any>): DataPoint? {
-        val bedtime = (data["bedtime"] as? Number)?.toFloat() ?: return null
-        val waketime = (data["waketime"] as? Number)?.toFloat() ?: return null
+        // Accept both naming conventions - UI sends start_time/end_time
+        val bedtime = (data["bedtime"] as? Number)?.toFloat() 
+            ?: (data["start_time"] as? Number)?.toFloat()
+            ?: return null
+            
+        val waketime = (data["waketime"] as? Number)?.toFloat()
+            ?: (data["end_time"] as? Number)?.toFloat()
+            ?: return null
         
         // Calculate duration accounting for crossing midnight
         val duration = if (waketime > bedtime) {
@@ -124,8 +130,12 @@ class SleepPlugin : Plugin {
     }
     
     override fun validateDataPoint(data: Map<String, Any>): ValidationResult {
+        // Accept both naming conventions
         val bedtime = data["bedtime"] as? Number
+            ?: data["start_time"] as? Number
+            
         val waketime = data["waketime"] as? Number
+            ?: data["end_time"] as? Number
         
         if (bedtime == null || waketime == null) {
             return ValidationResult.error(
@@ -207,7 +217,7 @@ class SleepPlugin : Plugin {
         return SleepDataFormatter()
     }
     
-    // INNER CLASS MUST BE INSIDE THE SLEEPPLUGIN CLASS
+    // Inner class for formatting sleep data
     private inner class SleepDataFormatter : PluginDataFormatter {
         
         override fun formatSummary(dataPoint: DataPoint): String {
@@ -279,27 +289,11 @@ class SleepPlugin : Plugin {
             dataPoint.value["quality"]?.let { quality ->
                 fields.add(DataField(
                     label = "Sleep Quality",
-                    value = when(quality.toString()) {
-                        "deep" -> "Deep Sleep"
-                        "good" -> "Good Sleep"
-                        "light" -> "Light Sleep"
-                        "poor" -> "Poor Sleep"
-                        else -> quality.toString()
-                    }
+                    value = "Score: $quality/100"
                 ))
             }
             
-            // Dreams
-            dataPoint.value["dreams"]?.let { dreams ->
-                if (dreams is Boolean && dreams) {
-                    fields.add(DataField(
-                        label = "Dreams",
-                        value = "Yes"
-                    ))
-                }
-            }
-            
-            // Notes
+            // Notes (if any)
             dataPoint.value["notes"]?.let { notes ->
                 if (notes.toString().isNotBlank()) {
                     fields.add(DataField(
