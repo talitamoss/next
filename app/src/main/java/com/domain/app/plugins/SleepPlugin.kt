@@ -203,4 +203,142 @@ class SleepPlugin : Plugin {
         val m = ((hour - h) * 60).toInt()
         return String.format("%02d:%02d", h, m)
     }
+    override fun getDataFormatter(): PluginDataFormatter {
+    return SleepDataFormatter()
+   }
+}
+
+private inner class SleepDataFormatter : PluginDataFormatter {
+    
+    override fun formatSummary(dataPoint: DataPoint): String {
+        val hours = (dataPoint.value["hours"] as? Number)?.toFloat() ?: 0f
+        val quality = dataPoint.value["quality"]?.toString() ?: ""
+        
+        val hoursText = when {
+            hours < 1 -> "${(hours * 60).toInt()} minutes"
+            hours == hours.toInt().toFloat() -> "${hours.toInt()} hours"
+            else -> String.format("%.1f hours", hours)
+        }
+        
+        val qualityText = when(quality) {
+            "deep" -> "Deep Sleep"
+            "good" -> "Good Sleep"
+            "light" -> "Light Sleep"
+            "poor" -> "Poor Sleep"
+            else -> quality
+        }
+        
+        return if (qualityText.isNotEmpty()) {
+            "$hoursText - $qualityText"
+        } else {
+            hoursText
+        }
+    }
+    
+    override fun formatDetails(dataPoint: DataPoint): List<DataField> {
+        val fields = mutableListOf<DataField>()
+        
+        // Sleep Duration - Important field
+        dataPoint.value["hours"]?.let { hours ->
+            val hoursFloat = (hours as? Number)?.toFloat() ?: 0f
+            val hoursInt = hoursFloat.toInt()
+            val minutes = ((hoursFloat - hoursInt) * 60).toInt()
+            
+            val durationText = when {
+                hoursInt == 0 -> "$minutes minutes"
+                minutes == 0 -> "$hoursInt hours"
+                else -> "$hoursInt hours $minutes minutes"
+            }
+            
+            fields.add(DataField(
+                label = "Sleep Duration",
+                value = durationText + getSleepDurationQuality(hoursFloat),
+                isImportant = true
+            ))
+        }
+        
+        // Bedtime
+        dataPoint.value["bedtime"]?.let { bedtime ->
+            val hour = (bedtime as? Number)?.toFloat() ?: 0f
+            fields.add(DataField(
+                label = "Bedtime",
+                value = formatTimeFromHour(hour)
+            ))
+        }
+        
+        // Wake time
+        dataPoint.value["waketime"]?.let { waketime ->
+            val hour = (waketime as? Number)?.toFloat() ?: 0f
+            fields.add(DataField(
+                label = "Wake Time",
+                value = formatTimeFromHour(hour)
+            ))
+        }
+        
+        // Sleep Quality
+        dataPoint.value["quality"]?.let { quality ->
+            fields.add(DataField(
+                label = "Sleep Quality",
+                value = when(quality.toString()) {
+                    "deep" -> "Deep Sleep"
+                    "good" -> "Good Sleep"
+                    "light" -> "Light Sleep"
+                    "poor" -> "Poor Sleep"
+                    else -> quality.toString()
+                }
+            ))
+        }
+        
+        // Dreams
+        dataPoint.value["dreams"]?.let { dreams ->
+            if (dreams is Boolean && dreams) {
+                fields.add(DataField(
+                    label = "Dreams",
+                    value = "Yes"
+                ))
+            }
+        }
+        
+        // Notes
+        dataPoint.value["notes"]?.let { notes ->
+            if (notes.toString().isNotBlank()) {
+                fields.add(DataField(
+                    label = "Notes",
+                    value = notes.toString(),
+                    isLongText = true
+                ))
+            }
+        }
+        
+        return fields
+    }
+    
+    private fun formatTimeFromHour(hour: Float): String {
+        val hourInt = hour.toInt()
+        val minutes = ((hour - hourInt) * 60).toInt()
+        
+        val displayHour = when {
+            hourInt == 0 -> 12
+            hourInt > 12 -> hourInt - 12
+            else -> hourInt
+        }
+        
+        val period = if (hourInt < 12) "AM" else "PM"
+        
+        return if (minutes == 0) {
+            "$displayHour:00 $period"
+        } else {
+            String.format("%d:%02d %s", displayHour, minutes, period)
+        }
+    }
+    
+    private fun getSleepDurationQuality(hours: Float): String {
+        return when {
+            hours < 4 -> " (Very Short)"
+            hours < 6 -> " (Short)"
+            hours <= 9 -> " (Normal)"
+            hours <= 10 -> " (Long)"
+            else -> " (Very Long)"
+        }
+    }
 }

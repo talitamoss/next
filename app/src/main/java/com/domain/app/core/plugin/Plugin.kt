@@ -27,6 +27,7 @@ interface Plugin {
     fun exportHeaders(): List<String>
     fun formatForExport(dataPoint: DataPoint): Map<String, String>
     suspend fun cleanup() = Unit  // Default implementation - does nothing
+    fun getDataFormatter(): PluginDataFormatter? = null
 }
 
 /**

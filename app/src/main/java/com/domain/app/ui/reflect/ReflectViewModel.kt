@@ -53,18 +53,18 @@ data class DayData(
     val totalCount: Int = 0
 )
 
-// Enhanced DataEntry with raw value data
 data class DataEntry(
     val id: String,
     val pluginId: String,
     val pluginName: String,
     val displayValue: String,  // Formatted summary
     val rawValue: Map<String, Any?>,  // Raw data from DataPoint
-    val metadata: Map<String, Any?>?,  // Additional metadata
+    val formattedDetails: List<DataField>,  // NEW: Formatted details for display
+    val metadata: Map<String, Any?>?,
     val note: String?,
     val time: String,
     val timestamp: Instant,
-    val source: String? = null  // Data source (manual/auto/import)
+    val source: String?
 )
 
 @HiltViewModel
@@ -78,7 +78,8 @@ class ReflectViewModel @Inject constructor(
     
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     private val monthYearFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
-    
+    private val defaultFormatter = DefaultDataFormatter()
+
     init {
         loadInitialData()
         observeDataChanges()
@@ -270,62 +271,64 @@ class ReflectViewModel @Inject constructor(
     }
     
 private suspend fun loadDayDetails(date: LocalDate) {
-    viewModelScope.launch {
-        try {
-            val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val endOfDay = date.atTime(23, 59, 59)
-                .atZone(ZoneId.systemDefault()).toInstant()
-            
-            dataRepository.getDataInRange(startOfDay, endOfDay)
-                .collect { dataPoints: List<DataPoint> ->
-                    val entries = dataPoints.map { dp: DataPoint ->
-                        val plugin = pluginManager.getPlugin(dp.pluginId)
-                        
-                        // FIXED: Look for notes in value map first, then metadata
-                        val noteFromValue = dp.value["notes"] as? String 
-                            ?: dp.value["note"] as? String
-                        val noteFromMetadata = dp.metadata?.get("note")
-                        val finalNote = noteFromValue ?: noteFromMetadata
-                        
-                        // FIXED: Get source from either value or metadata
-                        val sourceFromValue = dp.value["source"] as? String
-                        val sourceFromMetadata = dp.metadata?.get("source")
-                        val finalSource = sourceFromValue ?: sourceFromMetadata ?: dp.source
-                        
-                        DataEntry(
-                            id = dp.id,
-                            pluginId = dp.pluginId,
-                            pluginName = plugin?.metadata?.name ?: dp.pluginId,
-                            displayValue = formatDataPointValue(dp),
-                            rawValue = dp.value,  // This contains the actual data
-                            metadata = dp.metadata?.mapValues { it.value as Any? },  // Convert String to Any?
-                            note = finalNote,  // FIXED: Now properly extracted
-                            time = dp.timestamp.atZone(ZoneId.systemDefault())
-                                .toLocalTime()
-                                .format(timeFormatter),
-                            timestamp = dp.timestamp,
-                            source = finalSource
-                        )
-                    }.sortedByDescending { it.timestamp }
+    try {
+        val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
+        val endOfDay = date.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant()
+        
+        dataRepository.getDataInRange(startOfDay, endOfDay)
+            .onSuccess { dataPoints ->
+                val entries = dataPoints.map { dp ->
+                    val plugin = pluginManager.getPlugin(dp.pluginId)
+                    val formatter = plugin?.getDataFormatter() ?: defaultFormatter
                     
-                    _uiState.update {
-                        it.copy(
-                            selectedDayData = DayData(
-                                date = date,
-                                entries = entries,
-                                totalCount = entries.size
-                            )
+                    // Get formatted summary and details
+                    val displayValue = formatter.formatSummary(dp)
+                    val formattedDetails = formatter.formatDetails(dp)
+                    
+                    // Extract note if exists
+                    val noteFromValue = dp.value["note"] as? String 
+                        ?: dp.value["notes"] as? String
+                    val noteFromMetadata = dp.metadata?.get("note")
+                    val finalNote = noteFromValue ?: noteFromMetadata
+                    
+                    // Get source
+                    val sourceFromValue = dp.value["source"] as? String
+                    val sourceFromMetadata = dp.metadata?.get("source")
+                    val finalSource = sourceFromValue ?: sourceFromMetadata ?: dp.source
+                    
+                    DataEntry(
+                        id = dp.id,
+                        pluginId = dp.pluginId,
+                        pluginName = plugin?.metadata?.name ?: dp.pluginId,
+                        displayValue = displayValue,  // Now using formatter
+                        rawValue = dp.value,
+                        formattedDetails = formattedDetails,  // NEW: Formatted details
+                        metadata = dp.metadata?.mapValues { it.value as Any? },
+                        note = finalNote,
+                        time = dp.timestamp.atZone(ZoneId.systemDefault())
+                            .toLocalTime()
+                            .format(timeFormatter),
+                        timestamp = dp.timestamp,
+                        source = finalSource
+                    )
+                }.sortedByDescending { it.timestamp }
+                
+                _uiState.update {
+                    it.copy(
+                        selectedDayData = DayData(
+                            date = date,
+                            entries = entries,
+                            totalCount = entries.size
                         )
-                    }
+                    )
                 }
-        } catch (e: Exception) {
-            _uiState.update {
-                it.copy(error = "Failed to load day details: ${e.message}")
             }
+    } catch (e: Exception) {
+        _uiState.update {
+            it.copy(error = "Failed to load day details: ${e.message}")
         }
     }
-}
-    
+}    
     private fun filterDataPointsForMonth(
         dataPoints: List<DataPoint>, 
         yearMonth: YearMonth
