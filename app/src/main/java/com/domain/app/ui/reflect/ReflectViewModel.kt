@@ -1,4 +1,3 @@
-// app/src/main/java/com/domain/app/ui/reflect/ReflectViewModel.kt
 package com.domain.app.ui.reflect
 
 import androidx.lifecycle.ViewModel
@@ -7,6 +6,8 @@ import com.domain.app.core.data.DataPoint
 import com.domain.app.core.data.DataRepository
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginManager
+import com.domain.app.core.plugin.DataField
+import com.domain.app.core.plugin.DefaultDataFormatter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -27,7 +28,7 @@ data class ReflectUiState(
     val mostActiveDay: String = "None",
     val availablePlugins: List<Plugin> = emptyList(),
     val selectedFilterPlugin: Plugin? = null,
-    val expandedEntryIds: Set<String> = emptySet(),  // Track which cards are expanded
+    val expandedEntryIds: Set<String> = emptySet(),
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -40,11 +41,11 @@ data class DayActivity(
 )
 
 enum class ActivityIntensity {
-    NONE,     // 0 entries
-    LOW,      // 1-3 entries
-    MEDIUM,   // 4-6 entries
-    HIGH,     // 7-10 entries
-    VERY_HIGH // 10+ entries
+    NONE,
+    LOW,
+    MEDIUM,
+    HIGH,
+    VERY_HIGH
 }
 
 data class DayData(
@@ -57,9 +58,9 @@ data class DataEntry(
     val id: String,
     val pluginId: String,
     val pluginName: String,
-    val displayValue: String,  // Formatted summary
-    val rawValue: Map<String, Any?>,  // Raw data from DataPoint
-    val formattedDetails: List<DataField>,  // NEW: Formatted details for display
+    val displayValue: String,
+    val rawValue: Map<String, Any?>,
+    val formattedDetails: List<DataField>,
     val metadata: Map<String, Any?>?,
     val note: String?,
     val time: String,
@@ -145,45 +146,25 @@ class ReflectViewModel @Inject constructor(
             _uiState.update { 
                 it.copy(
                     selectedDate = date,
-                    expandedEntryIds = emptySet()  // Reset expanded cards when selecting new date
+                    expandedEntryIds = emptySet()
                 )
             }
             loadDayDetails(date)
         }
     }
     
-    fun toggleEntryExpanded(entryId: String) {
+    fun toggleEntryExpansion(entryId: String) {
         _uiState.update { state ->
-            val expandedIds = if (state.expandedEntryIds.contains(entryId)) {
+            val newExpandedIds = if (entryId in state.expandedEntryIds) {
                 state.expandedEntryIds - entryId
             } else {
                 state.expandedEntryIds + entryId
             }
-            state.copy(expandedEntryIds = expandedIds)
+            state.copy(expandedEntryIds = newExpandedIds)
         }
     }
     
-    fun deleteEntry(entryId: String) {
-        viewModelScope.launch {
-            try {
-                dataRepository.deleteDataPoint(entryId)
-                // Refresh the current day's data
-                _uiState.value.selectedDate?.let { date ->
-                    loadDayDetails(date)
-                }
-                // Remove from expanded if it was expanded
-                _uiState.update { state ->
-                    state.copy(expandedEntryIds = state.expandedEntryIds - entryId)
-                }
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(error = "Failed to delete entry: ${e.message}")
-                }
-            }
-        }
-    }
-    
-    fun setFilterPlugin(plugin: Plugin?) {
+    fun selectFilterPlugin(plugin: Plugin?) {
         _uiState.update { state ->
             val filteredMap = if (plugin != null) {
                 state.dayActivityMap.filterValues { activity ->
@@ -200,14 +181,11 @@ class ReflectViewModel @Inject constructor(
         }
     }
     
-    fun clearError() {
-        _uiState.update { it.copy(error = null) }
-    }
-    
-    private suspend fun loadAvailablePlugins() {
-        // FIXED: Use getAllActivePlugins() instead of getEnabledPlugins()
-        val plugins = pluginManager.getAllActivePlugins()
-        _uiState.update { it.copy(availablePlugins = plugins) }
+    private fun loadAvailablePlugins() {
+        viewModelScope.launch {
+            val plugins = pluginManager.getAvailablePlugins()
+            _uiState.update { it.copy(availablePlugins = plugins) }
+        }
     }
     
     private suspend fun loadMonthData(yearMonth: YearMonth) {
@@ -218,9 +196,8 @@ class ReflectViewModel @Inject constructor(
             val endOfMonth = yearMonth.atEndOfMonth().atTime(23, 59, 59)
                 .atZone(ZoneId.systemDefault()).toInstant()
             
-            // FIXED: Use getDataInRange() instead of getDataPointsForDateRange()
             dataRepository.getDataInRange(startOfMonth, endOfMonth)
-                .collect { dataPoints: List<DataPoint> ->  // FIXED: Explicit type declaration
+                .collect { dataPoints: List<DataPoint> ->
                     updateActivityMap(dataPoints)
                     updateStats(dataPoints)
                     _uiState.update { it.copy(isLoading = false) }
@@ -270,65 +247,66 @@ class ReflectViewModel @Inject constructor(
         }
     }
     
-private suspend fun loadDayDetails(date: LocalDate) {
-    try {
-        val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
-        val endOfDay = date.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant()
-        
-        dataRepository.getDataInRange(startOfDay, endOfDay)
-            .onSuccess { dataPoints ->
-                val entries = dataPoints.map { dp ->
-                    val plugin = pluginManager.getPlugin(dp.pluginId)
-                    val formatter = plugin?.getDataFormatter() ?: defaultFormatter
-                    
-                    // Get formatted summary and details
-                    val displayValue = formatter.formatSummary(dp)
-                    val formattedDetails = formatter.formatDetails(dp)
-                    
-                    // Extract note if exists
-                    val noteFromValue = dp.value["note"] as? String 
-                        ?: dp.value["notes"] as? String
-                    val noteFromMetadata = dp.metadata?.get("note")
-                    val finalNote = noteFromValue ?: noteFromMetadata
-                    
-                    // Get source
-                    val sourceFromValue = dp.value["source"] as? String
-                    val sourceFromMetadata = dp.metadata?.get("source")
-                    val finalSource = sourceFromValue ?: sourceFromMetadata ?: dp.source
-                    
-                    DataEntry(
-                        id = dp.id,
-                        pluginId = dp.pluginId,
-                        pluginName = plugin?.metadata?.name ?: dp.pluginId,
-                        displayValue = displayValue,  // Now using formatter
-                        rawValue = dp.value,
-                        formattedDetails = formattedDetails,  // NEW: Formatted details
-                        metadata = dp.metadata?.mapValues { it.value as Any? },
-                        note = finalNote,
-                        time = dp.timestamp.atZone(ZoneId.systemDefault())
-                            .toLocalTime()
-                            .format(timeFormatter),
-                        timestamp = dp.timestamp,
-                        source = finalSource
-                    )
-                }.sortedByDescending { it.timestamp }
-                
-                _uiState.update {
-                    it.copy(
-                        selectedDayData = DayData(
-                            date = date,
-                            entries = entries,
-                            totalCount = entries.size
+    private suspend fun loadDayDetails(date: LocalDate) {
+        try {
+            val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val endOfDay = date.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant()
+            
+            dataRepository.getDataInRange(startOfDay, endOfDay)
+                .collect { dataPoints ->  // FIXED: Use collect instead of onSuccess
+                    val entries = dataPoints.map { dp ->
+                        val plugin = pluginManager.getPlugin(dp.pluginId)
+                        val formatter = plugin?.getDataFormatter() ?: defaultFormatter
+                        
+                        // Get formatted summary and details
+                        val displayValue = formatter.formatSummary(dp)
+                        val formattedDetails = formatter.formatDetails(dp)
+                        
+                        // Extract note if exists
+                        val noteFromValue = dp.value["note"] as? String 
+                            ?: dp.value["notes"] as? String
+                        val noteFromMetadata = dp.metadata?.get("note") as? String
+                        val finalNote = noteFromValue ?: noteFromMetadata
+                        
+                        // Get source
+                        val sourceFromValue = dp.value["source"] as? String
+                        val sourceFromMetadata = dp.metadata?.get("source") as? String
+                        val finalSource = sourceFromValue ?: sourceFromMetadata ?: dp.source
+                        
+                        DataEntry(
+                            id = dp.id,
+                            pluginId = dp.pluginId,
+                            pluginName = plugin?.metadata?.name ?: dp.pluginId,
+                            displayValue = displayValue,
+                            rawValue = dp.value,
+                            formattedDetails = formattedDetails,
+                            metadata = dp.metadata?.mapValues { entry -> entry.value as? Any? },
+                            note = finalNote,
+                            time = dp.timestamp.atZone(ZoneId.systemDefault())
+                                .toLocalTime()
+                                .format(timeFormatter),
+                            timestamp = dp.timestamp,
+                            source = finalSource
                         )
-                    )
+                    }.sortedByDescending { it.timestamp }
+                    
+                    _uiState.update {
+                        it.copy(
+                            selectedDayData = DayData(
+                                date = date,
+                                entries = entries,
+                                totalCount = entries.size
+                            )
+                        )
+                    }
                 }
+        } catch (e: Exception) {
+            _uiState.update {
+                it.copy(error = "Failed to load day details: ${e.message}")
             }
-    } catch (e: Exception) {
-        _uiState.update {
-            it.copy(error = "Failed to load day details: ${e.message}")
         }
     }
-}    
+    
     private fun filterDataPointsForMonth(
         dataPoints: List<DataPoint>, 
         yearMonth: YearMonth
@@ -338,7 +316,7 @@ private suspend fun loadDayDetails(date: LocalDate) {
             .atZone(ZoneId.systemDefault()).toInstant()
         
         return dataPoints.filter { dp ->
-            dp.timestamp in startOfMonth..endOfMonth
+            dp.timestamp >= startOfMonth && dp.timestamp <= endOfMonth
         }
     }
     
@@ -350,23 +328,22 @@ private suspend fun loadDayDetails(date: LocalDate) {
             .mapValues { (date, points) ->
                 val pluginCounts = points.groupBy { it.pluginId }
                     .mapValues { it.value.size }
-                val totalCount = points.size
                 
                 DayActivity(
                     date = date,
-                    entryCount = totalCount,
-                    intensity = getIntensityForCount(totalCount),
+                    entryCount = points.size,
+                    intensity = calculateIntensity(points.size),
                     pluginCounts = pluginCounts
                 )
             }
     }
     
-    private fun getIntensityForCount(count: Int): ActivityIntensity {
-        return when {
-            count == 0 -> ActivityIntensity.NONE
-            count in 1..3 -> ActivityIntensity.LOW
-            count in 4..6 -> ActivityIntensity.MEDIUM
-            count in 7..10 -> ActivityIntensity.HIGH
+    private fun calculateIntensity(count: Int): ActivityIntensity {
+        return when (count) {
+            0 -> ActivityIntensity.NONE
+            in 1..3 -> ActivityIntensity.LOW
+            in 4..6 -> ActivityIntensity.MEDIUM
+            in 7..10 -> ActivityIntensity.HIGH
             else -> ActivityIntensity.VERY_HIGH
         }
     }
@@ -378,38 +355,25 @@ private suspend fun loadDayDetails(date: LocalDate) {
             .map { it.timestamp.atZone(ZoneId.systemDefault()).toLocalDate() }
             .distinct()
             .sorted()
-            .reversed()
         
-        var streak = 0
-        var currentDate = LocalDate.now()
+        var streak = 1
+        var maxStreak = 1
         
-        for (date in dates) {
-            if (date == currentDate || date == currentDate.minusDays(1)) {
+        for (i in 1 until dates.size) {
+            if (dates[i].minusDays(1) == dates[i-1]) {
                 streak++
-                currentDate = date
+                maxStreak = maxOf(maxStreak, streak)
             } else {
-                break
+                streak = 1
             }
         }
         
-        return streak
+        return maxStreak
     }
     
     private fun calculateMostActiveDay(activityMap: Map<LocalDate, DayActivity>): String {
-        if (activityMap.isEmpty()) return "None"
-        
-        val dayOfWeekCounts = activityMap.values
-            .groupBy { it.date.dayOfWeek }
-            .mapValues { (_, activities) ->
-                activities.sumOf { it.entryCount }
-            }
-        
-        val mostActiveDay = dayOfWeekCounts.maxByOrNull { it.value }?.key
-        
-        return mostActiveDay?.getDisplayName(
-            java.time.format.TextStyle.FULL,
-            java.util.Locale.getDefault()
-        ) ?: "None"
+        val mostActive = activityMap.maxByOrNull { it.value.entryCount }
+        return mostActive?.key?.dayOfWeek?.toString()?.lowercase()?.capitalize() ?: "None"
     }
     
     private fun formatDataPointValue(dataPoint: DataPoint): String {

@@ -21,8 +21,8 @@ class SleepPlugin : Plugin {
         author = "System",
         category = PluginCategory.HEALTH,
         tags = listOf("sleep", "rest", "health", "daily", "recovery"),
-        dataPattern = DataPattern.OCCURRENCE,  // Fixed: OCCURRENCE exists
-        inputType = InputType.TIME_RANGE,  // Uses RangeSlider for time selection
+        dataPattern = DataPattern.OCCURRENCE,
+        inputType = InputType.TIME_RANGE,
         supportsMultiStage = false,
         relatedPlugins = listOf("mood", "energy"),
         exportFormat = ExportFormat.CSV,
@@ -71,22 +71,21 @@ class SleepPlugin : Plugin {
         id = "sleep",
         title = "Log Sleep",
         inputType = InputType.TIME_RANGE,
-        min = 12f,        // 0:00 (midnight)
-        max = 36f,       // 48 hours to handle crossing midnight
-        step = 1f,       // 1-hour increments for simplicity
+        min = 12f,
+        max = 36f,
+        step = 1f,
         defaultValue = mapOf(
-            "bedtime" to 23f,   // 11 PM default
-            "waketime" to 7f    // 7 AM default
+            "bedtime" to 23f,
+            "waketime" to 7f
         ),
         unit = null,
         showValue = true,
-        primaryColor = "#1E3A8A",    // Deep blue for sleep
-        secondaryColor = "#60A5FA"   // Light blue for wake
+        primaryColor = "#1E3A8A",
+        secondaryColor = "#60A5FA"
     )
     
     override suspend fun collectData(): DataPoint? {
         // Automatic collection not implemented for sleep
-        // Would require integration with device sensors or sleep tracking apps
         return null
     }
     
@@ -105,21 +104,22 @@ class SleepPlugin : Plugin {
             id = generateDataPointId(),
             pluginId = id,
             timestamp = Instant.now(),
-            type = "sleep_session",  // Added required type parameter
+            type = "sleep_session",
             value = mapOf(
                 "bedtime" to bedtime,
                 "waketime" to waketime,
                 "duration" to duration,
+                "hours" to duration,  // Add hours field for formatter
                 "quality" to calculateSleepQuality(duration)
             ),
-	metadata = mapOf(
-    "startKey" to "bedtime",
-    "endKey" to "waketime",
-    "startLabel" to "Bedtime",
-    "endLabel" to "Wake",
-    "durationLabel" to "{duration} sleep",
-    "timeFormat" to "12h"
-)
+            metadata = mapOf(
+                "startKey" to "bedtime",
+                "endKey" to "waketime",
+                "startLabel" to "Bedtime",
+                "endLabel" to "Wake",
+                "durationLabel" to "{duration} sleep",
+                "timeFormat" to "12h"
+            )
         )
     }
     
@@ -182,7 +182,6 @@ class SleepPlugin : Plugin {
     }
     
     // Helper functions
-    
     private fun generateDataPointId(): String {
         return "sleep_${System.currentTimeMillis()}"
     }
@@ -203,142 +202,144 @@ class SleepPlugin : Plugin {
         val m = ((hour - h) * 60).toInt()
         return String.format("%02d:%02d", h, m)
     }
+    
     override fun getDataFormatter(): PluginDataFormatter {
-    return SleepDataFormatter()
-   }
-}
-
-private inner class SleepDataFormatter : PluginDataFormatter {
-    
-    override fun formatSummary(dataPoint: DataPoint): String {
-        val hours = (dataPoint.value["hours"] as? Number)?.toFloat() ?: 0f
-        val quality = dataPoint.value["quality"]?.toString() ?: ""
-        
-        val hoursText = when {
-            hours < 1 -> "${(hours * 60).toInt()} minutes"
-            hours == hours.toInt().toFloat() -> "${hours.toInt()} hours"
-            else -> String.format("%.1f hours", hours)
-        }
-        
-        val qualityText = when(quality) {
-            "deep" -> "Deep Sleep"
-            "good" -> "Good Sleep"
-            "light" -> "Light Sleep"
-            "poor" -> "Poor Sleep"
-            else -> quality
-        }
-        
-        return if (qualityText.isNotEmpty()) {
-            "$hoursText - $qualityText"
-        } else {
-            hoursText
-        }
+        return SleepDataFormatter()
     }
     
-    override fun formatDetails(dataPoint: DataPoint): List<DataField> {
-        val fields = mutableListOf<DataField>()
+    // INNER CLASS MUST BE INSIDE THE SLEEPPLUGIN CLASS
+    private inner class SleepDataFormatter : PluginDataFormatter {
         
-        // Sleep Duration - Important field
-        dataPoint.value["hours"]?.let { hours ->
-            val hoursFloat = (hours as? Number)?.toFloat() ?: 0f
-            val hoursInt = hoursFloat.toInt()
-            val minutes = ((hoursFloat - hoursInt) * 60).toInt()
+        override fun formatSummary(dataPoint: DataPoint): String {
+            val hours = (dataPoint.value["hours"] as? Number)?.toFloat() ?: 0f
+            val quality = dataPoint.value["quality"]?.toString() ?: ""
             
-            val durationText = when {
-                hoursInt == 0 -> "$minutes minutes"
-                minutes == 0 -> "$hoursInt hours"
-                else -> "$hoursInt hours $minutes minutes"
+            val hoursText = when {
+                hours < 1 -> "${(hours * 60).toInt()} minutes"
+                hours == hours.toInt().toFloat() -> "${hours.toInt()} hours"
+                else -> String.format("%.1f hours", hours)
             }
             
-            fields.add(DataField(
-                label = "Sleep Duration",
-                value = durationText + getSleepDurationQuality(hoursFloat),
-                isImportant = true
-            ))
+            val qualityText = when(quality) {
+                "deep" -> "Deep Sleep"
+                "good" -> "Good Sleep"
+                "light" -> "Light Sleep"
+                "poor" -> "Poor Sleep"
+                else -> quality
+            }
+            
+            return if (qualityText.isNotEmpty()) {
+                "$hoursText - $qualityText"
+            } else {
+                hoursText
+            }
         }
         
-        // Bedtime
-        dataPoint.value["bedtime"]?.let { bedtime ->
-            val hour = (bedtime as? Number)?.toFloat() ?: 0f
-            fields.add(DataField(
-                label = "Bedtime",
-                value = formatTimeFromHour(hour)
-            ))
-        }
-        
-        // Wake time
-        dataPoint.value["waketime"]?.let { waketime ->
-            val hour = (waketime as? Number)?.toFloat() ?: 0f
-            fields.add(DataField(
-                label = "Wake Time",
-                value = formatTimeFromHour(hour)
-            ))
-        }
-        
-        // Sleep Quality
-        dataPoint.value["quality"]?.let { quality ->
-            fields.add(DataField(
-                label = "Sleep Quality",
-                value = when(quality.toString()) {
-                    "deep" -> "Deep Sleep"
-                    "good" -> "Good Sleep"
-                    "light" -> "Light Sleep"
-                    "poor" -> "Poor Sleep"
-                    else -> quality.toString()
+        override fun formatDetails(dataPoint: DataPoint): List<DataField> {
+            val fields = mutableListOf<DataField>()
+            
+            // Sleep Duration - Important field
+            dataPoint.value["hours"]?.let { hours ->
+                val hoursFloat = (hours as? Number)?.toFloat() ?: 0f
+                val hoursInt = hoursFloat.toInt()
+                val minutes = ((hoursFloat - hoursInt) * 60).toInt()
+                
+                val durationText = when {
+                    hoursInt == 0 -> "$minutes minutes"
+                    minutes == 0 -> "$hoursInt hours"
+                    else -> "$hoursInt hours $minutes minutes"
                 }
-            ))
+                
+                fields.add(DataField(
+                    label = "Sleep Duration",
+                    value = durationText + getSleepDurationQuality(hoursFloat),
+                    isImportant = true
+                ))
+            }
+            
+            // Bedtime
+            dataPoint.value["bedtime"]?.let { bedtime ->
+                val hour = (bedtime as? Number)?.toFloat() ?: 0f
+                fields.add(DataField(
+                    label = "Bedtime",
+                    value = formatTimeFromHour(hour)
+                ))
+            }
+            
+            // Wake time
+            dataPoint.value["waketime"]?.let { waketime ->
+                val hour = (waketime as? Number)?.toFloat() ?: 0f
+                fields.add(DataField(
+                    label = "Wake Time",
+                    value = formatTimeFromHour(hour)
+                ))
+            }
+            
+            // Sleep Quality
+            dataPoint.value["quality"]?.let { quality ->
+                fields.add(DataField(
+                    label = "Sleep Quality",
+                    value = when(quality.toString()) {
+                        "deep" -> "Deep Sleep"
+                        "good" -> "Good Sleep"
+                        "light" -> "Light Sleep"
+                        "poor" -> "Poor Sleep"
+                        else -> quality.toString()
+                    }
+                ))
+            }
+            
+            // Dreams
+            dataPoint.value["dreams"]?.let { dreams ->
+                if (dreams is Boolean && dreams) {
+                    fields.add(DataField(
+                        label = "Dreams",
+                        value = "Yes"
+                    ))
+                }
+            }
+            
+            // Notes
+            dataPoint.value["notes"]?.let { notes ->
+                if (notes.toString().isNotBlank()) {
+                    fields.add(DataField(
+                        label = "Notes",
+                        value = notes.toString(),
+                        isLongText = true
+                    ))
+                }
+            }
+            
+            return fields
         }
         
-        // Dreams
-        dataPoint.value["dreams"]?.let { dreams ->
-            if (dreams is Boolean && dreams) {
-                fields.add(DataField(
-                    label = "Dreams",
-                    value = "Yes"
-                ))
+        private fun formatTimeFromHour(hour: Float): String {
+            val hourInt = hour.toInt()
+            val minutes = ((hour - hourInt) * 60).toInt()
+            
+            val displayHour = when {
+                hourInt == 0 -> 12
+                hourInt > 12 -> hourInt - 12
+                else -> hourInt
+            }
+            
+            val period = if (hourInt < 12) "AM" else "PM"
+            
+            return if (minutes == 0) {
+                "$displayHour:00 $period"
+            } else {
+                String.format("%d:%02d %s", displayHour, minutes, period)
             }
         }
         
-        // Notes
-        dataPoint.value["notes"]?.let { notes ->
-            if (notes.toString().isNotBlank()) {
-                fields.add(DataField(
-                    label = "Notes",
-                    value = notes.toString(),
-                    isLongText = true
-                ))
+        private fun getSleepDurationQuality(hours: Float): String {
+            return when {
+                hours < 4 -> " (Very Short)"
+                hours < 6 -> " (Short)"
+                hours <= 9 -> " (Normal)"
+                hours <= 10 -> " (Long)"
+                else -> " (Very Long)"
             }
-        }
-        
-        return fields
-    }
-    
-    private fun formatTimeFromHour(hour: Float): String {
-        val hourInt = hour.toInt()
-        val minutes = ((hour - hourInt) * 60).toInt()
-        
-        val displayHour = when {
-            hourInt == 0 -> 12
-            hourInt > 12 -> hourInt - 12
-            else -> hourInt
-        }
-        
-        val period = if (hourInt < 12) "AM" else "PM"
-        
-        return if (minutes == 0) {
-            "$displayHour:00 $period"
-        } else {
-            String.format("%d:%02d %s", displayHour, minutes, period)
-        }
-    }
-    
-    private fun getSleepDurationQuality(hours: Float): String {
-        return when {
-            hours < 4 -> " (Very Short)"
-            hours < 6 -> " (Short)"
-            hours <= 9 -> " (Normal)"
-            hours <= 10 -> " (Long)"
-            else -> " (Very Long)"
         }
     }
 }
