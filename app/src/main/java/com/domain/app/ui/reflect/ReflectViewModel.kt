@@ -91,7 +91,7 @@ class ReflectViewModel @Inject constructor(
             val currentMonth = YearMonth.now()
             updateMonthDisplay(currentMonth)
             loadMonthData(currentMonth)
-            loadAvailablePlugins()
+            loadAvailablePlugins()  // This method is defined below
         }
     }
     
@@ -164,6 +164,34 @@ class ReflectViewModel @Inject constructor(
         }
     }
     
+    // Alias method for ReflectCalendarScreen compatibility
+    fun toggleEntryExpanded(entryId: String) {
+        toggleEntryExpansion(entryId)
+    }
+    
+    // Delete entry method (ONLY ONE DEFINITION)
+    fun deleteEntry(entryId: String) {
+        viewModelScope.launch {
+            try {
+                dataRepository.deleteDataPoint(entryId)
+                
+                // Refresh the current day's data after deletion
+                _uiState.value.selectedDate?.let { date ->
+                    loadDayDetails(date)
+                }
+                
+                // Remove from expanded entries if it was expanded
+                _uiState.update { state ->
+                    state.copy(expandedEntryIds = state.expandedEntryIds - entryId)
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(error = "Failed to delete entry: ${e.message}")
+                }
+            }
+        }
+    }
+    
     fun selectFilterPlugin(plugin: Plugin?) {
         _uiState.update { state ->
             val filteredMap = if (plugin != null) {
@@ -181,9 +209,10 @@ class ReflectViewModel @Inject constructor(
         }
     }
     
+    // Load available plugins method (PROPERLY DEFINED)
     private fun loadAvailablePlugins() {
         viewModelScope.launch {
-            val plugins = pluginManager.getAvailablePlugins()
+            val plugins = pluginManager.getAllActivePlugins()  // Using correct method
             _uiState.update { it.copy(availablePlugins = plugins) }
         }
     }
@@ -253,7 +282,7 @@ class ReflectViewModel @Inject constructor(
             val endOfDay = date.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant()
             
             dataRepository.getDataInRange(startOfDay, endOfDay)
-                .collect { dataPoints ->  // FIXED: Use collect instead of onSuccess
+                .collect { dataPoints ->
                     val entries = dataPoints.map { dp ->
                         val plugin = pluginManager.getPlugin(dp.pluginId)
                         val formatter = plugin?.getDataFormatter() ?: defaultFormatter
@@ -374,64 +403,5 @@ class ReflectViewModel @Inject constructor(
     private fun calculateMostActiveDay(activityMap: Map<LocalDate, DayActivity>): String {
         val mostActive = activityMap.maxByOrNull { it.value.entryCount }
         return mostActive?.key?.dayOfWeek?.toString()?.lowercase()?.capitalize() ?: "None"
-    }
-    
-    private fun formatDataPointValue(dataPoint: DataPoint): String {
-        val value = dataPoint.value
-        
-        return when {
-            value.containsKey("amount") -> {
-                val amount = value["amount"]
-                val unit = value["unit"] ?: ""
-                "$amount $unit".trim()
-            }
-            value.containsKey("value") -> {
-                val mainValue = value["value"]
-                val unit = value["unit"] ?: ""
-                "$mainValue $unit".trim()
-            }
-            value.containsKey("duration_seconds") -> {
-                val seconds = (value["duration_seconds"] as? Number)?.toLong() ?: 0
-                formatDuration(seconds)
-            }
-            value.containsKey("hours") -> {
-                val hours = value["hours"]
-                "$hours hours"
-            }
-            value.containsKey("mood") -> {
-                val mood = value["mood"]
-                val score = value["score"]
-                if (score != null) {
-                    "$mood ($score/10)"
-                } else {
-                    mood.toString()
-                }
-            }
-            value.containsKey("file_name") -> {
-                val duration = value["duration_seconds"]
-                if (duration != null) {
-                    "Audio: ${formatDuration((duration as Number).toLong())}"
-                } else {
-                    "Audio recording"
-                }
-            }
-            else -> {
-                value.entries.firstOrNull { 
-                    it.key !in listOf("note", "metadata", "timestamp", "source")
-                }?.let { "${it.value}" } ?: "Data entry"
-            }
-        }
-    }
-    
-    private fun formatDuration(seconds: Long): String {
-        val hours = seconds / 3600
-        val minutes = (seconds % 3600) / 60
-        val secs = seconds % 60
-        
-        return when {
-            hours > 0 -> String.format("%d:%02d:%02d", hours, minutes, secs)
-            minutes > 0 -> String.format("%d:%02d", minutes, secs)
-            else -> String.format("%ds", secs)
-        }
     }
 }
