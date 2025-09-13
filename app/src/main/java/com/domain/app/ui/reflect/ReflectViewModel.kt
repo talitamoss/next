@@ -141,19 +141,44 @@ class ReflectViewModel @Inject constructor(
     private val monthYearFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
     private val defaultFormatter = DefaultDataFormatter()
     
-    init {
+init {
+        // Load plugins first
+        loadPluginsNow()
+        // Then load initial data
         loadInitialData()
+        // Setup observers
         observeDataChanges()
     }
     
     // ============== INITIALIZATION ==============
+    
+    private fun loadPluginsNow() {
+        // Get the plugins directly from registry - they're already registered
+        val allPlugins = pluginRegistry.getAllPlugins()
+        
+        // If that returns empty, try getting from pluginManager
+        val plugins = if (allPlugins.isNotEmpty()) {
+            allPlugins
+        } else {
+            // Fallback to pluginManager's active plugins
+            pluginManager.getAllActivePlugins()
+        }
+        
+        // Update the state immediately
+        _uiState.value = _uiState.value.copy(availablePlugins = plugins)
+    }
+    
+    private fun loadAvailablePlugins() {
+        // Just call loadPluginsNow
+        loadPluginsNow()
+    }
     
     private fun loadInitialData() {
         viewModelScope.launch {
             val currentMonth = YearMonth.now()
             updateMonthDisplay(currentMonth)
             loadMonthData(currentMonth)
-            loadAvailablePlugins()
+            // Don't load plugins here - already done in init
         }
     }
     
@@ -169,27 +194,6 @@ class ReflectViewModel @Inject constructor(
             }
             .launchIn(viewModelScope)
     }
-    
-
-    private fun loadAvailablePlugins() {
-        viewModelScope.launch {
-            try {
-                val allPlugins = pluginManager.getAllActivePlugins()
-                _uiState.update { currentState ->
-                    currentState.copy(availablePlugins = allPlugins)
-                }
-                
-            } catch (e: Exception) {
-                // Handle any errors gracefully
-                _uiState.update { 
-                    it.copy(
-                        availablePlugins = emptyList(),
-                        error = "Failed to load plugins: ${e.message}"
-                    )
-                }
-            }
-        }
-    }    
     // ============== PLUGIN FILTERING ==============
     
     fun togglePluginFilter(pluginId: String) {

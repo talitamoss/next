@@ -32,7 +32,9 @@ fun PluginFilterDropdown(
     
     // Determine display text based on selection
     val displayText = when {
-        showAllPlugins || selectedPluginIds.isEmpty() -> "All Activities"
+        availablePlugins.isEmpty() -> "Loading..."
+        showAllPlugins -> "All Activities"
+        selectedPluginIds.isEmpty() -> "No Activities Selected"
         selectedPluginIds.size == 1 -> {
             availablePlugins.find { it.id == selectedPluginIds.first() }?.metadata?.name ?: "1 Activity"
         }
@@ -67,6 +69,14 @@ fun PluginFilterDropdown(
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium
                     )
+                    // Debug text to show plugin count
+                    if (availablePlugins.isNotEmpty()) {
+                        Text(
+                            text = "${availablePlugins.size} plugins available",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 Icon(
                     imageVector = if (expanded) AppIcons.Control.collapse else AppIcons.Control.expand,
@@ -90,112 +100,119 @@ fun PluginFilterDropdown(
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 4.dp
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                        .heightIn(max = 400.dp)
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    // Show "All Activities" option at the top
-                    Row(
+                if (availablePlugins.isEmpty()) {
+                    // Show loading or empty state
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { 
-                                if (!showAllPlugins) {
-                                    onSelectAll()
-                                }
-                            }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Checkbox(
-                            checked = showAllPlugins,
-                            onCheckedChange = { 
-                                if (it) {
-                                    onSelectAll()
-                                } else {
-                                    onClearAll()
-                                }
-                            }
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "All Activities",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = if (showAllPlugins) FontWeight.Medium else FontWeight.Normal
+                            text = "No plugins available",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    
-                    // Divider between "All" and individual plugins
-                    if (availablePlugins.isNotEmpty()) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant
-                        )
-                    }
-                    
-                    // Individual plugin options
-                    availablePlugins.forEach { plugin ->
-                        val isSelected = if (showAllPlugins) {
-                            true // All are selected when showAllPlugins is true
-                        } else {
-                            plugin.id in selectedPluginIds
-                        }
-                        
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    ) {
+                        // "All Activities" option at the top
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { 
-                                    onTogglePlugin(plugin.id)
+                                    if (!showAllPlugins) {
+                                        onSelectAll()
+                                    }
                                 }
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Checkbox(
-                                checked = isSelected,
+                                checked = showAllPlugins,
                                 onCheckedChange = { 
-                                    onTogglePlugin(plugin.id)
-                                },
-                                enabled = true // Always enabled for better UX
+                                    if (it) {
+                                        onSelectAll()
+                                    } else {
+                                        onClearAll()
+                                    }
+                                }
                             )
                             Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = plugin.metadata.name,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = if (isSelected && !showAllPlugins) FontWeight.Medium else FontWeight.Normal
-                                )
-                                plugin.metadata.description.takeIf { it.isNotBlank() }?.let { desc ->
-                                    Text(
-                                        text = desc,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1
+                            Text(
+                                text = "All Activities",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (showAllPlugins) FontWeight.Medium else FontWeight.Normal
+                            )
+                        }
+                        
+                        // Divider
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant
+                        )
+                        
+                        // Scrollable plugin list
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 300.dp) // Set max height for scrolling
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            // Individual plugin options
+                            availablePlugins.forEach { plugin ->
+                                val isSelected = if (showAllPlugins) {
+                                    true
+                                } else {
+                                    plugin.id in selectedPluginIds
+                                }
+                                
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { 
+                                            onTogglePlugin(plugin.id)
+                                        }
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = isSelected,
+                                        onCheckedChange = { 
+                                            onTogglePlugin(plugin.id)
+                                        }
                                     )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = plugin.metadata.name,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = if (isSelected && !showAllPlugins) {
+                                                FontWeight.Medium
+                                            } else {
+                                                FontWeight.Normal
+                                            }
+                                        )
+                                        if (plugin.metadata.description.isNotBlank()) {
+                                            Text(
+                                                text = plugin.metadata.description,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
                                 }
                             }
-                            
-                            // Optional: Show data count badge (to be connected later)
-                            // Badge(
-                            //     containerColor = if (isSelected) {
-                            //         MaterialTheme.colorScheme.primaryContainer
-                            //     } else {
-                            //         MaterialTheme.colorScheme.surfaceVariant
-                            //     }
-                            // ) {
-                            //     Text(
-                            //         text = "0", // Connect to actual counts
-                            //         style = MaterialTheme.typography.labelSmall
-                            //     )
-                            // }
                         }
-                    }
-                    
-                    // Action buttons
-                    if (availablePlugins.isNotEmpty()) {
+                        
+                        // Action buttons
                         HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp),
                             color = MaterialTheme.colorScheme.outlineVariant
                         )
                         Row(
@@ -212,7 +229,7 @@ fun PluginFilterDropdown(
                             }
                             TextButton(
                                 onClick = onSelectAll,
-                                enabled = !showAllPlugins || selectedPluginIds.size < availablePlugins.size
+                                enabled = !showAllPlugins
                             ) {
                                 Text("Select All")
                             }
