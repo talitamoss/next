@@ -170,18 +170,14 @@ class ReflectViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
     
+
     private fun loadAvailablePlugins() {
         viewModelScope.launch {
             try {
-                // First initialize plugins in the manager
-                pluginManager.initializePlugins()
-                
-                // Get ALL registered plugins from the registry
-                // This gives us all 14 plugins regardless of initialization state
-                val allPlugins = pluginRegistry.getAllPlugins()
-                
-                // Update the UI state with all available plugins
-                _uiState.update { it.copy(availablePlugins = allPlugins) }
+                val allPlugins = pluginManager.getAllActivePlugins()
+                _uiState.update { currentState ->
+                    currentState.copy(availablePlugins = allPlugins)
+                }
                 
             } catch (e: Exception) {
                 // Handle any errors gracefully
@@ -193,8 +189,7 @@ class ReflectViewModel @Inject constructor(
                 }
             }
         }
-    }
-    
+    }    
     // ============== PLUGIN FILTERING ==============
     
     fun togglePluginFilter(pluginId: String) {
