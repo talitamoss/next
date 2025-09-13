@@ -170,7 +170,7 @@ class ReflectViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
     
- private fun loadAvailablePlugins() {
+    private fun loadAvailablePlugins() {
         viewModelScope.launch {
             try {
                 // First initialize plugins in the manager
@@ -193,21 +193,41 @@ class ReflectViewModel @Inject constructor(
                 }
             }
         }
-    }    
+    }
+    
     // ============== PLUGIN FILTERING ==============
     
     fun togglePluginFilter(pluginId: String) {
         _uiState.update { state ->
-            val newSelectedIds = if (pluginId in state.selectedPluginIds) {
-                state.selectedPluginIds - pluginId
-            } else {
-                state.selectedPluginIds + pluginId
-            }
+            val currentPlugins = state.availablePlugins
             
-            state.copy(
-                selectedPluginIds = newSelectedIds,
-                showAllPlugins = false
-            )
+            // If we're in "show all" mode and user deselects one plugin,
+            // switch to selective mode with all BUT the deselected plugin
+            if (state.showAllPlugins) {
+                val allPluginIds = currentPlugins.map { it.id }.toSet()
+                val newSelectedIds = allPluginIds - pluginId
+                
+                state.copy(
+                    selectedPluginIds = newSelectedIds,
+                    showAllPlugins = false
+                )
+            } else {
+                // Normal toggle behavior when not in "show all" mode
+                val newSelectedIds = if (pluginId in state.selectedPluginIds) {
+                    state.selectedPluginIds - pluginId
+                } else {
+                    state.selectedPluginIds + pluginId
+                }
+                
+                // If all plugins are now selected, switch to "show all" mode
+                val allSelected = currentPlugins.isNotEmpty() && 
+                                 newSelectedIds.size == currentPlugins.size
+                
+                state.copy(
+                    selectedPluginIds = if (allSelected) emptySet() else newSelectedIds,
+                    showAllPlugins = allSelected
+                )
+            }
         }
         updateFilteredData()
     }
@@ -450,37 +470,26 @@ class ReflectViewModel @Inject constructor(
                 displayValue = displayValue,
                 rawValue = dp.value,
                 formattedDetails = formattedDetails,
-                metadata = dp.metadata?.mapValues { it.value },
-                note = note,
-                time = dp.timestamp.atZone(ZoneId.systemDefault())
-                    .toLocalTime()
-                    .format(timeFormatter),
+                metadata = dp.metadata,
+                note = note as? String,
+                time = dp.timestamp.atZone(ZoneId.systemDefault()).format(timeFormatter),
                 timestamp = dp.timestamp,
                 source = source
             )
-        }.sortedByDescending { it.timestamp }
+        }
     }
     
-    private fun createWeekData(
-        startDate: LocalDate,
-        endDate: LocalDate,
-        dataPoints: List<DataPoint>
-    ): WeekData {
-        val dailyBreakdown = mutableMapOf<LocalDate, DayStats>()
-        var currentDate = startDate
-        
-        while (!currentDate.isAfter(endDate)) {
+    private fun createWeekData(startDate: LocalDate, endDate: LocalDate, dataPoints: List<DataPoint>): WeekData {
+        val dailyBreakdown = (0..6).associate { dayOffset ->
+            val date = startDate.plusDays(dayOffset.toLong())
             val dayPoints = dataPoints.filter { dp ->
-                dp.timestamp.atZone(ZoneId.systemDefault()).toLocalDate() == currentDate
+                dp.timestamp.atZone(ZoneId.systemDefault()).toLocalDate() == date
             }
-            
-            dailyBreakdown[currentDate] = DayStats(
-                date = currentDate,
+            date to DayStats(
+                date = date,
                 totalEntries = dayPoints.size,
                 pluginCounts = dayPoints.groupBy { it.pluginId }.mapValues { it.value.size }
             )
-            
-            currentDate = currentDate.plusDays(1)
         }
         
         return WeekData(
@@ -488,7 +497,7 @@ class ReflectViewModel @Inject constructor(
             endDate = endDate,
             dailyBreakdown = dailyBreakdown,
             totalEntries = dataPoints.size,
-            dailyAverage = if (dailyBreakdown.isNotEmpty()) dataPoints.size.toFloat() / 7 else 0f,
+            dailyAverage = dataPoints.size / 7f,
             pluginStats = calculatePluginStats(dataPoints),
             timePatterns = calculateTimePatterns(dataPoints)
         )
@@ -496,25 +505,22 @@ class ReflectViewModel @Inject constructor(
     
     private fun createMonthData(yearMonth: YearMonth, dataPoints: List<DataPoint>): MonthData {
         val weekFields = WeekFields.of(Locale.getDefault())
-        val weeklyBreakdown = mutableMapOf<Int, WeekStats>()
-        
-        val weekGroups = dataPoints.groupBy { dp ->
-            val date = dp.timestamp.atZone(ZoneId.systemDefault()).toLocalDate()
-            date.get(weekFields.weekOfMonth())
-        }
-        
-        weekGroups.forEach { (weekNum, weekPoints) ->
-            val dates = weekPoints.map {
-                it.timestamp.atZone(ZoneId.systemDefault()).toLocalDate()
+        val weeklyBreakdown = dataPoints
+            .groupBy { dp ->
+                dp.timestamp.atZone(ZoneId.systemDefault()).toLocalDate()
+                    .get(weekFields.weekOfMonth())
             }
-            
-            weeklyBreakdown[weekNum] = WeekStats(
-                weekNumber = weekNum,
-                startDate = dates.minOrNull() ?: yearMonth.atDay(1),
-                endDate = dates.maxOrNull() ?: yearMonth.atEndOfMonth(),
-                totalEntries = weekPoints.size
-            )
-        }
+            .mapValues { (weekNum, weekPoints) ->
+                val dates = weekPoints.map {
+                    it.timestamp.atZone(ZoneId.systemDefault()).toLocalDate()
+                }
+                WeekStats(
+                    weekNumber = weekNum,
+                    startDate = dates.minOrNull() ?: yearMonth.atDay(1),
+                    endDate = dates.maxOrNull() ?: yearMonth.atEndOfMonth(),
+                    totalEntries = weekPoints.size
+                )
+            }
         
         val dayGroups = dataPoints.groupBy {
             it.timestamp.atZone(ZoneId.systemDefault()).toLocalDate()
@@ -672,17 +678,15 @@ class ReflectViewModel @Inject constructor(
             }
         }
         
-        val total = dataPoints.size.toFloat()
-        return if (total > 0) {
-            slotCounts.mapValues { it.value / total }
-        } else {
-            emptyMap()
+        val total = slotCounts.values.sum().toFloat()
+        return slotCounts.mapValues { (_, count) ->
+            if (total > 0) (count / total) * 100 else 0f
         }
     }
     
     // ============== UI ACTIONS ==============
     
-    fun toggleEntryExpansion(entryId: String) {
+    fun toggleEntryExpanded(entryId: String) {
         _uiState.update { state ->
             val newExpandedIds = if (entryId in state.expandedEntryIds) {
                 state.expandedEntryIds - entryId
@@ -693,18 +697,10 @@ class ReflectViewModel @Inject constructor(
         }
     }
     
-    fun toggleEntryExpanded(entryId: String) {
-        toggleEntryExpansion(entryId)
-    }
-    
     fun deleteEntry(entryId: String) {
         viewModelScope.launch {
             try {
                 dataRepository.deleteDataPoint(entryId)
-                _uiState.value.selectedDate?.let { loadDayDetails(it) }
-                _uiState.update { state ->
-                    state.copy(expandedEntryIds = state.expandedEntryIds - entryId)
-                }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(error = "Failed to delete entry: ${e.message}")

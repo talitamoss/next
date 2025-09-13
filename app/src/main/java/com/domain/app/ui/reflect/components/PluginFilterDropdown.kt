@@ -4,26 +4,20 @@ package com.domain.app.ui.reflect.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.PopupProperties
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.ui.theme.AppIcons
+import androidx.compose.foundation.shape.RoundedCornerShape
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PluginFilterDropdown(
     availablePlugins: List<Plugin>,
@@ -36,12 +30,11 @@ fun PluginFilterDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
     
-    // Determine display text
+    // Determine display text based on selection
     val displayText = when {
-        showAllPlugins -> "All Activities"
-        selectedPluginIds.isEmpty() -> "Select Activities"
+        showAllPlugins || selectedPluginIds.isEmpty() -> "All Activities"
         selectedPluginIds.size == 1 -> {
-            availablePlugins.find { it.id in selectedPluginIds }?.metadata?.name ?: "1 Activity"
+            availablePlugins.find { it.id == selectedPluginIds.first() }?.metadata?.name ?: "1 Activity"
         }
         else -> "${selectedPluginIds.size} Activities"
     }
@@ -95,15 +88,16 @@ fun PluginFilterDropdown(
                     .padding(top = 4.dp),
                 shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 4.dp,
-                shadowElevation = 4.dp
+                tonalElevation = 4.dp
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 300.dp)
+                        .padding(vertical = 8.dp)
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState())
                 ) {
-                    // All option
+                    // Show "All Activities" option at the top
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -118,7 +112,11 @@ fun PluginFilterDropdown(
                         Checkbox(
                             checked = showAllPlugins,
                             onCheckedChange = { 
-                                if (it) onSelectAll() else onClearAll()
+                                if (it) {
+                                    onSelectAll()
+                                } else {
+                                    onClearAll()
+                                }
                             }
                         )
                         Spacer(modifier = Modifier.width(12.dp))
@@ -129,77 +127,93 @@ fun PluginFilterDropdown(
                         )
                     }
                     
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    // Divider between "All" and individual plugins
+                    if (availablePlugins.isNotEmpty()) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant
+                        )
+                    }
                     
-                    // Plugin list
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f, fill = false)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        availablePlugins.forEach { plugin ->
-                            val isSelected = plugin.id in selectedPluginIds
-                            
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onTogglePlugin(plugin.id) }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = isSelected || showAllPlugins,
-                                    onCheckedChange = { onTogglePlugin(plugin.id) },
-                                    enabled = !showAllPlugins
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = plugin.metadata.name,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
-                                    )
-                                    plugin.metadata.description.takeIf { it.isNotBlank() }?.let {
-                                        Text(
-                                            text = it,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1
-                                        )
-                                    }
+                    // Individual plugin options
+                    availablePlugins.forEach { plugin ->
+                        val isSelected = if (showAllPlugins) {
+                            true // All are selected when showAllPlugins is true
+                        } else {
+                            plugin.id in selectedPluginIds
+                        }
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { 
+                                    onTogglePlugin(plugin.id)
                                 }
-                                
-                                // Show count if available
-                                Badge(
-                                    containerColor = if (isSelected || showAllPlugins) {
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    }
-                                ) {
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = isSelected,
+                                onCheckedChange = { 
+                                    onTogglePlugin(plugin.id)
+                                },
+                                enabled = true // Always enabled for better UX
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = plugin.metadata.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (isSelected && !showAllPlugins) FontWeight.Medium else FontWeight.Normal
+                                )
+                                plugin.metadata.description.takeIf { it.isNotBlank() }?.let { desc ->
                                     Text(
-                                        text = "0", // This will be connected to actual counts
-                                        style = MaterialTheme.typography.labelSmall
+                                        text = desc,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
                                     )
                                 }
                             }
+                            
+                            // Optional: Show data count badge (to be connected later)
+                            // Badge(
+                            //     containerColor = if (isSelected) {
+                            //         MaterialTheme.colorScheme.primaryContainer
+                            //     } else {
+                            //         MaterialTheme.colorScheme.surfaceVariant
+                            //     }
+                            // ) {
+                            //     Text(
+                            //         text = "0", // Connect to actual counts
+                            //         style = MaterialTheme.typography.labelSmall
+                            //     )
+                            // }
                         }
                     }
                     
                     // Action buttons
-                    if (!showAllPlugins && availablePlugins.isNotEmpty()) {
-                        Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                    if (availablePlugins.isNotEmpty()) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant
+                        )
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            TextButton(onClick = onClearAll) {
+                            TextButton(
+                                onClick = onClearAll,
+                                enabled = showAllPlugins || selectedPluginIds.isNotEmpty()
+                            ) {
                                 Text("Clear All")
                             }
-                            TextButton(onClick = onSelectAll) {
+                            TextButton(
+                                onClick = onSelectAll,
+                                enabled = !showAllPlugins || selectedPluginIds.size < availablePlugins.size
+                            ) {
                                 Text("Select All")
                             }
                         }
