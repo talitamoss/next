@@ -129,7 +129,8 @@ data class WeekStats(
 @HiltViewModel
 class ReflectViewModel @Inject constructor(
     private val dataRepository: DataRepository,
-    private val pluginManager: PluginManager
+    private val pluginManager: PluginManager,
+    private val pluginRegistry: PluginRegistry
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(ReflectUiState())
@@ -169,13 +170,30 @@ class ReflectViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
     
-    private fun loadAvailablePlugins() {
+ private fun loadAvailablePlugins() {
         viewModelScope.launch {
-            val plugins = pluginManager.getAllActivePlugins()
-            _uiState.update { it.copy(availablePlugins = plugins) }
+            try {
+                // First initialize plugins in the manager
+                pluginManager.initializePlugins()
+                
+                // Get ALL registered plugins from the registry
+                // This gives us all 14 plugins regardless of initialization state
+                val allPlugins = pluginRegistry.getAllPlugins()
+                
+                // Update the UI state with all available plugins
+                _uiState.update { it.copy(availablePlugins = allPlugins) }
+                
+            } catch (e: Exception) {
+                // Handle any errors gracefully
+                _uiState.update { 
+                    it.copy(
+                        availablePlugins = emptyList(),
+                        error = "Failed to load plugins: ${e.message}"
+                    )
+                }
+            }
         }
-    }
-    
+    }    
     // ============== PLUGIN FILTERING ==============
     
     fun togglePluginFilter(pluginId: String) {
