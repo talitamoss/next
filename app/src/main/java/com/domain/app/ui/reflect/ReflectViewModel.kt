@@ -7,6 +7,7 @@ import com.domain.app.core.data.DataPoint
 import com.domain.app.core.data.DataRepository
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginManager
+import com.domain.app.core.plugin.PluginRegistry
 import com.domain.app.core.plugin.DataField
 import com.domain.app.core.plugin.DefaultDataFormatter
 import dagger.hilt.android.lifecycle.HiltViewModel
