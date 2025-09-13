@@ -8,13 +8,14 @@ import com.domain.app.core.validation.ValidationResult
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+import kotlin.math.roundToInt
 
 /**
  * Social interaction tracking plugin
  * Tracks three key factors of social interactions:
  * 1. Group size (number of other people)
  * 2. Location setting (where the interaction occurred)
- * 3. Social battery (energy level after interaction)
+ * 3. Social battery (energy level after interaction) - INTEGER SCALE -5 to 5
  */
 class SocialPlugin : Plugin {
     
@@ -128,7 +129,7 @@ class SocialPlugin : Plugin {
                     QuickOption(label = location.label, value = location.value)
                 }
             ),
-            // Social battery horizontal slider
+            // Social battery horizontal slider - INTEGER SCALE
             QuickAddInput(
                 id = "socialBattery",
                 label = "Social Battery",
@@ -173,7 +174,10 @@ class SocialPlugin : Plugin {
     override suspend fun createManualEntry(data: Map<String, Any>): DataPoint? {
         val groupSize = data["groupSize"] as? String ?: "1"
         val setting = data["setting"] as? String ?: "home"
-        val socialBattery = (data["socialBattery"] as? Number)?.toFloat() ?: 0f
+        // Convert social battery to integer
+        val rawBattery = (data["socialBattery"] as? Number)?.toFloat() ?: 0f
+        val socialBattery = rawBattery.roundToInt()  // Round to nearest integer
+        
         val notes = data["notes"] as? String
         val timestamp = data["timestamp"] as? Instant ?: Instant.now()
         
@@ -181,7 +185,7 @@ class SocialPlugin : Plugin {
         val socialData = mutableMapOf<String, Any>(
             "group_size" to groupSize,
             "setting" to setting,
-            "social_battery" to socialBattery,
+            "social_battery" to socialBattery,  // Store as Int
             "battery_label" to getBatteryLabel(socialBattery)
         )
         
@@ -229,15 +233,15 @@ class SocialPlugin : Plugin {
             errors.add("Invalid setting: $setting")
         }
         
-        // Validate social battery
-        val socialBattery = data["socialBattery"] as? Number
+        // Validate social battery - now as integer
+        val socialBattery = when (val battery = data["socialBattery"]) {
+            is Number -> battery.toFloat().roundToInt()
+            else -> null
+        }
         if (socialBattery == null) {
             errors.add("Social battery is required")
-        } else {
-            val batteryValue = socialBattery.toFloat()
-            if (batteryValue < -5f || batteryValue > 5f) {
-                errors.add("Social battery must be between -5 and 5")
-            }
+        } else if (socialBattery < -5 || socialBattery > 5) {
+            errors.add("Social battery must be between -5 and 5")
         }
         
         return if (errors.isEmpty()) {
@@ -284,17 +288,139 @@ class SocialPlugin : Plugin {
         // No cleanup needed
     }
     
+    /**
+     * Custom formatter to ensure integer display for social battery
+     */
+    override fun getDataFormatter(): PluginDataFormatter = SocialDataFormatter()
+    
+    /**
+     * Inner class for custom social data formatting
+     * Ensures social battery displays as integer without decimals
+     */
+    private inner class SocialDataFormatter : PluginDataFormatter {
+        
+        override fun formatSummary(dataPoint: DataPoint): String {
+            val groupSize = dataPoint.value["group_size"]?.toString() ?: "Unknown"
+            val setting = dataPoint.value["setting"]?.toString() ?: "Unknown"
+            val battery = when (val b = dataPoint.value["social_battery"]) {
+                is Number -> b.toInt()
+                else -> 0
+            }
+            
+            // Format group size nicely
+            val groupLabel = groupSizeOptions.find { it.value == groupSize }?.label ?: groupSize
+            
+            // Format setting nicely
+            val settingLabel = locationOptions.find { it.value == setting }?.label ?: setting
+            
+            // Build summary with battery indicator
+            val batteryIcon = when {
+                battery <= -3 -> "🔴"  // Very drained
+                battery < 0 -> "🟠"    // Somewhat drained
+                battery == 0 -> "🟡"   // Neutral
+                battery <= 2 -> "🟢"   // Somewhat energized
+                else -> "⚡"           // Very energized
+            }
+            
+            return "$groupLabel at $settingLabel $batteryIcon"
+        }
+        
+        override fun formatDetails(dataPoint: DataPoint): List<DataField> {
+            val fields = mutableListOf<DataField>()
+            
+            // Group size
+            val groupSize = dataPoint.value["group_size"]?.toString() ?: "Unknown"
+            val groupLabel = groupSizeOptions.find { it.value == groupSize }?.label ?: groupSize
+            fields.add(
+                DataField(
+                    label = "Group Size",
+                    value = groupLabel
+                )
+            )
+            
+            // Setting
+            val setting = dataPoint.value["setting"]?.toString() ?: "Unknown"
+            val settingLabel = locationOptions.find { it.value == setting }?.label ?: setting
+            fields.add(
+                DataField(
+                    label = "Setting",
+                    value = settingLabel
+                )
+            )
+            
+            // Social battery - formatted as integer
+            val battery = when (val b = dataPoint.value["social_battery"]) {
+                is Number -> b.toInt()
+                else -> 0
+            }
+            val batteryLabel = dataPoint.value["battery_label"]?.toString() 
+                ?: getBatteryLabel(battery)
+            fields.add(
+                DataField(
+                    label = "Social Battery",
+                    value = "$battery ($batteryLabel)",
+                    isImportant = true
+                )
+            )
+            
+            // Time
+            val timeParts = dataPoint.timestamp.toString().split("T")
+            if (timeParts.size > 1) {
+                val timeSubParts = timeParts[1].split(".")
+                if (timeSubParts.isNotEmpty() && timeSubParts[0].length >= 5) {
+                    fields.add(
+                        DataField(
+                            label = "Time",
+                            value = timeSubParts[0].substring(0, 5)  // HH:mm
+                        )
+                    )
+                }
+            }
+            
+            // Notes if present
+            dataPoint.value["notes"]?.let { notes ->
+                if (notes.toString().isNotBlank()) {
+                    fields.add(
+                        DataField(
+                            label = "Notes",
+                            value = notes.toString(),
+                            isLongText = true
+                        )
+                    )
+                }
+            }
+            
+            return fields
+        }
+        
+        override fun getHiddenFields(): List<String> = listOf(
+            "metadata", 
+            "timestamp", 
+            "source", 
+            "version", 
+            "inputType",
+            "is_group",
+            "is_draining",
+            "is_energizing",
+            "setting_category",
+            "battery_label"  // Hide since we show it with the battery value
+        )
+    }
+    
     // Helper functions
     
-    private fun getBatteryLabel(value: Float): String {
-        return when {
-            value <= -4 -> "Completely Depleted"
-            value <= -2 -> "Drained"
-            value <= -0.5 -> "Slightly Drained"
-            value < 0.5 -> "Neutral"
-            value <= 2 -> "Slightly Energized"
-            value <= 4 -> "Energized"
-            else -> "Completely Amped"
+    private fun getBatteryLabel(value: Int): String {
+        return when (value) {
+            -5 -> "Completely Depleted"
+            -4 -> "Very Drained"
+            -3, -2 -> "Drained"
+            -1 -> "Slightly Drained"
+            0 -> "Neutral"
+            1 -> "Slightly Energized"
+            2, 3 -> "Energized"
+            4 -> "Very Energized"
+            5 -> "Completely Amped"
+            else -> "Unknown"
         }
     }
     
@@ -318,54 +444,52 @@ class SocialPlugin : Plugin {
     
     // Natural language parsing helper
     fun parseNaturalLanguage(input: String): Map<String, Any>? {
-        val lowerInput = input.lowercase()
+        // Implementation for parsing natural language inputs
+        // This is a simplified version - could be expanded with NLP
+        val lowercaseInput = input.lowercase()
         
-        return when {
-            lowerInput.contains("coffee") && lowerInput.contains("friend") -> mapOf(
-                "groupSize" to "1",
-                "setting" to "indoor_venue"
-            )
-            lowerInput.contains("team meeting") || lowerInput.contains("work meeting") -> mapOf(
-                "groupSize" to "5",
-                "setting" to "workplace"
-            )
-            lowerInput.contains("party") -> mapOf(
-                "groupSize" to ">10",
-                "setting" to "indoor_venue"
-            )
-            lowerInput.contains("concert") -> mapOf(
-                "groupSize" to ">50",
-                "setting" to "event_space"
-            )
-            lowerInput.contains("conference") -> mapOf(
-                "groupSize" to ">100",
-                "setting" to "event_space"
-            )
-            lowerInput.contains("family") && lowerInput.contains("dinner") -> mapOf(
-                "groupSize" to "5",
-                "setting" to "home"
-            )
-            lowerInput.contains("walk") && lowerInput.contains("park") -> mapOf(
-                "groupSize" to "1",
-                "setting" to "outdoors"
-            )
-            lowerInput.contains("video call") || lowerInput.contains("zoom") -> mapOf(
-                "groupSize" to "5",
-                "setting" to "online"
-            )
+        // Try to detect group size
+        val groupSize = when {
+            lowercaseInput.contains("one-on-one") || lowercaseInput.contains("1-on-1") -> "1"
+            lowercaseInput.contains("couple") || lowercaseInput.contains("pair") -> "2"
+            lowercaseInput.contains("small group") -> "3"
+            lowercaseInput.contains("team") || lowercaseInput.contains("meeting") -> "5"
+            lowercaseInput.contains("party") || lowercaseInput.contains("event") -> ">10"
+            lowercaseInput.contains("crowd") || lowercaseInput.contains("concert") -> ">50"
             else -> null
+        }
+        
+        // Try to detect setting
+        val setting = when {
+            lowercaseInput.contains("home") || lowercaseInput.contains("house") -> "home"
+            lowercaseInput.contains("work") || lowercaseInput.contains("office") -> "workplace"
+            lowercaseInput.contains("outside") || lowercaseInput.contains("park") -> "outdoors"
+            lowercaseInput.contains("online") || lowercaseInput.contains("video") || lowercaseInput.contains("zoom") -> "online"
+            lowercaseInput.contains("restaurant") || lowercaseInput.contains("cafe") || lowercaseInput.contains("bar") -> "indoor_venue"
+            else -> null
+        }
+        
+        // Try to detect energy impact
+        val socialBattery = when {
+            lowercaseInput.contains("exhausted") || lowercaseInput.contains("drained") -> -4
+            lowercaseInput.contains("tired") -> -2
+            lowercaseInput.contains("energized") || lowercaseInput.contains("great") -> 3
+            lowercaseInput.contains("good") -> 1
+            else -> null
+        }
+        
+        return if (groupSize != null || setting != null || socialBattery != null) {
+            mapOf(
+                "groupSize" to (groupSize ?: "1"),
+                "setting" to (setting ?: "home"),
+                "socialBattery" to (socialBattery ?: 0)
+            )
+        } else {
+            null
         }
     }
     
-    // Data classes for type safety
-    
-    private data class GroupSize(
-        val value: String,
-        val label: String
-    )
-    
-    private data class LocationSetting(
-        val value: String,
-        val label: String
-    )
+    // Data classes for options
+    data class GroupSize(val value: String, val label: String)
+    data class LocationSetting(val value: String, val label: String)
 }
