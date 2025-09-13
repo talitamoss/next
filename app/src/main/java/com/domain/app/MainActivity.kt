@@ -4,16 +4,20 @@ package com.domain.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.domain.app.ui.dashboard.DashboardScreen
-import com.domain.app.ui.reflect.ReflectScreen  // CHANGED: Import ReflectScreen instead of DataScreen
+import com.domain.app.ui.reflect.ReflectScreen
 import com.domain.app.ui.settings.navigation.SettingsNavigation
 import com.domain.app.ui.theme.AppTheme
 import com.domain.app.ui.theme.AppIcons
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -27,14 +31,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen() {
-    var selectedTab by remember { mutableStateOf(0) }
+    // Pager state for swipe navigation (2 screens: Collect and Reflect)
+    val pagerState = rememberPagerState(pageCount = { 2 })
+    val coroutineScope = rememberCoroutineScope()
     var showSettings by remember { mutableStateOf(false) }
     
     if (showSettings) {
-        // Use the new SettingsNavigation with all sub-screens
+        // Settings navigation remains the same
         SettingsNavigation(
             onNavigateBack = {
                 showSettings = false
@@ -43,38 +49,55 @@ fun MainScreen() {
     } else {
         Scaffold(
             bottomBar = {
-                NavigationBar {
-                    NavigationBarItem(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        icon = { 
+                // Replace NavigationBar with TabRow for swipe sync
+                TabRow(
+                    selectedTabIndex = pagerState.currentPage,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Collect tab
+                    Tab(
+                        selected = pagerState.currentPage == 0,
+                        onClick = {
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(0)
+                            }
+                        },
+                        text = { Text("Collect") },
+                        icon = {
                             Icon(
                                 imageVector = AppIcons.Navigation.home,
                                 contentDescription = "Collect"
                             )
-                        },
-                        label = { Text("Collect") }
+                        }
                     )
-                    NavigationBarItem(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        icon = { 
+                    
+                    // Reflect tab
+                    Tab(
+                        selected = pagerState.currentPage == 1,
+                        onClick = {
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(1)
+                            }
+                        },
+                        text = { Text("Reflect") },
+                        icon = {
                             Icon(
                                 imageVector = AppIcons.Data.chart,
                                 contentDescription = "Reflect"
                             )
-                        },
-                        label = { Text("Reflect") }
+                        }
                     )
                 }
             }
         ) { paddingValues ->
-            Box(
+            // HorizontalPager for swipe navigation
+            HorizontalPager(
+                state = pagerState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-            ) {
-                when (selectedTab) {
+            ) { page ->
+                when (page) {
                     0 -> DashboardScreen(
                         onNavigateToPlugin = { plugin ->
                             // TODO: Navigate to plugin detail screen
@@ -83,7 +106,7 @@ fun MainScreen() {
                             showSettings = true
                         }
                     )
-                    1 -> ReflectScreen(  // CHANGED: Use ReflectScreen instead of DataScreen
+                    1 -> ReflectScreen(
                         onNavigateToSettings = {
                             showSettings = true
                         }

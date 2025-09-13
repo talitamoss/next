@@ -121,6 +121,8 @@ dependencies {
     // DocumentFile for file operations (if not already included)
     implementation("androidx.documentfile:documentfile:1.0.1")
 
+    implementation(libs.androidx.material3)
+
 }
 
 kapt {
