@@ -67,7 +67,7 @@ class ExportManager @Inject constructor(
             
             // Step 3: Save to user Downloads
             val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
-            val fileName = "behavioral_data_export_$timestamp.csv"
+            val fileName = "anthemos_data_$timestamp.csv"
             
             val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 Log.d(TAG, "Using MediaStore for Downloads folder")
@@ -117,7 +117,7 @@ class ExportManager @Inject constructor(
             }
             
             val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
-            val fileName = "${plugin.metadata.name.lowercase().replace(" ", "_")}_export_$timestamp.csv"
+            val fileName = "anthemos_data_${plugin.metadata.name.lowercase().replace(" ", "_")}_$timestamp.csv"
             val csvContent = generatePluginCsvContent(data, plugin)
             
             val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -220,7 +220,7 @@ class ExportManager @Inject constructor(
                 else -> "all_time"
             }
             
-            val fileName = "${pluginPart}_${timePart}_export_$timestamp.$extension"
+            val fileName = "anthemos_data_${timePart}_$timestamp.$extension"
             
             // Step 5: Save to Downloads
             val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
