@@ -1,3 +1,4 @@
+// app/src/main/java/com/domain/app/di/DatabaseModule.kt
 package com.domain.app.di
 
 import android.content.Context
@@ -20,7 +21,10 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideEncryptionManager(@ApplicationContext context: Context): EncryptionManager {
-        return (context as App).encryptionManager
+        // Line 23: Cast context to App
+        val app = context.applicationContext as App
+        // Line 25: Access encryptionManager FROM the app instance
+        return app.encryptionManager  // NOT just "encryptionManager"
     }
     
     @Provides

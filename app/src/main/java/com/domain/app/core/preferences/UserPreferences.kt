@@ -1,8 +1,11 @@
+// app/src/main/java/com/domain/app/core/preferences/UserPreferences.kt
 package com.domain.app.core.preferences
 
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -34,16 +37,108 @@ class UserPreferences @Inject constructor(
     
     // Preference keys
     companion object {
-        private val KEY_DARK_MODE = booleanPreferencesKey("dark_mode_enabled")
+        // User Profile
         private val KEY_USER_NAME = stringPreferencesKey("user_name")
-        private val KEY_NOTIFICATIONS = booleanPreferencesKey("notifications_enabled")
+        private val KEY_USER_EMAIL = stringPreferencesKey("user_email")
+        private val KEY_USER_AVATAR_URI = stringPreferencesKey("user_avatar_uri")
+        
+        // UI Preferences
+        private val KEY_DARK_MODE = booleanPreferencesKey("dark_mode_enabled")
+        private val KEY_THEME_MODE = stringPreferencesKey("theme_mode") // "light", "dark", "system"
+        private val KEY_LANGUAGE = stringPreferencesKey("app_language")
+        private val KEY_FONT_SIZE = stringPreferencesKey("font_size") // "small", "medium", "large"
+        
+        // Security
+        private val KEY_BIOMETRIC_AUTH = booleanPreferencesKey("biometric_auth_enabled")
+        private val KEY_AUTO_LOCK_TIMEOUT = intPreferencesKey("auto_lock_timeout_minutes")
+        private val KEY_REQUIRE_AUTH_ON_START = booleanPreferencesKey("require_auth_on_start")
+        
+        // Privacy
         private val KEY_ANALYTICS = booleanPreferencesKey("analytics_enabled")
         private val KEY_CRASH_REPORTING = booleanPreferencesKey("crash_reporting_enabled")
-        private val KEY_BIOMETRIC_AUTH = booleanPreferencesKey("biometric_auth_enabled")
+        private val KEY_PERSONALIZED_ADS = booleanPreferencesKey("personalized_ads_enabled")
+        
+        // Notifications
+        private val KEY_NOTIFICATIONS = booleanPreferencesKey("notifications_enabled")
+        private val KEY_NOTIFICATION_SOUND = booleanPreferencesKey("notification_sound_enabled")
+        private val KEY_NOTIFICATION_VIBRATE = booleanPreferencesKey("notification_vibrate_enabled")
+        
+        // Backup
         private val KEY_AUTO_BACKUP = booleanPreferencesKey("auto_backup_enabled")
         private val KEY_BACKUP_FREQUENCY = stringPreferencesKey("backup_frequency")
-        private val KEY_LANGUAGE = stringPreferencesKey("app_language")
-        private val KEY_THEME_MODE = stringPreferencesKey("theme_mode") // "light", "dark", "system"
+        private val KEY_BACKUP_WIFI_ONLY = booleanPreferencesKey("backup_wifi_only")
+        private val KEY_LAST_BACKUP_TIME = longPreferencesKey("last_backup_timestamp")
+        private val KEY_BACKUP_LOCATION = stringPreferencesKey("backup_location")
+        
+        // App State
+        private val KEY_FIRST_LAUNCH = booleanPreferencesKey("first_launch_completed")
+        private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+        private val KEY_APP_VERSION = stringPreferencesKey("last_app_version")
+    }
+    
+    // ========== USER PROFILE PREFERENCES ==========
+    
+    /**
+     * Flow that emits the current user name
+     */
+    val userName: Flow<String?> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_USER_NAME]
+        }
+    
+    /**
+     * Flow that emits the current user email
+     */
+    val userEmail: Flow<String?> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_USER_EMAIL]
+        }
+    
+    /**
+     * Flow that emits the user avatar URI
+     */
+    val userAvatarUri: Flow<String?> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_USER_AVATAR_URI]
+        }
+    
+    /**
+     * Set the user name
+     */
+    suspend fun setUserName(name: String?) {
+        dataStore.edit { preferences ->
+            if (name != null) {
+                preferences[KEY_USER_NAME] = name
+            } else {
+                preferences.remove(KEY_USER_NAME)
+            }
+        }
+    }
+    
+    /**
+     * Set the user email
+     */
+    suspend fun setUserEmail(email: String?) {
+        dataStore.edit { preferences ->
+            if (email != null) {
+                preferences[KEY_USER_EMAIL] = email
+            } else {
+                preferences.remove(KEY_USER_EMAIL)
+            }
+        }
+    }
+    
+    /**
+     * Set the user avatar URI
+     */
+    suspend fun setUserAvatarUri(uri: String?) {
+        dataStore.edit { preferences ->
+            if (uri != null) {
+                preferences[KEY_USER_AVATAR_URI] = uri
+            } else {
+                preferences.remove(KEY_USER_AVATAR_URI)
+            }
+        }
     }
     
     // ========== USER INTERFACE PREFERENCES ==========
@@ -70,6 +165,14 @@ class UserPreferences @Inject constructor(
     val appLanguage: Flow<String> = dataStore.data
         .map { preferences ->
             preferences[KEY_LANGUAGE] ?: "en"
+        }
+    
+    /**
+     * Flow that emits the current font size preference
+     */
+    val fontSize: Flow<String> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_FONT_SIZE] ?: "medium"
         }
     
     /**
@@ -107,49 +210,69 @@ class UserPreferences @Inject constructor(
         }
     }
     
-    // ========== USER PROFILE PREFERENCES ==========
-    
     /**
-     * Flow that emits the current user name
+     * Set the font size preference
      */
-    val userName: Flow<String?> = dataStore.data
-        .map { preferences ->
-            preferences[KEY_USER_NAME]
-        }
-    
-    /**
-     * Set the user name
-     */
-    suspend fun setUserName(name: String?) {
+    suspend fun setFontSize(size: String) {
         dataStore.edit { preferences ->
-            if (name != null) {
-                preferences[KEY_USER_NAME] = name
-            } else {
-                preferences.remove(KEY_USER_NAME)
-            }
+            preferences[KEY_FONT_SIZE] = size
         }
     }
     
-    // ========== NOTIFICATION PREFERENCES ==========
+    // ========== SECURITY PREFERENCES ==========
     
     /**
-     * Flow that emits the current notifications enabled state
+     * Flow that emits the current biometric authentication enabled state
      */
-    val notificationsEnabled: Flow<Boolean> = dataStore.data
+    val biometricAuthEnabled: Flow<Boolean> = dataStore.data
         .map { preferences ->
-            preferences[KEY_NOTIFICATIONS] ?: true
+            preferences[KEY_BIOMETRIC_AUTH] ?: false
         }
     
     /**
-     * Set the notifications enabled preference
+     * Flow that emits the auto-lock timeout in minutes
      */
-    suspend fun setNotificationsEnabled(enabled: Boolean) {
+    val autoLockTimeout: Flow<Int> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_AUTO_LOCK_TIMEOUT] ?: 5 // Default 5 minutes
+        }
+    
+    /**
+     * Flow that emits whether auth is required on app start
+     */
+    val requireAuthOnStart: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_REQUIRE_AUTH_ON_START] ?: false
+        }
+    
+    /**
+     * Set the biometric authentication enabled preference
+     */
+    suspend fun setBiometricAuthEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
-            preferences[KEY_NOTIFICATIONS] = enabled
+            preferences[KEY_BIOMETRIC_AUTH] = enabled
         }
     }
     
-    // ========== PRIVACY & SECURITY PREFERENCES ==========
+    /**
+     * Set the auto-lock timeout in minutes
+     */
+    suspend fun setAutoLockTimeout(minutes: Int) {
+        dataStore.edit { preferences ->
+            preferences[KEY_AUTO_LOCK_TIMEOUT] = minutes
+        }
+    }
+    
+    /**
+     * Set whether auth is required on app start
+     */
+    suspend fun setRequireAuthOnStart(required: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_REQUIRE_AUTH_ON_START] = required
+        }
+    }
+    
+    // ========== PRIVACY PREFERENCES ==========
     
     /**
      * Flow that emits the current analytics enabled state
@@ -165,14 +288,6 @@ class UserPreferences @Inject constructor(
     val crashReportingEnabled: Flow<Boolean> = dataStore.data
         .map { preferences ->
             preferences[KEY_CRASH_REPORTING] ?: true
-        }
-    
-    /**
-     * Flow that emits the current biometric authentication enabled state
-     */
-    val biometricAuthEnabled: Flow<Boolean> = dataStore.data
-        .map { preferences ->
-            preferences[KEY_BIOMETRIC_AUTH] ?: false
         }
     
     /**
@@ -193,12 +308,56 @@ class UserPreferences @Inject constructor(
         }
     }
     
+    // ========== NOTIFICATION PREFERENCES ==========
+    
     /**
-     * Set the biometric authentication enabled preference
+     * Flow that emits the current notifications enabled state
      */
-    suspend fun setBiometricAuthEnabled(enabled: Boolean) {
+    val notificationsEnabled: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_NOTIFICATIONS] ?: true
+        }
+    
+    /**
+     * Flow that emits whether notification sound is enabled
+     */
+    val notificationSoundEnabled: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_NOTIFICATION_SOUND] ?: true
+        }
+    
+    /**
+     * Flow that emits whether notification vibration is enabled
+     */
+    val notificationVibrateEnabled: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_NOTIFICATION_VIBRATE] ?: true
+        }
+    
+    /**
+     * Set the notifications enabled preference
+     */
+    suspend fun setNotificationsEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
-            preferences[KEY_BIOMETRIC_AUTH] = enabled
+            preferences[KEY_NOTIFICATIONS] = enabled
+        }
+    }
+    
+    /**
+     * Set the notification sound preference
+     */
+    suspend fun setNotificationSoundEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_NOTIFICATION_SOUND] = enabled
+        }
+    }
+    
+    /**
+     * Set the notification vibration preference
+     */
+    suspend fun setNotificationVibrateEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_NOTIFICATION_VIBRATE] = enabled
         }
     }
     
@@ -217,7 +376,31 @@ class UserPreferences @Inject constructor(
      */
     val backupFrequency: Flow<String> = dataStore.data
         .map { preferences ->
-            preferences[KEY_BACKUP_FREQUENCY] ?: "weekly"
+            preferences[KEY_BACKUP_FREQUENCY] ?: "daily"
+        }
+    
+    /**
+     * Flow that emits whether backups should only happen on WiFi
+     */
+    val backupWifiOnly: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_BACKUP_WIFI_ONLY] ?: true
+        }
+    
+    /**
+     * Flow that emits the last backup timestamp
+     */
+    val lastBackupTime: Flow<Long> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_LAST_BACKUP_TIME] ?: 0L
+        }
+    
+    /**
+     * Flow that emits the backup location
+     */
+    val backupLocation: Flow<String> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_BACKUP_LOCATION] ?: "Local storage"
         }
     
     /**
@@ -235,6 +418,33 @@ class UserPreferences @Inject constructor(
     suspend fun setBackupFrequency(frequency: String) {
         dataStore.edit { preferences ->
             preferences[KEY_BACKUP_FREQUENCY] = frequency
+        }
+    }
+    
+    /**
+     * Set whether backups should only happen on WiFi
+     */
+    suspend fun setBackupWifiOnly(wifiOnly: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_BACKUP_WIFI_ONLY] = wifiOnly
+        }
+    }
+    
+    /**
+     * Set the last backup timestamp
+     */
+    suspend fun setLastBackupTime(timestamp: Long) {
+        dataStore.edit { preferences ->
+            preferences[KEY_LAST_BACKUP_TIME] = timestamp
+        }
+    }
+    
+    /**
+     * Set the backup location
+     */
+    suspend fun setBackupLocation(location: String) {
+        dataStore.edit { preferences ->
+            preferences[KEY_BACKUP_LOCATION] = location
         }
     }
     
@@ -280,6 +490,51 @@ class UserPreferences @Inject constructor(
         return preferencesManager.getDashboardPluginCount()
     }
     
+    // ========== APP STATE PREFERENCES ==========
+    
+    /**
+     * Check if this is the first time the app is launched
+     */
+val isFirstLaunch: Flow<Boolean> = dataStore.data
+    .map { preferences ->
+        preferences[KEY_FIRST_LAUNCH] != true
+        }
+    
+    /**
+     * Check if onboarding has been completed
+     */
+    val isOnboardingCompleted: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[KEY_ONBOARDING_COMPLETED] ?: false
+        }
+    
+    /**
+     * Mark that the initial setup has been completed
+     */
+    suspend fun markFirstLaunchComplete() {
+        dataStore.edit { preferences ->
+            preferences[KEY_FIRST_LAUNCH] = true
+        }
+    }
+    
+    /**
+     * Mark that onboarding has been completed
+     */
+    suspend fun markOnboardingComplete() {
+        dataStore.edit { preferences ->
+            preferences[KEY_ONBOARDING_COMPLETED] = true
+        }
+    }
+    
+    /**
+     * Update the last known app version
+     */
+    suspend fun updateAppVersion(version: String) {
+        dataStore.edit { preferences ->
+            preferences[KEY_APP_VERSION] = version
+        }
+    }
+    
     // ========== UTILITY FUNCTIONS ==========
     
     /**
@@ -294,23 +549,15 @@ class UserPreferences @Inject constructor(
     }
     
     /**
-     * Check if this is the first time the app is launched
+     * Export all preferences as a map (for backup)
      */
-    val isFirstLaunch: Flow<Boolean> = dataStore.data
-        .map { preferences ->
-            !preferences.contains(KEY_USER_NAME) && 
-            !preferences.contains(KEY_DARK_MODE)
-        }
-    
-    /**
-     * Mark that the initial setup has been completed
-     */
-    suspend fun markSetupComplete() {
-        dataStore.edit { preferences ->
-            // Just ensure at least one preference is set
-            if (!preferences.contains(KEY_NOTIFICATIONS)) {
-                preferences[KEY_NOTIFICATIONS] = true
+    suspend fun exportPreferences(): Map<String, Any?> {
+        val prefs = mutableMapOf<String, Any?>()
+        dataStore.data.collect { preferences ->
+            preferences.asMap().forEach { (key, value) ->
+                prefs[key.name] = value
             }
         }
+        return prefs
     }
 }

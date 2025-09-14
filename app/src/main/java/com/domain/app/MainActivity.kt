@@ -12,8 +12,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.domain.app.ui.dashboard.DashboardScreen
-import com.domain.app.ui.reflect.ReflectScreen  // Using original ReflectScreen for now
-import com.domain.app.ui.settings.SettingsScreen
+import com.domain.app.ui.reflect.ReflectScreen
+import com.domain.app.ui.settings.navigation.SettingsNavigation
 import com.domain.app.ui.theme.AppTheme
 import com.domain.app.ui.theme.AppIcons
 import dagger.hilt.android.AndroidEntryPoint
@@ -34,70 +34,63 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen() {
-    val pagerState = rememberPagerState(initialPage = 0) { 2 }
+    // Pager state for swipe navigation (2 screens: Collect and Reflect)
+    val pagerState = rememberPagerState(pageCount = { 2 })
     val coroutineScope = rememberCoroutineScope()
-    var selectedTab by remember { mutableStateOf(0) }
     var showSettings by remember { mutableStateOf(false) }
     
-    // Sync pager with bottom navigation
-    LaunchedEffect(pagerState.currentPage) {
-        selectedTab = pagerState.currentPage
-    }
-    
     if (showSettings) {
-        SettingsScreen(
+        // Settings navigation remains the same
+        SettingsNavigation(
             onNavigateBack = {
                 showSettings = false
-            },
-            onNavigateToPlugins = {
-                // TODO: Navigate to plugins management screen
-            },
-            onNavigateToSecurity = {
-                // TODO: Navigate to security settings screen
-            },
-            onNavigateToAbout = {
-                // TODO: Navigate to about screen
             }
         )
     } else {
         Scaffold(
             bottomBar = {
-                NavigationBar {
-                    NavigationBarItem(
-                        selected = selectedTab == 0,
+                // Replace NavigationBar with TabRow for swipe sync
+                TabRow(
+                    selectedTabIndex = pagerState.currentPage,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Collect tab
+                    Tab(
+                        selected = pagerState.currentPage == 0,
                         onClick = {
-                            selectedTab = 0
                             coroutineScope.launch {
                                 pagerState.animateScrollToPage(0)
                             }
                         },
+                        text = { Text("Collect") },
                         icon = {
                             Icon(
                                 imageVector = AppIcons.Navigation.home,
                                 contentDescription = "Collect"
                             )
-                        },
-                        label = { Text("Collect") }
+                        }
                     )
-                    NavigationBarItem(
-                        selected = selectedTab == 1,
+                    
+                    // Reflect tab
+                    Tab(
+                        selected = pagerState.currentPage == 1,
                         onClick = {
-                            selectedTab = 1
                             coroutineScope.launch {
                                 pagerState.animateScrollToPage(1)
                             }
                         },
+                        text = { Text("Reflect") },
                         icon = {
                             Icon(
                                 imageVector = AppIcons.Data.chart,
                                 contentDescription = "Reflect"
                             )
-                        },
-                        label = { Text("Reflect") }
+                        }
                     )
                 }
             }
         ) { paddingValues ->
+            // HorizontalPager for swipe navigation
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier
@@ -105,23 +98,19 @@ fun MainScreen() {
                     .padding(paddingValues)
             ) { page ->
                 when (page) {
-                    0 -> {
-                        DashboardScreen(
-                            onNavigateToPlugin = { plugin ->
-                                // TODO: Navigate to plugin detail screen
-                            },
-                            onNavigateToSettings = {
-                                showSettings = true
-                            }
-                        )
-                    }
-                    1 -> {
-                        ReflectScreen(
-                            onNavigateToSettings = {
-                                showSettings = true
-                            }
-                        )
-                    }
+                    0 -> DashboardScreen(
+                        onNavigateToPlugin = { plugin ->
+                            // TODO: Navigate to plugin detail screen
+                        },
+                        onNavigateToSettings = {
+                            showSettings = true
+                        }
+                    )
+                    1 -> ReflectScreen(
+                        onNavigateToSettings = {
+                            showSettings = true
+                        }
+                    )
                 }
             }
         }

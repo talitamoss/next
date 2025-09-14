@@ -7,40 +7,33 @@ import com.domain.app.core.plugin.security.*
 import com.domain.app.core.validation.ValidationResult
 import java.time.Instant
 import java.time.LocalDateTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
 
 /**
- * Screen Time tracking plugin
- * Tracks hours spent on different device types with a feelings reflection slider
- * No judgment, just awareness and self-reflection
+ * Screen Time Tracking Plugin
+ * Tracks device usage (handheld/laptop/large screen) with duration and feeling
+ * Hours stored as Float (0.5h = 30min valid), Feeling as Integer (0-10 scale)
  */
 class ScreenTimePlugin : Plugin {
     override val id = "screen_time"
     
-    // Simple device categories
-    private val deviceTypes = listOf(
-        "Hand-held",      // Phones, tablets, etc.
-        "Laptop",         // Laptops, computers
-        "Large Screen"    // TVs, monitors, projectors
-    )
-    
     override val metadata = PluginMetadata(
         name = "Screen Time",
-        description = "Track device usage and how you feel about it",
+        description = "Track your screen time across different devices",
         version = "1.0.0",
         author = "System",
         category = PluginCategory.LIFESTYLE,
-        tags = listOf("screen", "device", "digital", "wellness", "reflection"),
-        dataPattern = DataPattern.COMPOSITE,  // Multiple values: device, hours, feeling
-        inputType = InputType.CHOICE,  // Primary type (composite handled by inputs field)
-        supportsMultiStage = false,  // All inputs on one page
-        relatedPlugins = listOf("mood", "sleep", "focus"),
+        tags = listOf("screen", "digital", "device", "technology", "wellness"),
+        dataPattern = DataPattern.COMPOSITE,
+        inputType = InputType.CAROUSEL,  // Primary type for multi-input
+        supportsMultiStage = false,
+        relatedPlugins = listOf("mood", "productivity", "sleep"),
         exportFormat = ExportFormat.CSV,
         dataSensitivity = DataSensitivity.NORMAL,
         naturalLanguageAliases = listOf(
-            "screen time", "phone time", "device", "screen",
-            "watched", "scrolling", "computer time", "tv time"
+            "screen time", "phone time", "computer time",
+            "used phone", "on laptop", "watching TV",
+            "scrolling", "browsing", "gaming"
         ),
         contextualTriggers = listOf(
             ContextTrigger.TIME_OF_DAY,
@@ -57,18 +50,17 @@ class ScreenTimePlugin : Plugin {
         ),
         dataSensitivity = DataSensitivity.NORMAL,
         dataAccess = setOf(DataAccessScope.OWN_DATA_ONLY),
-        privacyPolicy = "Screen time and feeling data is stored locally. " +
-                       "We only track hours and your feelings, no specific content or apps.",
+        privacyPolicy = "Screen time data is stored locally and never shared without your permission.",
         dataRetention = DataRetentionPolicy.USER_CONTROLLED
     )
     
     override val trustLevel = PluginTrustLevel.OFFICIAL
     
     override fun getPermissionRationale() = mapOf(
-        PluginCapability.COLLECT_DATA to "Record your screen time and feelings",
-        PluginCapability.READ_OWN_DATA to "View your screen time patterns",
-        PluginCapability.LOCAL_STORAGE to "Save your data on your device",
-        PluginCapability.EXPORT_DATA to "Export your screen time data"
+        PluginCapability.COLLECT_DATA to "Record your screen time",
+        PluginCapability.READ_OWN_DATA to "View your screen time history",
+        PluginCapability.LOCAL_STORAGE to "Save your screen time data on your device",
+        PluginCapability.EXPORT_DATA to "Export your screen time data for personal use"
     )
     
     override suspend fun initialize(context: Context) {
@@ -76,43 +68,30 @@ class ScreenTimePlugin : Plugin {
     }
     
     override fun supportsManualEntry() = true
-    
     override fun supportsAutomaticCollection() = false
     
     override fun getQuickAddConfig() = QuickAddConfig(
-        id = "screen_time",
+        id = "screen_time_entry",
         title = "Log Screen Time",
-        inputType = InputType.CHOICE,  // Primary type (composite handled by inputs field)
-        // Multiple inputs on ONE page via inputs field
+        inputType = InputType.CAROUSEL,  // Primary type, but uses inputs list
         inputs = listOf(
-            // Input 1: Device selection (choice tiles)
+            // Input 1: Device type carousel selector
             QuickAddInput(
                 id = "device",
-                label = "Which device?",
-                type = InputType.CHOICE,  // Using 'type' field from QuickAddInput
-                required = true,
+                label = "Device",
+                type = InputType.CAROUSEL,
+                defaultValue = "handheld",
                 options = listOf(
-                    QuickOption(
-                        label = "Hand-held",
-                        value = "handheld",
-                        icon = "📱"
-                    ),
-                    QuickOption(
-                        label = "Laptop",
-                        value = "laptop",
-                        icon = "💻"
-                    ),
-                    QuickOption(
-                        label = "Large Screen",
-                        value = "large_screen",
-                        icon = "🖥️"
-                    )
-                )
+                    QuickOption(label = "Hand-held", value = "handheld"),
+                    QuickOption(label = "Laptop", value = "laptop"),
+                    QuickOption(label = "Large Screen", value = "large_screen")
+                ),
+                required = true
             ),
-            // Input 2: Hours spent (horizontal slider)
+            // Input 2: Hours horizontal slider (KEEP AS FLOAT - 0.5h is valid)
             QuickAddInput(
                 id = "hours",
-                label = "How many hours?",
+                label = "Hours",
                 type = InputType.HORIZONTAL_SLIDER,
                 required = true,
                 min = 0.5f,
@@ -121,7 +100,7 @@ class ScreenTimePlugin : Plugin {
                 unit = "hours"
                 // showValue controlled by QuickAddDialog implementation
             ),
-            // Input 3: Feeling about screen time (horizontal slider with custom labels)
+            // Input 3: Feeling about screen time (INTEGER SCALE 0-10)
             QuickAddInput(
                 id = "feeling",
                 label = "How do we feel about the screen time today?",
@@ -150,21 +129,28 @@ class ScreenTimePlugin : Plugin {
     override suspend fun createManualEntry(data: Map<String, Any>): DataPoint? {
         // Extract the composite input data
         val device = data["device"] as? String ?: return null
-        val hours = (data["hours"] as? Number)?.toFloat() ?: return null
-        val feeling = (data["feeling"] as? Number)?.toFloat() ?: 5f  // Default to neutral (5/10)
+        val hours = (data["hours"] as? Number)?.toFloat() ?: return null  // Keep as Float
+        
+        // Convert feeling to integer
+        val rawFeeling = (data["feeling"] as? Number)?.toFloat() ?: 5f  // Default to neutral
+        val feeling = rawFeeling.roundToInt()  // Round to nearest integer
         
         // Validate the entry
-        val validationResult = validateDataPoint(data)
+        val validationResult = validateDataPoint(mapOf(
+            "device" to device,
+            "hours" to hours,
+            "feeling" to feeling
+        ))
         if (validationResult is ValidationResult.Error) {
             return null
         }
         
         // Create feeling description for better data interpretation (0-10 scale)
-        val feelingDescription = when {
-            feeling < 2 -> "very_negative"
-            feeling < 4 -> "negative"
-            feeling < 6 -> "neutral"
-            feeling < 8 -> "positive"
+        val feelingDescription = when (feeling) {
+            in 0..1 -> "very_negative"
+            in 2..3 -> "negative"
+            in 4..6 -> "neutral"
+            in 7..8 -> "positive"
             else -> "very_positive"
         }
         
@@ -175,8 +161,8 @@ class ScreenTimePlugin : Plugin {
             type = "screen_time_session",
             value = mapOf(
                 "device" to device,
-                "hours" to hours,
-                "feeling" to feeling,
+                "hours" to hours,  // Float value preserved
+                "feeling" to feeling,  // Integer value
                 "feeling_category" to feelingDescription
             ),
             metadata = mapOf(
@@ -190,7 +176,10 @@ class ScreenTimePlugin : Plugin {
     override fun validateDataPoint(data: Map<String, Any>): ValidationResult {
         val device = data["device"] as? String
         val hours = (data["hours"] as? Number)?.toFloat()
-        val feeling = (data["feeling"] as? Number)?.toFloat()
+        val feeling = when (val f = data["feeling"]) {
+            is Number -> f.toInt()
+            else -> null
+        }
         
         return when {
             device == null -> ValidationResult.Error("Device type is required")
@@ -227,14 +216,175 @@ class ScreenTimePlugin : Plugin {
             else -> dataPoint.value["device"]?.toString() ?: ""
         }
         
+        // Format hours with decimal if needed
+        val hours = when (val h = dataPoint.value["hours"]) {
+            is Number -> {
+                val floatValue = h.toFloat()
+                if (floatValue % 1 == 0f) {
+                    floatValue.toInt().toString()
+                } else {
+                    String.format("%.1f", floatValue)
+                }
+            }
+            else -> ""
+        }
+        
+        // Format feeling as integer
+        val feeling = when (val f = dataPoint.value["feeling"]) {
+            is Number -> f.toInt().toString()
+            else -> ""
+        }
+        
         return mapOf(
             "Date" to date,
             "Time" to time,
             "Device" to device,
-            "Hours" to (dataPoint.value["hours"]?.toString() ?: ""),
-            "Feeling Score" to (dataPoint.value["feeling"]?.toString() ?: ""),
+            "Hours" to hours,
+            "Feeling Score" to feeling,
             "Feeling Category" to (dataPoint.value["feeling_category"]?.toString() ?: ""),
-            "Day of Week" to (dataPoint.metadata?.get("dayOfWeek") ?: "")  // Fixed: safe null access
+            "Day of Week" to (dataPoint.metadata?.get("dayOfWeek") ?: "")
+        )
+    }
+    
+    /**
+     * Custom formatter to ensure proper display of hours (float) and feeling (integer)
+     */
+    override fun getDataFormatter(): PluginDataFormatter = ScreenTimeDataFormatter()
+    
+    /**
+     * Inner class for custom screen time data formatting
+     */
+    private inner class ScreenTimeDataFormatter : PluginDataFormatter {
+        
+        override fun formatSummary(dataPoint: DataPoint): String {
+            val device = when (dataPoint.value["device"]) {
+                "handheld" -> "📱"
+                "laptop" -> "💻"
+                "large_screen" -> "📺"
+                else -> "📱"
+            }
+            
+            // Format hours with appropriate precision
+            val hours = when (val h = dataPoint.value["hours"]) {
+                is Number -> {
+                    val floatValue = h.toFloat()
+                    if (floatValue % 1 == 0f) {
+                        "${floatValue.toInt()}h"
+                    } else {
+                        String.format("%.1fh", floatValue)
+                    }
+                }
+                else -> "0h"
+            }
+            
+            // Format feeling as integer
+            val feeling = when (val f = dataPoint.value["feeling"]) {
+                is Number -> {
+                    val intValue = f.toInt()
+                    when {
+                        intValue <= 3 -> "😟"
+                        intValue <= 6 -> "😐"
+                        else -> "😊"
+                    }
+                }
+                else -> ""
+            }
+            
+            return "$device $hours $feeling"
+        }
+        
+        override fun formatDetails(dataPoint: DataPoint): List<DataField> {
+            val fields = mutableListOf<DataField>()
+            
+            // Device
+            val device = when (dataPoint.value["device"]) {
+                "handheld" -> "Hand-held Device"
+                "laptop" -> "Laptop"
+                "large_screen" -> "Large Screen (TV/Monitor)"
+                else -> dataPoint.value["device"]?.toString() ?: "Unknown"
+            }
+            fields.add(
+                DataField(
+                    label = "Device",
+                    value = device
+                )
+            )
+            
+            // Hours - show with appropriate precision
+            val hours = when (val h = dataPoint.value["hours"]) {
+                is Number -> {
+                    val floatValue = h.toFloat()
+                    val formatted = if (floatValue % 1 == 0f) {
+                        "${floatValue.toInt()} hours"
+                    } else {
+                        String.format("%.1f hours", floatValue)
+                    }
+                    formatted
+                }
+                else -> "0 hours"
+            }
+            fields.add(
+                DataField(
+                    label = "Duration",
+                    value = hours,
+                    isImportant = true
+                )
+            )
+            
+            // Feeling - formatted as integer
+            val feeling = when (val f = dataPoint.value["feeling"]) {
+                is Number -> f.toInt()
+                else -> 5
+            }
+            val feelingText = when (feeling) {
+                in 0..1 -> "Very Negative"
+                in 2..3 -> "Negative"
+                in 4..6 -> "Neutral"
+                in 7..8 -> "Positive"
+                else -> "Very Positive"
+            }
+            fields.add(
+                DataField(
+                    label = "Feeling",
+                    value = "$feeling/10 ($feelingText)",
+                    isImportant = true
+                )
+            )
+            
+            // Day of week
+            dataPoint.metadata?.get("dayOfWeek")?.let { day ->
+                fields.add(
+                    DataField(
+                        label = "Day",
+                        value = day.toString()
+                    )
+                )
+            }
+            
+            // Time
+            val timeParts = dataPoint.timestamp.toString().split("T")
+            if (timeParts.size > 1) {
+                val timeSubParts = timeParts[1].split(".")
+                if (timeSubParts.isNotEmpty() && timeSubParts[0].length >= 5) {
+                    fields.add(
+                        DataField(
+                            label = "Time",
+                            value = timeSubParts[0].substring(0, 5)  // HH:mm
+                        )
+                    )
+                }
+            }
+            
+            return fields
+        }
+        
+        override fun getHiddenFields(): List<String> = listOf(
+            "metadata", 
+            "timestamp", 
+            "source", 
+            "version", 
+            "inputType",
+            "feeling_category"  // Hide since we show it with the feeling value
         )
     }
     
@@ -251,8 +401,8 @@ class ScreenTimePlugin : Plugin {
         }
         
         val averageFeeling = dataPoints.mapNotNull { 
-            (it.value["feeling"] as? Number)?.toFloat() 
-        }.average().toFloat()
+            (it.value["feeling"] as? Number)?.toInt() 
+        }.average().roundToInt()
         
         val deviceBreakdown = dataPoints
             .groupBy { it.value["device"] }
@@ -270,7 +420,7 @@ class ScreenTimePlugin : Plugin {
     
     data class ScreenTimeStats(
         val totalHours: Double = 0.0,
-        val averageFeeling: Float = 5f,  // Default to middle of 0-10 scale
+        val averageFeeling: Int = 5,  // Default to middle of 0-10 scale
         val deviceBreakdown: Map<Any?, Double> = emptyMap(),
         val sessionCount: Int = 0
     )
