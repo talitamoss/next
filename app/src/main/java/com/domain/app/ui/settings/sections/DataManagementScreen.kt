@@ -30,6 +30,9 @@ import java.time.ZoneId
 import com.domain.app.core.plugin.ExportFormat
 import com.domain.app.ui.data.ExportOptions
 import com.domain.app.ui.data.TimeFrame
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
 
 val ExportFormat.displayName: String
     get() = when (this) {
@@ -55,6 +58,7 @@ fun DataManagementScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
     
     var showExportDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -73,7 +77,8 @@ fun DataManagementScreen(
                     }
                 }
             )
-        }
+        },
+	snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
@@ -286,15 +291,27 @@ fun DataManagementScreen(
         )
     }
     
-    // Show messages
-    uiState.message?.let { message ->
-        LaunchedEffect(message) {
-            // Show snackbar or toast
-            viewModel.clearMessage()
-        }
+// Show messages
+uiState.message?.let { message ->
+    LaunchedEffect(message) {
+        snackbarHostState.showSnackbar(
+            message = message,
+            duration = SnackbarDuration.Long
+        )
+        viewModel.clearMessage()
     }
 }
 
+// Show errors
+uiState.error?.let { error ->
+    LaunchedEffect(error) {
+        snackbarHostState.showSnackbar(
+            message = error,
+            duration = SnackbarDuration.Long
+        )
+        viewModel.clearError()
+    }
+}
 @Composable
 private fun DataStatisticsCard(
     dataPoints: Int,

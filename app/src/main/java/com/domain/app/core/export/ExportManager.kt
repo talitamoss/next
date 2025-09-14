@@ -177,7 +177,7 @@ class ExportManager @Inject constructor(
             
             val (content, mimeType) = when (format) {
                 ExportFormat.CSV -> generateCsvContent(filteredData, pluginMap) to "text/csv"
-                ExportFormat.JSON -> generateJsonContent(filteredData, pluginMap) to "application/json"
+                ExportFormat.JSON -> generateJsonContent(filteredData, pluginMap) to "text/plain"
                 ExportFormat.XML -> generateXmlContent(filteredData, pluginMap) to "application/xml"
                 ExportFormat.CUSTOM -> generateCsvContent(filteredData, pluginMap) to "text/plain"
             }
