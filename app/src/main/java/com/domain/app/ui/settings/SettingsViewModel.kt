@@ -1,11 +1,12 @@
-// app/src/main/java/com/domain/app/ui/settings/SettingsViewModel.kt
 package com.domain.app.ui.settings
 
 import android.content.Context
 import android.content.pm.PackageInfo
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.data.DataRepository
+import com.domain.app.core.data.export.ExportManager
 import com.domain.app.core.plugin.PluginManager
 import com.domain.app.core.preferences.UserPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -30,6 +31,12 @@ data class SettingsUiState(
     // Plugins
     val enabledPluginCount: Int = 0,
     
+    // Data Management
+    val autoBackupEnabled: Boolean = false,
+    val backupFrequency: String = "Daily",
+    val lastExportTime: Long? = null,
+    val exportInProgress: Boolean = false,
+    
     // Notifications
     val notificationsEnabled: Boolean = true,
     
@@ -43,11 +50,16 @@ class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dataRepository: DataRepository,
     private val pluginManager: PluginManager,
-    private val userPreferences: UserPreferences
+    private val userPreferences: UserPreferences,
+    private val exportManager: ExportManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+    
+    // Dialog states
+    val showBackupFrequencyDialog = mutableStateOf(false)
+    val showExportConfirmDialog = mutableStateOf(false)
     
     init {
         loadSettings()
@@ -77,17 +89,33 @@ class SettingsViewModel @Inject constructor(
             }
         }
         
+        // Load auto backup settings
+        viewModelScope.launch {
+            userPreferences.autoBackupEnabled.collect { enabled ->
+                _uiState.update { it.copy(autoBackupEnabled = enabled) }
+            }
+        }
+        
+        // Load backup frequency
+        viewModelScope.launch {
+            userPreferences.backupFrequency.collect { frequency ->
+                _uiState.update { it.copy(backupFrequency = frequency) }
+            }
+        }
+        
+        // Load last backup time
+        viewModelScope.launch {
+            userPreferences.lastBackupTime.collect { timestamp ->
+                if (timestamp > 0) {
+                    _uiState.update { it.copy(lastExportTime = timestamp) }
+                }
+            }
+        }
+        
         // Load user profile
         viewModelScope.launch {
             userPreferences.userName.collect { name ->
                 _uiState.update { it.copy(userName = name) }
-            }
-        }
-        
-        // Load user email (if available)
-        viewModelScope.launch {
-            userPreferences.userEmail.collect { email ->
-                _uiState.update { it.copy(userEmail = email) }
             }
         }
         
@@ -138,6 +166,58 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
+    fun toggleAutoBackup() {
+        viewModelScope.launch {
+            val newState = !_uiState.value.autoBackupEnabled
+            userPreferences.setAutoBackupEnabled(newState)
+        }
+    }
+    
+    fun showBackupFrequencyDialog() {
+        showBackupFrequencyDialog.value = true
+    }
+    
+    fun hideBackupFrequencyDialog() {
+        showBackupFrequencyDialog.value = false
+    }
+    
+    fun setBackupFrequency(frequency: String) {
+        viewModelScope.launch {
+            userPreferences.setBackupFrequency(frequency)
+            hideBackupFrequencyDialog()
+        }
+    }
+    
+    fun exportData() {
+        if (_uiState.value.exportInProgress) return
+        
+        viewModelScope.launch {
+            _uiState.update { it.copy(exportInProgress = true) }
+            
+            try {
+                val result = exportManager.exportAllData()
+                
+                if (result.isSuccess) {
+                    val timestamp = System.currentTimeMillis()
+                    userPreferences.setLastBackupTime(timestamp)
+                    
+                    _uiState.update { 
+                        it.copy(
+                            exportInProgress = false,
+                            lastExportTime = timestamp
+                        )
+                    }
+                } else {
+                    _uiState.update { it.copy(exportInProgress = false) }
+                    // Handle error - show toast or snackbar
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(exportInProgress = false) }
+                // Handle exception - show error message
+            }
+        }
+    }
+    
     fun toggleBiometric() {
         viewModelScope.launch {
             val newState = !_uiState.value.biometricEnabled
@@ -171,24 +251,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
-    fun updateUserEmail(email: String) {
-        viewModelScope.launch {
-            userPreferences.setUserEmail(email)
-        }
-    }
-    
-    fun exportData() {
-        viewModelScope.launch {
-            // Handled by DataManagementViewModel
-        }
-    }
-    
-    fun importData() {
-        viewModelScope.launch {
-            // Handled by DataManagementViewModel
-        }
-    }
-    
     fun clearAllData() {
         viewModelScope.launch {
             dataRepository.clearAllData()
@@ -216,16 +278,4 @@ class SettingsViewModel @Inject constructor(
             _uiState.update { it.copy(enabledPluginCount = plugins.size) }
         }
     }
-}
-
-// UserPreferences extensions (to be added to UserPreferences.kt)
-val UserPreferences.userEmail: Flow<String?>
-    get() = flowOf(null) // TODO: Implement in UserPreferences
-
-suspend fun UserPreferences.setUserEmail(email: String) {
-    // TODO: Implement in UserPreferences
-}
-
-suspend fun UserPreferences.setAutoLockTimeout(minutes: Int) {
-    // TODO: Implement in UserPreferences
 }
