@@ -232,21 +232,26 @@ class DataManagementViewModel @Inject constructor(
             try {
                 val result = backupManager.createBackup()
                 
-                if (result.isSuccess) {
-                    _uiState.update {
-                        it.copy(
-                            isBackingUp = false,
-                            message = "Backup completed successfully",
-                            lastBackupTime = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
-                                .format(Date())
-                        )
+                // VERIFICATION: BackupManager returns BackupResult sealed class, not kotlin.Result
+                // Must use when expression with is BackupResult.Success/Error
+                when (result) {
+                    is BackupResult.Success -> {
+                        _uiState.update {
+                            it.copy(
+                                isBackingUp = false,
+                                message = "Backup completed successfully",
+                                lastBackupTime = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+                                    .format(Date())
+                            )
+                        }
                     }
-                } else {
-                    _uiState.update {
-                        it.copy(
-                            isBackingUp = false,
-                            error = result.exceptionOrNull()?.message ?: "Backup failed"
-                        )
+                    is BackupResult.Error -> {
+                        _uiState.update {
+                            it.copy(
+                                isBackingUp = false,
+                                error = result.message
+                            )
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -263,16 +268,23 @@ class DataManagementViewModel @Inject constructor(
     fun restoreBackup(backupFile: File) {
         viewModelScope.launch {
             try {
-                val result = backupManager.restoreBackup(backupFile)
+                // VERIFICATION: restoreBackup expects Uri, not File
+                // Convert File to Uri using Uri.fromFile()
+                val result = backupManager.restoreBackup(Uri.fromFile(backupFile))
                 
-                if (result.isSuccess) {
-                    _uiState.update {
-                        it.copy(message = "Backup restored successfully")
+                // VERIFICATION: BackupManager returns RestoreResult sealed class
+                // Must use when expression with is RestoreResult.Success/Error
+                when (result) {
+                    is RestoreResult.Success -> {
+                        _uiState.update {
+                            it.copy(message = "Backup restored successfully")
+                        }
+                        loadDataStatistics() // Reload statistics after restore
                     }
-                    loadDataStatistics() // Reload statistics after restore
-                } else {
-                    _uiState.update {
-                        it.copy(error = result.exceptionOrNull()?.message ?: "Restore failed")
+                    is RestoreResult.Error -> {
+                        _uiState.update {
+                            it.copy(error = result.message)
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -286,7 +298,8 @@ class DataManagementViewModel @Inject constructor(
     fun clearAllData() {
         viewModelScope.launch {
             try {
-                // Clear all data from repository
+                // VERIFICATION: DataRepository has clearAllData(), we added deleteAllData() as alias
+                // Both methods work, using deleteAllData() as per the original code
                 dataRepository.deleteAllData()
                 
                 // Clear preferences

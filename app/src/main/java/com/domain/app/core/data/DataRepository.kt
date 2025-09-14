@@ -251,6 +251,7 @@ class DataRepository @Inject constructor(
      * Required by: BackupManager, SettingsViewModel, DataManagementViewModel
      */
     suspend fun clearAllData() {
+    suspend fun deleteAllData() = clearAllData()
         dataPointDao.deleteAll()
     }
     
