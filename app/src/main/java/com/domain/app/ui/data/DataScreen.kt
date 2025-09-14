@@ -2,16 +2,20 @@
 package com.domain.app.ui.data
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,14 +24,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.domain.app.core.data.DataPoint
-import com.domain.app.core.plugin.ExportFormat  // IMPORT FROM CORRECT PACKAGE
+import com.domain.app.core.plugin.ExportFormat
+import com.domain.app.core.plugin.Plugin
 import com.domain.app.ui.theme.AppIcons
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-
-// DO NOT CREATE FilterState - it exists in DataViewModel
-// DO NOT CREATE ExportFormat - it exists in core.plugin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,7 +75,7 @@ fun DataScreen(
                         }
                         IconButton(onClick = onNavigateToSettings) {
                             Icon(
-                                imageVector = AppIcons.Navigation.settings,
+                                imageVector = Icons.Default.Settings,
                                 contentDescription = "Settings"
                             )
                         }
@@ -81,85 +84,98 @@ fun DataScreen(
             }
         }
     ) { paddingValues ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(paddingValues),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Summary cards
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SummaryCard(
-                    title = "Total",
-                    value = uiState.dataPoints.size.toString(),
-                    modifier = Modifier.weight(1f)
-                )
-                SummaryCard(
-                    title = "Plugins",
-                    value = uiState.plugins.size.toString(),
-                    modifier = Modifier.weight(1f)
-                )
-                SummaryCard(
-                    title = "This Week",
-                    value = uiState.weeklyDataPoints.size.toString(),
-                    modifier = Modifier.weight(1f)
-                )
+            // Summary Cards
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    SummaryCard(
+                        title = "Total Records",
+                        value = uiState.dataPoints.size.toString(),
+                        modifier = Modifier.weight(1f)
+                    )
+                    SummaryCard(
+                        title = "This Week",
+                        value = uiState.weeklyDataPoints.size.toString(),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
             
-            // Data list
-            if (uiState.isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
+            // Plugin Filter Chips
+            if (uiState.plugins.isNotEmpty()) {
+                item {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        item {
+                            FilterChip(
+                                selected = uiState.selectedPluginFilter == null,
+                                onClick = { viewModel.filterByPlugin(null) },
+                                label = { Text("All") }
+                            )
+                        }
+                        items(uiState.plugins) { plugin ->
+                            FilterChip(
+                                selected = uiState.selectedPluginFilter == plugin.id,
+                                onClick = { viewModel.filterByPlugin(plugin.id) },
+                                label = { Text(plugin.metadata.name) }
+                            )
+                        }
+                    }
                 }
-            } else if (uiState.dataPoints.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No data points yet",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            
+            // Data Points
+            val filteredDataPoints = uiState.dataPoints.filter { dataPoint ->
+                val matchesPlugin = uiState.selectedPluginFilter == null || 
+                    dataPoint.pluginId == uiState.selectedPluginFilter
+                val matchesSearch = uiState.searchQuery.isEmpty() || 
+                    dataPoint.value.toString().contains(uiState.searchQuery, ignoreCase = true)
+                matchesPlugin && matchesSearch
+            }
+            
+            if (filteredDataPoints.isEmpty()) {
+                item {
+                    EmptyState(
+                        message = when {
+                            uiState.dataPoints.isEmpty() -> "No data recorded yet"
+                            uiState.selectedPluginFilter != null -> "No data for this tracker"
+                            uiState.searchQuery.isNotEmpty() -> "No results found"
+                            else -> "No data available"
+                        }
                     )
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(
-                        items = uiState.dataPoints,
-                        key = { it.id }
-                    ) { dataPoint ->
-                        DataPointCard(
-                            dataPoint = dataPoint,
-                            pluginName = uiState.pluginNames[dataPoint.pluginId] ?: dataPoint.pluginId,
-                            isExpanded = expandedDataPointId == dataPoint.id,
-                            isSelected = uiState.selectedDataPoints.contains(dataPoint.id),
-                            isInSelectionMode = uiState.isInSelectionMode,
-                            onToggleExpanded = {
-                                expandedDataPointId = if (expandedDataPointId == dataPoint.id) null else dataPoint.id
-                            },
-                            onToggleSelection = {
-                                viewModel.toggleDataPointSelection(dataPoint.id)
-                            },
-                            onDelete = {
-                                viewModel.deleteDataPoint(dataPoint.id)
-                            },
-                            onLongPress = {
-                                viewModel.enterSelectionMode()
-                                viewModel.toggleDataPointSelection(dataPoint.id)
-                            }
-                        )
-                    }
+                items(filteredDataPoints, key = { it.id }) { dataPoint ->
+                    DataPointCard(
+                        dataPoint = dataPoint,
+                        pluginName = uiState.pluginNames[dataPoint.pluginId] ?: dataPoint.pluginId,
+                        isExpanded = expandedDataPointId == dataPoint.id,
+                        isSelected = uiState.selectedDataPoints.contains(dataPoint.id),
+                        isInSelectionMode = uiState.isInSelectionMode,
+                        onToggleExpanded = {
+                            expandedDataPointId = if (expandedDataPointId == dataPoint.id) null else dataPoint.id
+                        },
+                        onToggleSelection = {
+                            viewModel.toggleDataPointSelection(dataPoint.id)
+                        },
+                        onDelete = {
+                            viewModel.deleteDataPoint(dataPoint.id)
+                        },
+                        onLongPress = {
+                            viewModel.enterSelectionMode()
+                            viewModel.toggleDataPointSelection(dataPoint.id)
+                        }
+                    )
                 }
             }
         }
@@ -173,18 +189,34 @@ fun DataScreen(
                 viewModel.updateFilters(filterState)
                 showFilterDialog = false
             },
-            currentFilters = FilterState() // Uses FilterState from DataViewModel
+            currentFilters = FilterState()
         )
     }
     
     if (showExportDialog) {
-        ExportDialog(
+        EnhancedExportDialog(
             onDismiss = { showExportDialog = false },
-            onExport = { format ->
-                viewModel.exportData(format)
+            onExport = { options ->
+                viewModel.exportData(options)
                 showExportDialog = false
-            }
+            },
+            availablePlugins = uiState.plugins
         )
+    }
+    
+    // Show messages
+    uiState.message?.let { message ->
+        LaunchedEffect(message) {
+            // Show snackbar or toast
+            viewModel.clearMessage()
+        }
+    }
+    
+    uiState.error?.let { error ->
+        LaunchedEffect(error) {
+            // Show error snackbar or toast
+            viewModel.clearError()
+        }
     }
 }
 
@@ -197,55 +229,28 @@ private fun SummaryCard(
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = value,
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
             )
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SelectionModeTopBar(
-    selectedCount: Int,
-    onCancelSelection: () -> Unit,
-    onDeleteSelected: () -> Unit
-) {
-    TopAppBar(
-        title = { Text("$selectedCount selected") },
-        navigationIcon = {
-            IconButton(onClick = onCancelSelection) {
-                Icon(
-                    imageVector = AppIcons.Navigation.close,
-                    contentDescription = "Cancel selection"
-                )
-            }
-        },
-        actions = {
-            IconButton(onClick = onDeleteSelected) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete selected"
-                )
-            }
-        }
-    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -274,46 +279,40 @@ private fun DataPointCard(
                 },
                 onLongClick = onLongPress
             ),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        )
+        colors = if (isSelected) {
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            )
+        } else {
+            CardDefaults.cardColors()
+        }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Header row with plugin name and menu
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                // Plugin badge
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier.padding(end = 8.dp)
-                ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = pluginName,
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = LocalDateTime.ofInstant(dataPoint.timestamp, ZoneId.systemDefault())
+                            .format(DateTimeFormatter.ofPattern("MMM dd, yyyy • HH:mm")),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 
-                // Selection checkbox or menu
-                if (isInSelectionMode) {
-                    Checkbox(
-                        checked = isSelected,
-                        onCheckedChange = { onToggleSelection() }
-                    )
-                } else {
+                if (!isInSelectionMode) {
                     var showMenu by remember { mutableStateOf(false) }
                     Box {
                         IconButton(onClick = { showMenu = true }) {
@@ -357,78 +356,97 @@ private fun DataPointCard(
             
             Text(
                 text = mainValue,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium
+                style = MaterialTheme.typography.bodyLarge
             )
             
-            // Timestamp
-            val formatter = DateTimeFormatter.ofPattern("MMM d, h:mm a")
-            val localDateTime = dataPoint.timestamp.atZone(ZoneId.systemDefault()).toLocalDateTime()
-            Text(
-                text = localDateTime.format(formatter),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            
-            // Expandable details
+            // Expanded details
             AnimatedVisibility(visible = isExpanded) {
                 Column(
-                    modifier = Modifier.padding(top = 12.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
                 ) {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    
-                    // Show all data fields
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
                     dataPoint.value.forEach { (key, value) ->
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 2.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = key.replaceFirstChar { it.uppercase() },
+                                text = key,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
                                 text = value.toString(),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium
+                                style = MaterialTheme.typography.bodySmall
                             )
                         }
-                    }
-                    
-                    // Show metadata if exists - FIX: Extract before @Composable calls
-                    val metadataEntries = dataPoint.metadata?.entries?.toList() ?: emptyList()
-                    if (metadataEntries.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Metadata",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        metadataEntries.forEach { entry ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 2.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = entry.key,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = entry.value,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
+                        Spacer(modifier = Modifier.height(4.dp))
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SelectionModeTopBar(
+    selectedCount: Int,
+    onCancelSelection: () -> Unit,
+    onDeleteSelected: () -> Unit
+) {
+    TopAppBar(
+        navigationIcon = {
+            IconButton(onClick = onCancelSelection) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Cancel selection"
+                )
+            }
+        },
+        title = {
+            Text("$selectedCount selected")
+        },
+        actions = {
+            IconButton(
+                onClick = onDeleteSelected,
+                enabled = selectedCount > 0
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete selected"
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun EmptyState(
+    message: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = AppIcons.Storage.folder,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -460,47 +478,279 @@ private fun FilterDialog(
 }
 
 @Composable
-private fun ExportDialog(
+private fun EnhancedExportDialog(
     onDismiss: () -> Unit,
-    onExport: (ExportFormat) -> Unit
+    onExport: (ExportOptions) -> Unit,
+    availablePlugins: List<Plugin>
 ) {
     var selectedFormat by remember { mutableStateOf(ExportFormat.CSV) }
+    var selectedTimeFrame by remember { mutableStateOf(TimeFrame.ALL) }
+    var selectedPlugins by remember { mutableStateOf(availablePlugins.map { it.id }.toSet()) }
+    var customStartDate by remember { mutableStateOf<LocalDateTime?>(null) }
+    var customEndDate by remember { mutableStateOf<LocalDateTime?>(null) }
+    var encryptExport by remember { mutableStateOf(false) }
+    var showFormatDropdown by remember { mutableStateOf(false) }
+    var showTimeFrameDropdown by remember { mutableStateOf(false) }
+    var showPluginSelector by remember { mutableStateOf(false) }
     
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Export Data") },
         text = {
-            Column {
-                Text("Select export format:")
-                Spacer(modifier = Modifier.height(16.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Format Dropdown
+                Column {
+                    Text(
+                        "Export Format",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box {
+                        OutlinedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showFormatDropdown = true }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(selectedFormat.name)
+                                    Text(
+                                        text = when (selectedFormat) {
+                                            ExportFormat.CSV -> "Spreadsheet compatible"
+                                            ExportFormat.JSON -> "Developer-friendly"
+                                            ExportFormat.XML -> "Structured data"
+                                            ExportFormat.CUSTOM -> "Plugin-specific"
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = null
+                                )
+                            }
+                        }
+                        
+                        DropdownMenu(
+                            expanded = showFormatDropdown,
+                            onDismissRequest = { showFormatDropdown = false }
+                        ) {
+                            ExportFormat.values().forEach { format ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(format.name)
+                                            Text(
+                                                text = when (format) {
+                                                    ExportFormat.CSV -> "Spreadsheet compatible"
+                                                    ExportFormat.JSON -> "Developer-friendly"
+                                                    ExportFormat.XML -> "Structured data"
+                                                    ExportFormat.CUSTOM -> "Plugin-specific"
+                                                },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedFormat = format
+                                        showFormatDropdown = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
                 
-                ExportFormat.values().forEach { format ->
+                // Time Frame Dropdown
+                Column {
+                    Text(
+                        "Time Frame",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box {
+                        OutlinedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showTimeFrameDropdown = true }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(selectedTimeFrame.displayName)
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = null
+                                )
+                            }
+                        }
+                        
+                        DropdownMenu(
+                            expanded = showTimeFrameDropdown,
+                            onDismissRequest = { showTimeFrameDropdown = false }
+                        ) {
+                            TimeFrame.values().forEach { timeFrame ->
+                                DropdownMenuItem(
+                                    text = { Text(timeFrame.displayName) },
+                                    onClick = {
+                                        selectedTimeFrame = timeFrame
+                                        showTimeFrameDropdown = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // Custom Date Range (if CUSTOM selected)
+                AnimatedVisibility(visible = selectedTimeFrame == TimeFrame.CUSTOM) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // TODO: Add date pickers for custom range
+                        Text(
+                            "Custom date range selection coming soon",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                
+                // Plugin Selection
+                Column {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selectedFormat = format }
-                            .padding(vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(
-                            selected = selectedFormat == format,
-                            onClick = { selectedFormat = format }
+                        Text(
+                            "Select Trackers",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(format.name)
-                            val description = when (format) {
-                                ExportFormat.CSV -> "Spreadsheet compatible format"
-                                ExportFormat.JSON -> "Developer-friendly format"
-                                ExportFormat.XML -> "Structured data format"
-                                ExportFormat.CUSTOM -> "Plugin-specific format"
+                        TextButton(
+                            onClick = {
+                                selectedPlugins = if (selectedPlugins.size == availablePlugins.size) {
+                                    emptySet()
+                                } else {
+                                    availablePlugins.map { it.id }.toSet()
+                                }
                             }
+                        ) {
                             Text(
-                                text = description,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                if (selectedPlugins.size == availablePlugins.size) "Deselect All" else "Select All"
                             )
                         }
+                    }
+                    
+                    OutlinedCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showPluginSelector = !showPluginSelector }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                when {
+                                    selectedPlugins.isEmpty() -> "No trackers selected"
+                                    selectedPlugins.size == availablePlugins.size -> "All trackers"
+                                    selectedPlugins.size == 1 -> {
+                                        availablePlugins.find { it.id == selectedPlugins.first() }?.metadata?.name ?: "1 tracker"
+                                    }
+                                    else -> "${selectedPlugins.size} trackers"
+                                }
+                            )
+                            Icon(
+                                imageVector = if (showPluginSelector) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = null
+                            )
+                        }
+                    }
+                    
+                    AnimatedVisibility(visible = showPluginSelector) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 200.dp)
+                        ) {
+                            LazyColumn(
+                                modifier = Modifier.padding(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                items(availablePlugins) { plugin ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                selectedPlugins = if (plugin.id in selectedPlugins) {
+                                                    selectedPlugins - plugin.id
+                                                } else {
+                                                    selectedPlugins + plugin.id
+                                                }
+                                            }
+                                            .padding(vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Checkbox(
+                                            checked = plugin.id in selectedPlugins,
+                                            onCheckedChange = { checked ->
+                                                selectedPlugins = if (checked) {
+                                                    selectedPlugins + plugin.id
+                                                } else {
+                                                    selectedPlugins - plugin.id
+                                                }
+                                            }
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(plugin.metadata.name)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Encryption Toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { encryptExport = !encryptExport },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = encryptExport,
+                        onCheckedChange = { encryptExport = it }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text("Encrypt export")
+                        Text(
+                            "Password protect your data",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -508,9 +758,20 @@ private fun ExportDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    onExport(selectedFormat)
+                    val options = ExportOptions(
+                        format = selectedFormat,
+                        timeFrame = selectedTimeFrame,
+                        selectedPlugins = selectedPlugins,
+                        customDateRange = if (selectedTimeFrame == TimeFrame.CUSTOM && customStartDate != null && customEndDate != null) {
+                            customStartDate!!.atZone(ZoneId.systemDefault()).toInstant() to
+                            customEndDate!!.atZone(ZoneId.systemDefault()).toInstant()
+                        } else null,
+                        encrypt = encryptExport
+                    )
+                    onExport(options)
                     onDismiss()
-                }
+                },
+                enabled = selectedPlugins.isNotEmpty()
             ) {
                 Text("Export")
             }

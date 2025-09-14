@@ -12,6 +12,7 @@ import com.domain.app.core.data.DataPoint
 import com.domain.app.core.data.DataRepository
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginManager
+import com.domain.app.core.plugin.ExportFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -95,18 +96,15 @@ class ExportManager @Inject constructor(
         startDate: Instant? = null,
         endDate: Instant? = null
     ): ExportResult = withContext(Dispatchers.IO) {
-        Log.d(TAG, "=== PLUGIN EXPORT: $pluginId ===")
+        Log.d(TAG, "Exporting plugin data: $pluginId")
         
         try {
             val plugin = pluginManager.getPlugin(pluginId)
-            if (plugin == null) {
-                return@withContext ExportResult.Error("Plugin not found: $pluginId")
-            }
+                ?: return@withContext ExportResult.Error("Plugin not found: $pluginId")
             
-            // FIXED: Handle different return types correctly
-            val data: List<DataPoint> = if (startDate != null && endDate != null) {
+            // Use suspend function if date range specified, otherwise use Flow
+            val data = if (startDate != null && endDate != null) {
                 // getPluginDataInRange returns List<DataPoint> directly (suspend function)
-                // NO .first() needed!
                 dataRepository.getPluginDataInRange(pluginId, startDate, endDate)
             } else {
                 // getPluginData returns Flow<List<DataPoint>>
@@ -138,6 +136,111 @@ class ExportManager @Inject constructor(
     }
     
     /**
+     * Export filtered data based on options
+     * ENHANCED: Supports plugin filtering, date ranges, and multiple formats
+     */
+    suspend fun exportFilteredData(
+        context: Context,
+        format: ExportFormat,
+        pluginIds: Set<String>? = null,
+        startDate: Instant? = null,
+        endDate: Instant? = null,
+        encrypt: Boolean = false
+    ): ExportResult = withContext(Dispatchers.IO) {
+        Log.d(TAG, "=== EXPORT FILTERED DATA START ===")
+        Log.d(TAG, "Format: $format, Plugins: ${pluginIds?.size ?: "all"}, Encrypt: $encrypt")
+        
+        try {
+            // Step 1: Get filtered data
+            val allData = if (startDate != null && endDate != null) {
+                dataRepository.getDataInRange(startDate, endDate).first()
+            } else {
+                dataRepository.getRecentData(24 * 365).first()
+            }
+            
+            // Filter by plugins if specified
+            val filteredData = if (!pluginIds.isNullOrEmpty()) {
+                allData.filter { it.pluginId in pluginIds }
+            } else {
+                allData
+            }
+            
+            Log.d(TAG, "Retrieved ${filteredData.size} data points after filtering")
+            
+            if (filteredData.isEmpty()) {
+                return@withContext ExportResult.Error("No data to export for selected filters")
+            }
+            
+            // Step 2: Generate content based on format
+            val plugins = pluginManager.getAllActivePlugins()
+            val pluginMap = plugins.associateBy { it.id }
+            
+            val (content, mimeType) = when (format) {
+                ExportFormat.CSV -> generateCsvContent(filteredData, pluginMap) to "text/csv"
+                ExportFormat.JSON -> generateJsonContent(filteredData, pluginMap) to "application/json"
+                ExportFormat.XML -> generateXmlContent(filteredData, pluginMap) to "application/xml"
+                ExportFormat.CUSTOM -> generateCsvContent(filteredData, pluginMap) to "text/plain"
+            }
+            
+            // Step 3: Apply encryption if requested
+            val finalContent = if (encrypt) {
+                // TODO: Implement encryption
+                Log.d(TAG, "Encryption requested but not yet implemented")
+                content
+            } else {
+                content
+            }
+            
+            // Step 4: Generate filename with descriptive parts
+            val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
+            val extension = when (format) {
+                ExportFormat.CSV -> "csv"
+                ExportFormat.JSON -> "json"
+                ExportFormat.XML -> "xml"
+                ExportFormat.CUSTOM -> "txt"
+            }
+            
+            val pluginPart = when {
+                pluginIds == null || pluginIds.isEmpty() -> "all_data"
+                pluginIds.size == 1 -> pluginMap[pluginIds.first()]?.metadata?.name?.lowercase()?.replace(" ", "_") ?: "data"
+                else -> "${pluginIds.size}_plugins"
+            }
+            
+            val timePart = when {
+                startDate != null && endDate != null -> {
+                    val days = java.time.Duration.between(startDate, endDate).toDays()
+                    when {
+                        days <= 1 -> "day"
+                        days <= 7 -> "week"
+                        days <= 31 -> "month"
+                        days <= 365 -> "year"
+                        else -> "custom"
+                    }
+                }
+                else -> "all_time"
+            }
+            
+            val fileName = "${pluginPart}_${timePart}_export_$timestamp.$extension"
+            
+            // Step 5: Save to Downloads
+            val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                Log.d(TAG, "Using MediaStore for Downloads folder")
+                saveToDownloadsMediaStore(context, fileName, finalContent, filteredData.size, mimeType)
+            } else {
+                Log.d(TAG, "Using legacy Downloads approach")
+                saveToDownloadsLegacy(context, fileName, finalContent, filteredData.size)
+            }
+            
+            Log.d(TAG, "=== EXPORT FILTERED DATA COMPLETED ===")
+            return@withContext result
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Export failed", e)
+            ExportResult.Error("Export failed: ${e.message}")
+        }
+    }
+    
+    /**
      * Save to Downloads using MediaStore (Android 10+)
      */
     @TargetApi(Build.VERSION_CODES.Q)
@@ -145,12 +248,13 @@ class ExportManager @Inject constructor(
         context: Context, 
         fileName: String, 
         content: String, 
-        recordCount: Int
+        recordCount: Int,
+        mimeType: String = "text/csv"
     ): ExportResult {
         try {
             val contentValues = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.MediaColumns.MIME_TYPE, "text/csv")
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
             }
             
@@ -284,6 +388,151 @@ class ExportManager @Inject constructor(
         }
         
         return csv.toString()
+    }
+    
+    /**
+     * Generate JSON content for export
+     * NEW: Added JSON format support
+     */
+    private fun generateJsonContent(
+        dataPoints: List<DataPoint>,
+        plugins: Map<String, Plugin>
+    ): String {
+        val json = StringBuilder()
+        json.append("{\n")
+        json.append("  \"export_date\": \"${LocalDateTime.now()}\",\n")
+        json.append("  \"total_records\": ${dataPoints.size},\n")
+        json.append("  \"data\": [\n")
+        
+        dataPoints.forEachIndexed { index, dataPoint ->
+            val plugin = plugins[dataPoint.pluginId]
+            val localDateTime = LocalDateTime.ofInstant(dataPoint.timestamp, ZoneId.systemDefault())
+            
+            json.append("    {\n")
+            json.append("      \"id\": \"${dataPoint.id}\",\n")
+            json.append("      \"plugin\": \"${plugin?.metadata?.name ?: dataPoint.pluginId}\",\n")
+            json.append("      \"date\": \"${localDateTime.format(DateTimeFormatter.ISO_LOCAL_DATE)}\",\n")
+            json.append("      \"time\": \"${localDateTime.format(DateTimeFormatter.ISO_LOCAL_TIME)}\",\n")
+            json.append("      \"type\": \"${dataPoint.type}\",\n")
+            
+            // Handle value as a complex object
+            json.append("      \"value\": ")
+            when (val value = dataPoint.value) {
+                is Map<*, *> -> {
+                    json.append("{")
+                    value.entries.forEachIndexed { i, entry ->
+                        json.append("\"${entry.key}\": ")
+                        when (val v = entry.value) {
+                            is String -> json.append("\"$v\"")
+                            is Number -> json.append(v)
+                            is Boolean -> json.append(v)
+                            else -> json.append("\"${v.toString()}\"")
+                        }
+                        if (i < value.size - 1) json.append(", ")
+                    }
+                    json.append("}")
+                }
+                else -> json.append("\"${value}\"")
+            }
+            json.append(",\n")
+            
+            json.append("      \"source\": \"${dataPoint.source ?: "unknown"}\",\n")
+            json.append("      \"metadata\": ")
+            
+            // Add plugin-specific formatted data
+            val formatted = plugin?.formatForExport(dataPoint) ?: mapOf()
+            json.append("{")
+            formatted.entries.forEachIndexed { i, entry ->
+                json.append("\"${entry.key}\": \"${entry.value}\"")
+                if (i < formatted.size - 1) json.append(", ")
+            }
+            json.append("}\n")
+            
+            json.append("    }")
+            
+            if (index < dataPoints.size - 1) {
+                json.append(",")
+            }
+            json.append("\n")
+        }
+        
+        json.append("  ]\n")
+        json.append("}\n")
+        
+        return json.toString()
+    }
+    
+    /**
+     * Generate XML content for export
+     * NEW: Added XML format support
+     */
+    private fun generateXmlContent(
+        dataPoints: List<DataPoint>,
+        plugins: Map<String, Plugin>
+    ): String {
+        val xml = StringBuilder()
+        xml.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+        xml.append("<export>\n")
+        xml.append("  <metadata>\n")
+        xml.append("    <export_date>${LocalDateTime.now()}</export_date>\n")
+        xml.append("    <total_records>${dataPoints.size}</total_records>\n")
+        xml.append("  </metadata>\n")
+        xml.append("  <data>\n")
+        
+        dataPoints.forEach { dataPoint ->
+            val plugin = plugins[dataPoint.pluginId]
+            val localDateTime = LocalDateTime.ofInstant(dataPoint.timestamp, ZoneId.systemDefault())
+            
+            xml.append("    <record>\n")
+            xml.append("      <id>${escapeXml(dataPoint.id)}</id>\n")
+            xml.append("      <plugin>${escapeXml(plugin?.metadata?.name ?: dataPoint.pluginId)}</plugin>\n")
+            xml.append("      <date>${localDateTime.format(DateTimeFormatter.ISO_LOCAL_DATE)}</date>\n")
+            xml.append("      <time>${localDateTime.format(DateTimeFormatter.ISO_LOCAL_TIME)}</time>\n")
+            xml.append("      <type>${escapeXml(dataPoint.type)}</type>\n")
+            
+            // Handle value as complex object
+            xml.append("      <value>\n")
+            when (val value = dataPoint.value) {
+                is Map<*, *> -> {
+                    value.forEach { (k, v) ->
+                        xml.append("        <${escapeXml(k.toString())}>${escapeXml(v.toString())}</${escapeXml(k.toString())}>\n")
+                    }
+                }
+                else -> xml.append("        <data>${escapeXml(value.toString())}</data>\n")
+            }
+            xml.append("      </value>\n")
+            
+            xml.append("      <source>${escapeXml(dataPoint.source ?: "unknown")}</source>\n")
+            
+            // Add plugin-specific formatted data
+            val formatted = plugin?.formatForExport(dataPoint) ?: mapOf()
+            if (formatted.isNotEmpty()) {
+                xml.append("      <plugin_data>\n")
+                formatted.forEach { (key, value) ->
+                    xml.append("        <${escapeXml(key)}>${escapeXml(value)}</${escapeXml(key)}>\n")
+                }
+                xml.append("      </plugin_data>\n")
+            }
+            
+            xml.append("    </record>\n")
+        }
+        
+        xml.append("  </data>\n")
+        xml.append("</export>\n")
+        
+        return xml.toString()
+    }
+    
+    /**
+     * Escape special XML characters
+     */
+    private fun escapeXml(text: String): String {
+        return text
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&apos;")
     }
 }
 
