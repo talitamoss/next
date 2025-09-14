@@ -4,7 +4,6 @@ package com.domain.app.ui.settings.sections
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -30,9 +30,6 @@ import java.time.ZoneId
 import com.domain.app.core.plugin.ExportFormat
 import com.domain.app.ui.data.ExportOptions
 import com.domain.app.ui.data.TimeFrame
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarDuration
 
 val ExportFormat.displayName: String
     get() = when (this) {
@@ -78,7 +75,7 @@ fun DataManagementScreen(
                 }
             )
         },
-	snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
@@ -154,16 +151,14 @@ fun DataManagementScreen(
                             Column {
                                 BackupActionItem(
                                     title = "Backup Frequency",
-                                    subtitle = uiState.backupFrequency,
-                                    onClick = { /* TODO: Frequency selector */ }
+                                    subtitle = uiState.backupFrequency.capitalize(),
+                                    onClick = { /* TODO: Show frequency picker */ }
                                 )
-                                
                                 BackupActionItem(
                                     title = "Backup Time",
                                     subtitle = uiState.backupTime,
-                                    onClick = { /* TODO: Time picker */ }
+                                    onClick = { /* TODO: Show time picker */ }
                                 )
-                                
                                 BackupSettingItem(
                                     title = "WiFi Only",
                                     subtitle = "Only backup when connected to WiFi",
@@ -172,16 +167,56 @@ fun DataManagementScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+            
+            // Manual Backup Actions
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = "Manual Backup",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
                         
-                        HorizontalDivider()
+                        Spacer(modifier = Modifier.height(16.dp))
                         
-                        TextButton(
-                            onClick = { viewModel.backupNow() },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Text("Backup Now")
+                            Button(
+                                onClick = { showBackupDialog = true },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Backup,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Backup Now")
+                            }
+                            
+                            OutlinedButton(
+                                onClick = { /* TODO: Restore */ },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Restore,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Restore")
+                            }
                         }
                     }
                 }
@@ -190,16 +225,10 @@ fun DataManagementScreen(
             // Danger Zone
             item {
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.5f),
-                            shape = RoundedCornerShape(12.dp)
-                        ),
+                    modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                        containerColor = MaterialTheme.colorScheme.errorContainer
                     )
                 ) {
                     Column(
@@ -291,27 +320,31 @@ fun DataManagementScreen(
         )
     }
     
-// Show messages
-uiState.message?.let { message ->
-    LaunchedEffect(message) {
-        snackbarHostState.showSnackbar(
-            message = message,
-            duration = SnackbarDuration.Long
-        )
-        viewModel.clearMessage()
+    // Show messages
+    uiState.message?.let { message ->
+        LaunchedEffect(message) {
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Long
+            )
+            viewModel.clearMessage()
+        }
     }
-}
+    
+    // Show errors
+    uiState.error?.let { error ->
+        LaunchedEffect(error) {
+            snackbarHostState.showSnackbar(
+                message = error,
+                duration = SnackbarDuration.Long
+            )
+            viewModel.clearError()
+        }
+    }
+}  // DataManagementScreen ends here
 
-// Show errors
-uiState.error?.let { error ->
-    LaunchedEffect(error) {
-        snackbarHostState.showSnackbar(
-            message = error,
-            duration = SnackbarDuration.Long
-        )
-        viewModel.clearError()
-    }
-}
+// All helper functions come AFTER DataManagementScreen, not inside it
+
 @Composable
 private fun DataStatisticsCard(
     dataPoints: Int,
@@ -501,14 +534,9 @@ private fun EnhancedExportDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column {
-                                    Text(selectedFormat.name)
+                                    Text(selectedFormat.displayName)
                                     Text(
-                                        text = when (selectedFormat) {
-                                            ExportFormat.CSV -> "Spreadsheet compatible"
-                                            ExportFormat.JSON -> "Developer-friendly"
-                                            ExportFormat.XML -> "Structured data"
-                                            ExportFormat.CUSTOM -> "Plugin-specific"
-                                        },
+                                        text = selectedFormat.description,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -528,14 +556,9 @@ private fun EnhancedExportDialog(
                                 DropdownMenuItem(
                                     text = {
                                         Column {
-                                            Text(format.name)
+                                            Text(format.displayName)
                                             Text(
-                                                text = when (format) {
-                                                    ExportFormat.CSV -> "Spreadsheet compatible"
-                                                    ExportFormat.JSON -> "Developer-friendly"
-                                                    ExportFormat.XML -> "Structured data"
-                                                    ExportFormat.CUSTOM -> "Plugin-specific"
-                                                },
+                                                format.description,
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -551,10 +574,10 @@ private fun EnhancedExportDialog(
                     }
                 }
                 
-                // Time Frame Dropdown
+                // Time Frame Selection
                 Column {
                     Text(
-                        "Time Frame",
+                        "Time Period",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -597,18 +620,6 @@ private fun EnhancedExportDialog(
                     }
                 }
                 
-                // Custom Date Range (if CUSTOM selected)
-                AnimatedVisibility(visible = selectedTimeFrame == TimeFrame.CUSTOM) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // TODO: Add date pickers for custom range
-                        Text(
-                            "Custom date range selection coming soon",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                
                 // Plugin Selection
                 Column {
                     Row(
@@ -617,7 +628,7 @@ private fun EnhancedExportDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "Select Trackers",
+                            "Plugins to Export",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -636,83 +647,43 @@ private fun EnhancedExportDialog(
                         }
                     }
                     
-                    OutlinedCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showPluginSelector = !showPluginSelector }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                when {
-                                    selectedPlugins.isEmpty() -> "No trackers selected"
-                                    selectedPlugins.size == availablePlugins.size -> "All trackers"
-                                    selectedPlugins.size == 1 -> {
-                                        availablePlugins.find { it.id == selectedPlugins.first() }?.metadata?.name ?: "1 tracker"
-                                    }
-                                    else -> "${selectedPlugins.size} trackers"
-                                }
-                            )
-                            Icon(
-                                imageVector = if (showPluginSelector) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                contentDescription = null
-                            )
-                        }
-                    }
+                    Spacer(modifier = Modifier.height(8.dp))
                     
-                    AnimatedVisibility(visible = showPluginSelector) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 200.dp)
-                        ) {
-                            LazyColumn(
-                                modifier = Modifier.padding(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                items(availablePlugins) { plugin ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                selectedPlugins = if (plugin.id in selectedPlugins) {
-                                                    selectedPlugins - plugin.id
-                                                } else {
-                                                    selectedPlugins + plugin.id
-                                                }
-                                            }
-                                            .padding(vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Checkbox(
-                                            checked = plugin.id in selectedPlugins,
-                                            onCheckedChange = { checked ->
-                                                selectedPlugins = if (checked) {
-                                                    selectedPlugins + plugin.id
-                                                } else {
-                                                    selectedPlugins - plugin.id
-                                                }
-                                            }
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(plugin.metadata.name)
+                    Column {
+                        availablePlugins.forEach { plugin ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedPlugins = if (plugin.id in selectedPlugins) {
+                                            selectedPlugins - plugin.id
+                                        } else {
+                                            selectedPlugins + plugin.id
+                                        }
                                     }
-                                }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = plugin.id in selectedPlugins,
+                                    onCheckedChange = { checked ->
+                                        selectedPlugins = if (checked) {
+                                            selectedPlugins + plugin.id
+                                        } else {
+                                            selectedPlugins - plugin.id
+                                        }
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(plugin.metadata.name)
                             }
                         }
                     }
                 }
                 
-                // Encryption Toggle
+                // Encryption Option
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { encryptExport = !encryptExport },
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Checkbox(
@@ -721,9 +692,9 @@ private fun EnhancedExportDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
-                        Text("Encrypt export")
+                        Text("Encrypt Export")
                         Text(
-                            "Password protect your data",
+                            "Protect your data with encryption",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -732,20 +703,19 @@ private fun EnhancedExportDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = {
+            Button(
+		 onClick = {
                     val options = ExportOptions(
                         format = selectedFormat,
                         timeFrame = selectedTimeFrame,
                         selectedPlugins = selectedPlugins,
                         customDateRange = if (selectedTimeFrame == TimeFrame.CUSTOM && customStartDate != null && customEndDate != null) {
-                            customStartDate!!.atZone(ZoneId.systemDefault()).toInstant() to
-                            customEndDate!!.atZone(ZoneId.systemDefault()).toInstant()
+                            customStartDate.atZone(ZoneId.systemDefault()).toInstant() to
+                            customEndDate.atZone(ZoneId.systemDefault()).toInstant()
                         } else null,
                         encrypt = encryptExport
                     )
                     onExport(options)
-                    onDismiss()
                 },
                 enabled = selectedPlugins.isNotEmpty()
             ) {
@@ -760,6 +730,18 @@ private fun EnhancedExportDialog(
     )
 }
 
+val TimeFrame.displayName: String
+    get() = when (this) {
+        TimeFrame.DAY -> "Last 24 Hours"
+        TimeFrame.WEEK -> "Last Week"
+        TimeFrame.MONTH -> "Last Month"
+        TimeFrame.THREE_MONTHS -> "Last 3 Months"
+        TimeFrame.SIX_MONTHS -> "Last 6 Months"
+        TimeFrame.YEAR -> "Last Year"
+        TimeFrame.ALL -> "All Time"
+        TimeFrame.CUSTOM -> "Custom Range"
+    }
+
 @Composable
 private fun DeleteDataDialog(
     onDismiss: () -> Unit,
@@ -767,24 +749,11 @@ private fun DeleteDataDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = {
-            Icon(
-                imageVector = Icons.Default.Warning,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(48.dp)
-            )
-        },
-        title = {
-            Text(
-                "Clear All Data",
-                color = MaterialTheme.colorScheme.error
-            )
-        },
+        title = { Text("Delete All Data?") },
         text = {
             Column {
                 Text(
-                    "This action cannot be undone!",
+                    "This will permanently delete all your data.",
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
