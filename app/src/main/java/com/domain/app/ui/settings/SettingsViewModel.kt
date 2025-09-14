@@ -6,7 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.data.DataRepository
-import com.domain.app.core.data.export.ExportManager
+import com.domain.app.core.export.ExportManager
+import com.domain.app.core.export.ExportResult
 import com.domain.app.core.plugin.PluginManager
 import com.domain.app.core.preferences.UserPreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -195,9 +196,9 @@ class SettingsViewModel @Inject constructor(
             _uiState.update { it.copy(exportInProgress = true) }
             
             try {
-                val result = exportManager.exportAllData()
+                val result = exportManager.exportAllDataToCsv(context)
                 
-                if (result.isSuccess) {
+                if (result is ExportResult.Success) {
                     val timestamp = System.currentTimeMillis()
                     userPreferences.setLastBackupTime(timestamp)
                     

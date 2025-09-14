@@ -146,7 +146,7 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 24.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
                 )
             ) {
                 Row(
