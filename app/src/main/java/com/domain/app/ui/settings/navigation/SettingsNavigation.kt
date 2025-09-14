@@ -14,7 +14,7 @@ import com.domain.app.ui.settings.sections.*
  */
 sealed class SettingsRoute(val route: String) {
     object Main : SettingsRoute("settings_main")
-    object Profile : SettingsRoute("settings_profile")
+    // Profile route removed
     object Aesthetic : SettingsRoute("settings_aesthetic")
     object Privacy : SettingsRoute("settings_privacy")
     object Security : SettingsRoute("settings_security")
@@ -45,7 +45,7 @@ fun SettingsNavigation(
         composable(SettingsRoute.Main.route) {
             SettingsScreen(
                 onNavigateBack = onNavigateBack,
-                onNavigateToProfile = { navController.navigate(SettingsRoute.Profile.route) },
+                // onNavigateToProfile removed
                 onNavigateToAesthetic = { navController.navigate(SettingsRoute.Aesthetic.route) },
                 onNavigateToPrivacy = { navController.navigate(SettingsRoute.Privacy.route) },
                 onNavigateToSecurity = { navController.navigate(SettingsRoute.Security.route) },
@@ -58,12 +58,7 @@ fun SettingsNavigation(
             )
         }
         
-        // Profile
-        composable(SettingsRoute.Profile.route) {
-            ProfileSettingsScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
+        // Profile route and composable removed
         
         // Aesthetic
         composable(SettingsRoute.Aesthetic.route) {
