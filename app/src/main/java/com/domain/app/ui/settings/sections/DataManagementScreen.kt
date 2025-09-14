@@ -704,14 +704,17 @@ private fun EnhancedExportDialog(
         },
         confirmButton = {
             Button(
-		 onClick = {
+                onClick = {
                     val options = ExportOptions(
                         format = selectedFormat,
                         timeFrame = selectedTimeFrame,
                         selectedPlugins = selectedPlugins,
                         customDateRange = if (selectedTimeFrame == TimeFrame.CUSTOM && customStartDate != null && customEndDate != null) {
-                            customStartDate.atZone(ZoneId.systemDefault()).toInstant() to
-                            customEndDate.atZone(ZoneId.systemDefault()).toInstant()
+                            customStartDate?.atZone(ZoneId.systemDefault())?.toInstant()?.let { start ->
+                                customEndDate?.atZone(ZoneId.systemDefault())?.toInstant()?.let { end ->
+                                    start to end
+                                }
+                            }
                         } else null,
                         encrypt = encryptExport
                     )
