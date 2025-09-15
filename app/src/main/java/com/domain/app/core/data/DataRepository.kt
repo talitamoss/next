@@ -107,20 +107,18 @@ class DataRepository @Inject constructor(
                 when {
                     element.isString -> element.content
                     element.booleanOrNull != null -> element.boolean
-                    element.intOrNull != null -> element.int
                     element.longOrNull != null -> element.long
-                    element.floatOrNull != null -> element.float
                     element.doubleOrNull != null -> element.double
                     else -> element.content
                 }
-            }
-            is JsonArray -> {
-                element.map { parseJsonValue(it) }
             }
             is JsonObject -> {
                 element.entries.associate { (key, value) ->
                     key to parseJsonValue(value)
                 }.filterValues { it != null }
+            }
+            is JsonArray -> {
+                element.map { parseJsonValue(it) }.filterNotNull()
             }
             is JsonNull -> null
         }
@@ -128,26 +126,13 @@ class DataRepository @Inject constructor(
     
     /**
      * Parse JSON string to Map<String, String>
-     * FIXED: Properly implements JSON parsing for metadata
+     * Used for metadata field
      */
-    private fun parseJsonToStringMap(jsonString: String?): Map<String, String>? {
-        if (jsonString == null || jsonString.isEmpty()) return null
-        
+    private fun parseJsonToStringMap(jsonString: String): Map<String, String> {
         return try {
-            val jsonElement = json.parseToJsonElement(jsonString)
-            if (jsonElement is JsonObject) {
-                jsonElement.entries.associate { (key, value) ->
-                    key to when (value) {
-                        is JsonPrimitive -> value.content
-                        else -> value.toString()
-                    }
-                }
-            } else {
-                null
-            }
+            json.decodeFromString<Map<String, String>>(jsonString)
         } catch (e: Exception) {
-            println("Error parsing JSON to string map: ${e.message}")
-            null
+            emptyMap()
         }
     }
     
@@ -170,7 +155,7 @@ class DataRepository @Inject constructor(
     }
     
     /**
-     * Convert Any value to JsonElement
+     * Convert any value to JsonElement
      */
     private fun valueToJsonElement(value: Any?): JsonElement {
         return when (value) {
@@ -253,6 +238,12 @@ class DataRepository @Inject constructor(
     suspend fun clearAllData() {
         dataPointDao.deleteAll()
     }
+    
+    /**
+     * Alias for clearAllData() - required by DataManagementViewModel
+     * VERIFICATION: This is OUTSIDE clearAllData function, as a separate function
+     */
+    suspend fun deleteAllData() = clearAllData()
     
     /**
      * Get a single data point by ID

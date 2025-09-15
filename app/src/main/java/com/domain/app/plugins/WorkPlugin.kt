@@ -141,13 +141,11 @@ class WorkPlugin : Plugin {
                 "productivity_score" to calculateProductivityScore(duration, startTime)
             ),
             metadata = mapOf(
-	    "startKey" to "bedtime",
-	    "endKey" to "waketime",
-	    "startLabel" to "Bedtime",
-	    "endLabel" to "Wake",
-	    "durationLabel" to "{duration} sleep",
-	    "timeFormat" to "12h"
-	    )
+                "dayOfWeek" to dayOfWeek,
+                "formatted_start" to formatTime(startTime),
+                "formatted_end" to formatTime(endTime),
+                "formatted_duration" to formatDuration(duration)
+            )
         )
     }
     
@@ -207,6 +205,95 @@ class WorkPlugin : Plugin {
             "Overtime" to overtime.toString(),
             "Productivity Score" to productivityScore.toString(),
             "Day of Week" to dayOfWeek
+        )
+    }
+    
+    /**
+     * Custom formatter for cleaner data display
+     * Following pattern from WaterPlugin and ScreenTimePlugin
+     */
+    override fun getDataFormatter(): PluginDataFormatter = object : PluginDataFormatter {
+        
+        override fun formatSummary(dataPoint: DataPoint): String {
+            val startTime = dataPoint.value["start_time"] as? Float ?: 0f
+            val endTime = dataPoint.value["end_time"] as? Float ?: 0f
+            val duration = dataPoint.value["duration"] as? Float ?: 0f
+            
+            // Single line summary: "09:00 - 17:00 (8h)"
+            return "${formatTime(startTime)} - ${formatTime(endTime)} (${formatDuration(duration)})"
+        }
+        
+        override fun formatDetails(dataPoint: DataPoint): List<DataField> {
+            val fields = mutableListOf<DataField>()
+            
+            val startTime = dataPoint.value["start_time"] as? Float ?: 0f
+            val endTime = dataPoint.value["end_time"] as? Float ?: 0f
+            val duration = dataPoint.value["duration"] as? Float ?: 0f
+            val sessionType = dataPoint.value["session_type"] as? String ?: ""
+            val overtime = dataPoint.value["overtime"] as? Boolean ?: false
+            val productivityScore = dataPoint.value["productivity_score"] as? Int ?: 0
+            
+            // Work Hours - Combined field
+            fields.add(
+                DataField(
+                    label = "Work Hours",
+                    value = "${formatTime(startTime)} - ${formatTime(endTime)}",
+                    isImportant = true
+                )
+            )
+            
+            // Duration
+            fields.add(
+                DataField(
+                    label = "Duration",
+                    value = formatDuration(duration)
+                )
+            )
+            
+            // Session Type - Format nicely
+            val sessionTypeFormatted = when (sessionType) {
+                "full_day" -> "Full Day"
+                "half_day" -> "Half Day"
+                "focused_session" -> "Focused Session"
+                "quick_task" -> "Quick Task"
+                else -> sessionType
+            }
+            if (sessionTypeFormatted.isNotEmpty()) {
+                fields.add(
+                    DataField(
+                        label = "Session Type",
+                        value = sessionTypeFormatted
+                    )
+                )
+            }
+            
+            // Overtime - Only show if true
+            if (overtime) {
+                fields.add(
+                    DataField(
+                        label = "Overtime",
+                        value = "Yes"
+                    )
+                )
+            }
+            
+            // Productivity Score
+            fields.add(
+                DataField(
+                    label = "Productivity Score",
+                    value = productivityScore.toString()
+                )
+            )
+            
+            return fields
+        }
+        
+        override fun getHiddenFields(): List<String> = listOf(
+            "metadata", 
+            "timestamp", 
+            "source", 
+            "version", 
+            "inputType"
         )
     }
     

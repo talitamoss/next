@@ -14,7 +14,7 @@ import com.domain.app.ui.settings.sections.*
  */
 sealed class SettingsRoute(val route: String) {
     object Main : SettingsRoute("settings_main")
-    object Profile : SettingsRoute("settings_profile")
+    // Profile route removed
     object Aesthetic : SettingsRoute("settings_aesthetic")
     object Privacy : SettingsRoute("settings_privacy")
     object Security : SettingsRoute("settings_security")
@@ -42,29 +42,19 @@ fun SettingsNavigation(
         startDestination = SettingsRoute.Main.route
     ) {
         // Main Settings
-        composable(SettingsRoute.Main.route) {
-            SettingsScreen(
-                onNavigateBack = onNavigateBack,
-                onNavigateToProfile = { navController.navigate(SettingsRoute.Profile.route) },
-                onNavigateToAesthetic = { navController.navigate(SettingsRoute.Aesthetic.route) },
-                onNavigateToPrivacy = { navController.navigate(SettingsRoute.Privacy.route) },
-                onNavigateToSecurity = { navController.navigate(SettingsRoute.Security.route) },
-                onNavigateToDataManagement = { navController.navigate(SettingsRoute.DataManagement.route) },
-                onNavigateToPlugins = { navController.navigate(SettingsRoute.Plugins.route) },
-                onNavigateToPluginSecurity = { navController.navigate(SettingsRoute.PluginSecurity.route) },
-                onNavigateToNotifications = { navController.navigate(SettingsRoute.Notifications.route) },
-                onNavigateToAbout = { navController.navigate(SettingsRoute.About.route) },
-                onNavigateToLicenses = { navController.navigate(SettingsRoute.Licenses.route) }
-            )
-        }
-        
-        // Profile
-        composable(SettingsRoute.Profile.route) {
-            ProfileSettingsScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-        
+    composable(SettingsRoute.Main.route) {
+	SettingsScreen(
+            navController = navController,
+            onNavigateToAesthetic = { navController.navigate(SettingsRoute.Aesthetic.route) },
+            onNavigateToPrivacy = { navController.navigate(SettingsRoute.Privacy.route) },
+            onNavigateToSecurity = { navController.navigate(SettingsRoute.Security.route) },
+            onNavigateToDataManagement = { navController.navigate(SettingsRoute.DataManagement.route) },
+            onNavigateToPlugins = { navController.navigate(SettingsRoute.Plugins.route) },
+            onNavigateToPluginSecurity = { navController.navigate(SettingsRoute.PluginSecurity.route) },
+            onNavigateToNotifications = { navController.navigate(SettingsRoute.Notifications.route) },
+            onNavigateToAbout = { navController.navigate(SettingsRoute.About.route) }
+        )
+    }        
         // Aesthetic
         composable(SettingsRoute.Aesthetic.route) {
             AestheticSettingsScreen(

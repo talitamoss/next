@@ -37,12 +37,19 @@ android {
     }
     kotlinOptions {
         jvmTarget = "11"
+        // FIX: Add opt-in for experimental Material3 APIs
+        freeCompilerArgs += listOf(
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+            "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+            "-opt-in=androidx.compose.animation.ExperimentalAnimationApi"
+        )
     }
     buildFeatures {
         compose = true
+	buildConfig = true
     }
     lint {
-	disable += "SuspiciousModifierThen"
+        disable += "SuspiciousModifierThen"
     }
 }
 
@@ -108,7 +115,7 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
-     // WorkManager for scheduled backups
+    // WorkManager for scheduled backups
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     
     // Hilt integration with WorkManager
@@ -122,7 +129,6 @@ dependencies {
     implementation("androidx.documentfile:documentfile:1.0.1")
 
     implementation(libs.androidx.material3)
-
 }
 
 kapt {

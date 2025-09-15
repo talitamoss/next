@@ -1,3 +1,4 @@
+// app/src/main/java/com/domain/app/ui/data/DataViewModel.kt
 package com.domain.app.ui.data
 
 import android.content.Context
@@ -7,15 +8,13 @@ import com.domain.app.core.data.DataPoint
 import com.domain.app.core.data.DataRepository
 import com.domain.app.core.export.ExportManager
 import com.domain.app.core.export.ExportResult
-import com.domain.app.core.plugin.ExportFormat
 import com.domain.app.core.plugin.Plugin
 import com.domain.app.core.plugin.PluginManager
+import com.domain.app.core.plugin.ExportFormat
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.time.Instant
-import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
 @HiltViewModel
@@ -29,192 +28,82 @@ class DataViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(DataUiState())
     val uiState: StateFlow<DataUiState> = _uiState.asStateFlow()
     
-    private val selectedPluginFilter = MutableStateFlow<String?>(null)
-    private val refreshTrigger = MutableStateFlow(0)
-    private val searchQuery = MutableStateFlow("")
+    private val _filterState = MutableStateFlow(FilterState())
+    val filterState: StateFlow<FilterState> = _filterState.asStateFlow()
     
     init {
-        loadPluginInfo()
-        observeDataPoints()
-        loadWeeklyDataPoints()
+        loadData()
+        loadPlugins()
     }
     
-    private fun loadPluginInfo() {
-        val plugins = pluginManager.getAllActivePlugins()
-        
-        _uiState.update {
-            it.copy(
-                plugins = plugins,
-                pluginNames = plugins.associate { plugin -> 
-                    plugin.id to plugin.metadata.name 
-                },
-                pluginSummaries = plugins.map { plugin -> 
-                    plugin.id to plugin.metadata.name 
-                }
-            )
-        }
-    }
-    
-    private fun observeDataPoints() {
-        combine(
-            selectedPluginFilter,
-            searchQuery,
-            refreshTrigger
-        ) { filter, query, _ -> 
-            Pair(filter, query)
-        }
-            .flatMapLatest { (pluginId, query) ->
-                when {
-                    query.isNotEmpty() -> dataRepository.searchDataPoints(query)
-                    pluginId != null -> dataRepository.getPluginData(pluginId)
-                    else -> dataRepository.getLatestDataPoints(100)
-                }
-            }
-            .onEach { dataPoints ->
-                _uiState.update {
-                    it.copy(
-                        dataPoints = dataPoints,
-                        isLoading = false,
-                        error = null
-                    )
-                }
-            }
-            .catch { exception ->
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        error = "Failed to load data: ${exception.message}"
-                    )
-                }
-            }
-            .launchIn(viewModelScope)
-    }
-    
-    private fun loadWeeklyDataPoints() {
+    private fun loadData() {
         viewModelScope.launch {
-            val weekStart = Instant.now().minus(7, ChronoUnit.DAYS)
-            dataRepository.getRecentData(24 * 7)
-                .map { dataPoints ->
-                    dataPoints.filter { it.timestamp.isAfter(weekStart) }
+            // Load all data points
+            dataRepository.getAllDataPoints().collect { dataPoints ->
+                _uiState.update { state ->
+                    state.copy(
+                        dataPoints = dataPoints,
+                        weeklyDataPoints = dataPoints.filter { dataPoint ->
+                            val weekAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000)
+                            dataPoint.timestamp.toEpochMilli() >= weekAgo
+                        }
+                    )
                 }
-                .collect { weeklyData ->
-                    _uiState.update {
-                        it.copy(weeklyDataPoints = weeklyData)
-                    }
-                }
+            }
+        }
+    }
+    
+    private fun loadPlugins() {
+        viewModelScope.launch {
+            val plugins = pluginManager.getAllActivePlugins()
+            val pluginNames = plugins.associate { it.id to it.metadata.name }
+            
+            // Calculate plugin summaries
+            val summaries = plugins.map { plugin ->
+                val count = _uiState.value.dataPoints.count { it.pluginId == plugin.id }
+                plugin.id to "$count entries"
+            }
+            
+            _uiState.update { state ->
+                state.copy(
+                    plugins = plugins,
+                    pluginNames = pluginNames,
+                    pluginSummaries = summaries
+                )
+            }
         }
     }
     
     fun filterByPlugin(pluginId: String?) {
-        selectedPluginFilter.value = pluginId
         _uiState.update { it.copy(selectedPluginFilter = pluginId) }
+        _filterState.update { it.copy(selectedPlugin = _uiState.value.plugins.find { p -> p.id == pluginId }) }
     }
     
     fun searchDataPoints(query: String) {
-        searchQuery.value = query
         _uiState.update { it.copy(searchQuery = query) }
-    }
-    
-    fun refreshData() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            // Trigger refresh by incrementing the trigger
-            refreshTrigger.value++
-        }
+        _filterState.update { it.copy(searchQuery = query) }
     }
     
     fun deleteDataPoint(id: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isDeleting = true, error = null) }
-            
+            _uiState.update { it.copy(isDeleting = true) }
             try {
                 dataRepository.deleteDataPoint(id)
-                
-                // Remove from UI immediately for better UX
-                _uiState.update { state ->
-                    state.copy(
-                        dataPoints = state.dataPoints.filter { it.id != id },
+                _uiState.update {
+                    it.copy(
                         isDeleting = false,
-                        message = "Data point deleted successfully"
+                        message = "Data point deleted"
                     )
                 }
-                
-                // Trigger background refresh
-                refreshTrigger.value++
-                
+                loadData() // Reload data after deletion
             } catch (e: Exception) {
-                _uiState.update { 
+                _uiState.update {
                     it.copy(
                         isDeleting = false,
                         error = "Failed to delete: ${e.message}"
                     )
                 }
             }
-        }
-    }
-    
-    fun deleteMultipleDataPoints(ids: List<String>) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isDeleting = true, error = null) }
-            
-            try {
-                dataRepository.deleteDataPointsByIds(ids)
-                
-                // Remove from UI immediately
-                _uiState.update { state ->
-                    state.copy(
-                        dataPoints = state.dataPoints.filter { it.id !in ids },
-                        isDeleting = false,
-                        selectedDataPoints = emptySet(),
-                        isInSelectionMode = false,
-                        message = "${ids.size} data points deleted"
-                    )
-                }
-                
-                // Trigger background refresh
-                refreshTrigger.value++
-                
-            } catch (e: Exception) {
-                _uiState.update { 
-                    it.copy(
-                        isDeleting = false,
-                        error = "Failed to delete: ${e.message}"
-                    )
-                }
-            }
-        }
-    }
-    
-    fun toggleDataPointSelection(id: String) {
-        _uiState.update { state ->
-            val newSelection = if (state.selectedDataPoints.contains(id)) {
-                state.selectedDataPoints - id
-            } else {
-                state.selectedDataPoints + id
-            }
-            
-            state.copy(
-                selectedDataPoints = newSelection,
-                isInSelectionMode = newSelection.isNotEmpty()
-            )
-        }
-    }
-    
-    fun selectAllDataPoints() {
-        _uiState.update { state ->
-            state.copy(
-                selectedDataPoints = state.dataPoints.map { it.id }.toSet(),
-                isInSelectionMode = true
-            )
-        }
-    }
-    
-    fun clearSelection() {
-        _uiState.update { state ->
-            state.copy(
-                selectedDataPoints = emptySet(),
-                isInSelectionMode = false
-            )
         }
     }
     
@@ -223,36 +112,61 @@ class DataViewModel @Inject constructor(
     }
     
     fun exitSelectionMode() {
-        _uiState.update { 
+        _uiState.update {
             it.copy(
-                isInSelectionMode = false, 
+                isInSelectionMode = false,
                 selectedDataPoints = emptySet()
             )
         }
     }
     
+    fun toggleDataPointSelection(id: String) {
+        _uiState.update { state ->
+            val newSelection = if (id in state.selectedDataPoints) {
+                state.selectedDataPoints - id
+            } else {
+                state.selectedDataPoints + id
+            }
+            state.copy(selectedDataPoints = newSelection)
+        }
+    }
+    
     fun deleteSelectedDataPoints() {
         viewModelScope.launch {
-            val ids = _uiState.value.selectedDataPoints.toList()
-            if (ids.isNotEmpty()) {
-                deleteMultipleDataPoints(ids)
+            _uiState.update { it.copy(isDeleting = true) }
+            try {
+                _uiState.value.selectedDataPoints.forEach { id ->
+                    dataRepository.deleteDataPoint(id)
+                }
+                _uiState.update {
+                    it.copy(
+                        isDeleting = false,
+                        isInSelectionMode = false,
+                        selectedDataPoints = emptySet(),
+                        message = "${it.selectedDataPoints.size} data points deleted"
+                    )
+                }
+                loadData() // Reload data after deletion
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isDeleting = false,
+                        error = "Failed to delete: ${e.message}"
+                    )
+                }
             }
         }
     }
     
-fun updateFilters(filterState: FilterState) {
-        _uiState.update {
-            it.copy(
-                selectedPluginFilter = filterState.selectedPlugin?.id,
-                searchQuery = filterState.searchQuery
-            )
-        }
+    fun updateFilters(filterState: FilterState) {
+        _filterState.value = filterState
         
-        // Apply the filters - FIX: Remove malformed Elvis operator
-        filterState.selectedPlugin?.let { 
-            filterByPlugin(it.id) 
-        } ?: filterByPlugin(null)  // FIXED: Complete the Elvis operator properly
+        // Apply plugin filter
+        filterState.selectedPlugin?.let { plugin ->
+            filterByPlugin(plugin.id)
+        } ?: filterByPlugin(null)
         
+        // Apply search query
         if (filterState.searchQuery.isNotEmpty()) {
             searchDataPoints(filterState.searchQuery)
         } else {
@@ -260,17 +174,25 @@ fun updateFilters(filterState: FilterState) {
         }
     }
     
-    fun exportData(format: ExportFormat) {
+    /**
+     * Export data with enhanced options
+     * ENHANCED: Now accepts ExportOptions instead of just format
+     */
+    fun exportData(options: ExportOptions) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, message = "Preparing export...") }
             
             try {
-                val result = when (format) {
-                    ExportFormat.CSV -> exportManager.exportAllDataToCsv(context)
-                    ExportFormat.JSON -> ExportResult.Error("JSON export not yet implemented")
-                    ExportFormat.XML -> ExportResult.Error("XML export not yet implemented")
-                    ExportFormat.CUSTOM -> ExportResult.Error("Custom export not available")
-                }
+                val (startDate, endDate) = options.getDateRange()
+                
+                val result = exportManager.exportFilteredData(
+                    context = context,
+                    format = options.format,
+                    pluginIds = if (options.selectedPlugins.isEmpty()) null else options.selectedPlugins,
+                    startDate = startDate,
+                    endDate = endDate,
+                    encrypt = options.encrypt
+                )
                 
                 when (result) {
                     is ExportResult.Success -> {
@@ -299,6 +221,20 @@ fun updateFilters(filterState: FilterState) {
                 }
             }
         }
+    }
+    
+    /**
+     * Export data with format only (backward compatibility)
+     * KEPT: For backward compatibility with existing code
+     */
+    fun exportData(format: ExportFormat) {
+        val options = ExportOptions(
+            format = format,
+            timeFrame = TimeFrame.ALL,
+            selectedPlugins = _uiState.value.plugins.map { it.id }.toSet(),
+            encrypt = false
+        )
+        exportData(options)
     }
     
     fun clearMessage() {

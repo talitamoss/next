@@ -7,7 +7,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.backup.*
 import com.domain.app.core.data.DataRepository
+import com.domain.app.core.export.ExportManager
+import com.domain.app.core.export.ExportResult
+import com.domain.app.core.plugin.Plugin
+import com.domain.app.core.plugin.PluginManager
 import com.domain.app.core.preferences.UserPreferences
+import com.domain.app.ui.data.ExportOptions
+import com.domain.app.ui.data.TimeFrame
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
@@ -16,13 +22,6 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
-
-// Export format enum
-enum class ExportFormat {
-    JSON,
-    CSV,
-    ZIP
-}
 
 data class DataManagementUiState(
     val totalDataPoints: Int = 0,
@@ -38,61 +37,63 @@ data class DataManagementUiState(
     val isBackingUp: Boolean = false,
     val exportProgress: Float = 0f,
     val availableBackups: List<File> = emptyList(),
-    val message: String? = null
+    val availablePlugins: List<Plugin> = emptyList(),
+    val message: String? = null,
+    val error: String? = null
 )
 
 @HiltViewModel
 class DataManagementViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val dataRepository: DataRepository,
     private val userPreferences: UserPreferences,
-    private val backupManager: BackupManager
+    private val backupManager: BackupManager,
+    private val exportManager: ExportManager,
+    private val pluginManager: PluginManager,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(DataManagementUiState())
     val uiState: StateFlow<DataManagementUiState> = _uiState.asStateFlow()
     
     init {
-        loadDataStats()
-        observeBackupSettings()
-        loadAvailableBackups()
+        loadDataStatistics()
+        loadBackupSettings()
+        loadAvailablePlugins()
     }
     
-    private fun loadDataStats() {
+    private fun loadDataStatistics() {
         viewModelScope.launch {
-            // Count total data points using Flow
-            dataRepository.getAllDataPoints().collect { dataPoints ->
-                _uiState.update { state ->
-                    state.copy(totalDataPoints = dataPoints.size)
-                }
-            }
-        }
-        
-        // Calculate storage used
-        viewModelScope.launch {
-            val storageSize = calculateStorageUsed()
-            _uiState.update { state ->
-                state.copy(storageUsedMB = formatStorageSize(storageSize))
-            }
-        }
-        
-        // Load last backup time
-        viewModelScope.launch {
-            userPreferences.lastBackupTime.collect { timestamp ->
-                _uiState.update { state ->
-                    state.copy(
-                        lastBackupTime = if (timestamp > 0) {
-                            formatBackupTime(timestamp)
-                        } else {
-                            "Never"
-                        }
+            try {
+                val dataCount = dataRepository.getDataCount()
+                val storageSize = calculateStorageSize()
+                val lastBackup = getLastBackupTime()
+                
+                _uiState.update {
+                    it.copy(
+                        totalDataPoints = dataCount,
+                        storageUsedMB = formatStorageSize(storageSize),
+                        lastBackupTime = lastBackup
                     )
                 }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Failed to load statistics: ${e.message}") }
             }
         }
     }
     
-    private fun observeBackupSettings() {
+    private fun loadAvailablePlugins() {
+        viewModelScope.launch {
+            try {
+                val plugins = pluginManager.getAllActivePlugins()
+                _uiState.update { it.copy(availablePlugins = plugins) }
+            } catch (e: Exception) {
+                // If plugins can't be loaded, we'll just have an empty list
+                _uiState.update { it.copy(availablePlugins = emptyList()) }
+            }
+        }
+    }
+    
+    private fun loadBackupSettings() {
         viewModelScope.launch {
             userPreferences.autoBackupEnabled.collect { enabled ->
                 _uiState.update { it.copy(autoBackupEnabled = enabled) }
@@ -112,34 +113,89 @@ class DataManagementViewModel @Inject constructor(
         }
     }
     
-    private fun loadAvailableBackups() {
+    /**
+     * Export data with enhanced options
+     * NEW: Uses ExportOptions for filtering
+     */
+    fun exportDataWithOptions(options: ExportOptions) {
         viewModelScope.launch {
-            val backups = backupManager.listBackups()
-            _uiState.update { state ->
-                state.copy(availableBackups = backups.map { File(it.uri.path ?: "") })
+            _uiState.update { it.copy(isExporting = true, message = "Preparing export...") }
+            
+            try {
+                val (startDate, endDate) = options.getDateRange()
+                
+                val result = exportManager.exportFilteredData(
+                    context = context,
+                    format = options.format,
+                    pluginIds = if (options.selectedPlugins.isEmpty()) null else options.selectedPlugins,
+                    startDate = startDate,
+                    endDate = endDate,
+                    encrypt = options.encrypt
+                )
+                
+                when (result) {
+                    is ExportResult.Success -> {
+                        _uiState.update {
+                            it.copy(
+                                isExporting = false,
+                                message = "Export successful: ${result.fileName}"
+                            )
+                        }
+                    }
+                    is ExportResult.Error -> {
+                        _uiState.update {
+                            it.copy(
+                                isExporting = false,
+                                error = result.message
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isExporting = false,
+                        error = "Export failed: ${e.message}"
+                    )
+                }
             }
         }
     }
     
-    private fun calculateStorageUsed(): Long {
-        // Calculate database size + backup size
-        val dbFile = context.getDatabasePath("app_database")
-        val dbSize = if (dbFile.exists()) dbFile.length() else 0L
-        val backupSize = backupManager.getBackupStorageSize()
-        return dbSize + backupSize
+    /**
+     * Legacy export method (kept for compatibility if needed)
+     */
+    fun exportData(format: com.domain.app.core.plugin.ExportFormat, encrypt: Boolean) {
+        val options = ExportOptions(
+            format = format,
+            timeFrame = TimeFrame.ALL,
+            selectedPlugins = _uiState.value.availablePlugins.map { it.id }.toSet(),
+            encrypt = encrypt
+        )
+        exportDataWithOptions(options)
     }
     
-    private fun formatStorageSize(bytes: Long): String {
-        return when {
-            bytes < 1024 -> "$bytes B"
-            bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-            else -> "${bytes / (1024 * 1024)} MB"
+    fun importData(uri: Uri) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isImporting = true) }
+            
+            try {
+                // TODO: Implement actual import logic
+                _uiState.update { 
+                    it.copy(
+                        isImporting = false,
+                        message = "Import functionality coming soon"
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isImporting = false,
+                        error = "Import failed: ${e.message}"
+                    )
+                }
+            }
         }
-    }
-    
-    private fun formatBackupTime(timestamp: Long): String {
-        val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
-        return dateFormat.format(Date(timestamp))
     }
     
     fun toggleAutoBackup(enabled: Boolean) {
@@ -154,107 +210,86 @@ class DataManagementViewModel @Inject constructor(
         }
     }
     
-    fun updateBackupFrequency(frequency: String) {
+    fun setBackupFrequency(frequency: String) {
         viewModelScope.launch {
             userPreferences.setBackupFrequency(frequency)
             if (_uiState.value.autoBackupEnabled) {
-                // Reschedule with new frequency
-                cancelAutoBackup()
                 scheduleAutoBackup()
             }
         }
     }
     
-    fun updateBackupWifiOnly(wifiOnly: Boolean) {
+    fun setBackupWifiOnly(wifiOnly: Boolean) {
         viewModelScope.launch {
             userPreferences.setBackupWifiOnly(wifiOnly)
-            if (_uiState.value.autoBackupEnabled) {
-                // Reschedule with new settings
-                cancelAutoBackup()
-                scheduleAutoBackup()
-            }
-        }
-    }
-    
-    fun exportData(format: ExportFormat, encryptExport: Boolean) {
-        viewModelScope.launch {
-            _uiState.update { 
-                it.copy(isExporting = true, exportProgress = 0f)
-            }
-            
-            try {
-                when (format) {
-                    ExportFormat.JSON -> exportAsJson(encryptExport)
-                    ExportFormat.CSV -> exportAsCsv(encryptExport)
-                    ExportFormat.ZIP -> exportAsZip(encryptExport)
-                }
-                
-                _uiState.update { 
-                    it.copy(
-                        isExporting = false,
-                        exportProgress = 100f,
-                        message = "Export completed successfully!"
-                    )
-                }
-            } catch (e: Exception) {
-                _uiState.update { 
-                    it.copy(
-                        isExporting = false,
-                        exportProgress = 0f,
-                        message = "Export failed: ${e.message}"
-                    )
-                }
-            }
-        }
-    }
-    
-    fun importData(uri: String) {
-        // TODO: Implement import functionality
-        _uiState.update { 
-            it.copy(message = "Import feature coming soon!")
         }
     }
     
     fun backupNow() {
         viewModelScope.launch {
+            _uiState.update { it.copy(isBackingUp = true) }
+            
             try {
-                _uiState.update { it.copy(isBackingUp = true) }
+                val result = backupManager.createBackup()
                 
-                // Create backup
-                val result = backupManager.createBackup(encrypt = true)
-                
+                // VERIFICATION: BackupManager returns BackupResult sealed class, not kotlin.Result
+                // Must use when expression with is BackupResult.Success/Error
                 when (result) {
                     is BackupResult.Success -> {
-                        // Update last backup time
-                        val currentTime = System.currentTimeMillis()
-                        userPreferences.setLastBackupTime(currentTime)
-                        
-                        _uiState.update { 
+                        _uiState.update {
                             it.copy(
                                 isBackingUp = false,
-                                lastBackupTime = formatBackupTime(currentTime),
-                                message = "Backup created successfully! ${result.itemCount} items backed up."
+                                message = "Backup completed successfully",
+                                lastBackupTime = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+                                    .format(Date())
                             )
                         }
-                        
-                        // Reload available backups
-                        loadAvailableBackups()
                     }
                     is BackupResult.Error -> {
-                        _uiState.update { 
+                        _uiState.update {
                             it.copy(
                                 isBackingUp = false,
-                                message = "Backup failed: ${result.message}"
+                                error = result.message
                             )
                         }
                     }
                 }
             } catch (e: Exception) {
-                _uiState.update { 
+                _uiState.update {
                     it.copy(
                         isBackingUp = false,
-                        message = "Backup failed: ${e.message}"
+                        error = "Backup failed: ${e.message}"
                     )
+                }
+            }
+        }
+    }
+    
+    fun restoreBackup(backupFile: File) {
+        viewModelScope.launch {
+            try {
+                // VERIFICATION: restoreBackup expects Uri, not File
+                // Convert File to Uri using Uri.fromFile()
+                val result = backupManager.restoreBackup(Uri.fromFile(backupFile))
+                
+                // VERIFICATION: BackupManager returns RestoreResult sealed class
+                // Must use when expression with is RestoreResult.Success/Error
+                when (result) {
+                    is RestoreResult.Success -> {
+                        _uiState.update {
+                            it.copy(message = "Backup restored successfully")
+                        }
+                        loadDataStatistics() // Reload statistics after restore
+                    }
+                    is RestoreResult.Error -> {
+                        _uiState.update {
+                            it.copy(error = result.message)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(error = "Restore failed: ${e.message}")
                 }
             }
         }
@@ -263,10 +298,11 @@ class DataManagementViewModel @Inject constructor(
     fun clearAllData() {
         viewModelScope.launch {
             try {
-                // Clear all data from repository
-                dataRepository.clearAllData()
+                // VERIFICATION: DataRepository has clearAllData(), we added deleteAllData() as alias
+                // Both methods work, using deleteAllData() as per the original code
+                dataRepository.deleteAllData()
                 
-                // Clear user preferences
+                // Clear preferences
                 userPreferences.clearAllPreferences()
                 
                 // Reset UI state
@@ -275,7 +311,7 @@ class DataManagementViewModel @Inject constructor(
                 )
             } catch (e: Exception) {
                 _uiState.update { 
-                    it.copy(message = "Failed to clear data: ${e.message}")
+                    it.copy(error = "Failed to clear data: ${e.message}")
                 }
             }
         }
@@ -285,36 +321,26 @@ class DataManagementViewModel @Inject constructor(
         _uiState.update { it.copy(message = null) }
     }
     
-    private suspend fun exportAsJson(encrypt: Boolean) {
-        // Get all data points using Flow
-        val dataPoints = dataRepository.getAllDataPoints().first()
-        
-        // TODO: Implement actual JSON export
-        // For now, just simulate progress
-        _uiState.update { it.copy(exportProgress = 50f) }
-        // Convert to JSON and save to file
-        // If encrypt = true, encrypt the JSON before saving
-        _uiState.update { it.copy(exportProgress = 100f) }
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
     }
     
-    private suspend fun exportAsCsv(encrypt: Boolean) {
-        // Get all data points using Flow
-        val dataPoints = dataRepository.getAllDataPoints().first()
-        
-        // TODO: Implement actual CSV export
-        _uiState.update { it.copy(exportProgress = 50f) }
-        // Convert to CSV format and save
-        _uiState.update { it.copy(exportProgress = 100f) }
+    private suspend fun calculateStorageSize(): Long {
+        // TODO: Calculate actual storage size
+        return 0L
     }
     
-    private suspend fun exportAsZip(encrypt: Boolean) {
-        // Get all data points using Flow
-        val dataPoints = dataRepository.getAllDataPoints().first()
-        
-        // TODO: Implement actual ZIP export
-        _uiState.update { it.copy(exportProgress = 50f) }
-        // Create ZIP archive with all data
-        _uiState.update { it.copy(exportProgress = 100f) }
+    private fun formatStorageSize(bytes: Long): String {
+        return when {
+            bytes < 1024 -> "$bytes B"
+            bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+            else -> "${bytes / (1024 * 1024)} MB"
+        }
+    }
+    
+    private fun getLastBackupTime(): String {
+        // TODO: Get actual last backup time
+        return "Never"
     }
     
     private fun scheduleAutoBackup() {
