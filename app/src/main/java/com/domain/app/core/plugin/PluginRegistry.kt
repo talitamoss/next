@@ -92,6 +92,7 @@ class PluginRegistry @Inject constructor() {
 	register(AudioPlugin())
 	register(MedicalPlugin())
 	register(PooPlugin())
+	register(MoodPlugin())
         
         // Future plugins will be added here
         // register(JournalPlugin())
