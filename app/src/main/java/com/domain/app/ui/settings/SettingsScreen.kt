@@ -28,7 +28,7 @@ fun SettingsScreen(
     navController: NavController,
     paddingValues: PaddingValues = PaddingValues(),
     viewModel: SettingsViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit = {}, // Add this parameter for back navigation
+    onNavigateBack: () -> Unit = {}, // Back navigation parameter
     onNavigateToPlugins: () -> Unit = {},
     onNavigateToDataManagement: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
@@ -75,7 +75,7 @@ fun SettingsScreen(
             // WORKING FEATURES SECTION
             // ============================================
             
-            // Data Management Section (WORKING)
+            // Data Management Section (WORKING - Only Export)
             item {
                 SettingsSection(title = "Data Management") {
                     SettingsItem(
@@ -85,51 +85,17 @@ fun SettingsScreen(
                         onClick = onNavigateToDataManagement,
                         enabled = true
                     )
-                    
-                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
-                    
-                    SettingsItemWithSwitch(
-                        icon = Icons.Default.Backup,
-                        title = "Auto Backup",
-                        subtitle = if (uiState.autoBackupEnabled) "Enabled" else "Disabled",
-                        checked = uiState.autoBackupEnabled,
-                        onCheckedChange = { viewModel.toggleAutoBackup() },
-                        enabled = true
-                    )
-                    
-                    if (uiState.autoBackupEnabled) {
-                        Divider(modifier = Modifier.padding(horizontal = 16.dp))
-                        
-                        SettingsItem(
-                            icon = Icons.Default.Schedule,
-                            title = "Backup Frequency",
-                            subtitle = uiState.backupFrequency,
-                            value = uiState.backupFrequency,
-                            onClick = { viewModel.showBackupFrequencyDialog() },
-                            enabled = true
-                        )
-                    }
                 }
             }
             
-            // About Section (WORKING)
+            // About Section (WORKING - Simplified to single button)
             item {
-                SettingsSection(title = "About") {
+                SettingsSection(title = "Information") {
                     SettingsItem(
                         icon = Icons.Default.Info,
-                        title = "App Version",
-                        subtitle = "Version ${BuildConfig.VERSION_NAME}",
+                        title = "About",
+                        subtitle = "Version ${BuildConfig.VERSION_NAME} • Licenses • Credits",
                         onClick = onNavigateToAbout,
-                        enabled = true
-                    )
-                    
-                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
-                    
-                    SettingsItem(
-                        icon = Icons.Default.Code,
-                        title = "Open Source Licenses",
-                        subtitle = "View third-party licenses",
-                        onClick = { navController.navigate("licenses") },
                         enabled = true
                     )
                 }
@@ -180,6 +146,43 @@ fun SettingsScreen(
             // ============================================
             // DISABLED FEATURES (COMING SOON)
             // ============================================
+            
+            // Data & Backup Section (DISABLED) - Moved from working section
+            item {
+                SettingsSection(
+                    title = "Backup & Sync",
+                    enabled = false
+                ) {
+                    SettingsItemWithSwitch(
+                        icon = Icons.Default.Backup,
+                        title = "Auto Backup",
+                        subtitle = "Automatically backup your data",
+                        checked = false,
+                        onCheckedChange = {},
+                        enabled = false
+                    )
+                    
+                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                    
+                    SettingsItem(
+                        icon = Icons.Default.Schedule,
+                        title = "Backup Frequency",
+                        subtitle = "Daily, Weekly, Monthly",
+                        onClick = {},
+                        enabled = false
+                    )
+                    
+                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                    
+                    SettingsItem(
+                        icon = Icons.Default.CloudUpload,
+                        title = "Cloud Sync",
+                        subtitle = "Sync data across devices",
+                        onClick = {},
+                        enabled = false
+                    )
+                }
+            }
             
             // Plugins Section (DISABLED) - Moved from working section
             item {
