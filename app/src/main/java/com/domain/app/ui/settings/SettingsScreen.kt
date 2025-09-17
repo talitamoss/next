@@ -12,12 +12,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.domain.app.BuildConfig
 import com.domain.app.ui.theme.AppIcons
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,6 +42,17 @@ fun SettingsScreen(
     onNavigateToPluginSecurity: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    var showFeedbackDialog by remember { mutableStateOf(false) }
+    
+    // Check for crash logs when screen loads
+    LaunchedEffect(Unit) {
+        val crashLog = CrashHandler.getLastCrashLog(context)
+        if (crashLog != null) {
+            // Auto-show dialog if there's a crash to report
+            showFeedbackDialog = true
+        }
+    }
     
     Scaffold(
         topBar = {
@@ -88,7 +101,7 @@ fun SettingsScreen(
                 }
             }
             
-            // About Section (WORKING - Simplified to single button)
+            // Information Section (WORKING)
             item {
                 SettingsSection(title = "Information") {
                     SettingsItem(
@@ -96,6 +109,16 @@ fun SettingsScreen(
                         title = "About",
                         subtitle = "Version ${BuildConfig.VERSION_NAME} • Licenses • Credits",
                         onClick = onNavigateToAbout,
+                        enabled = true
+                    )
+                    
+                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                    
+                    SettingsItem(
+                        icon = Icons.Default.Feedback,
+                        title = "Send Feedback",
+                        subtitle = "Report bugs or suggest features",
+                        onClick = { showFeedbackDialog = true },
                         enabled = true
                     )
                 }
@@ -357,6 +380,24 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
+    }
+    
+    // Show feedback dialog
+    if (showFeedbackDialog) {
+        val crashLog = CrashHandler.getLastCrashLog(context)
+        
+        FeedbackDialog(
+            onDismiss = { 
+                showFeedbackDialog = false
+                // Clear crash log after user dismisses (whether they sent it or not)
+                if (crashLog != null) {
+                    CrashHandler.clearCrashLog(context)
+                }
+            },
+            feedbackEmail = "feedback@yourdomain.com", // TODO: Replace with your actual email
+            crashLog = crashLog,
+            preselectedType = if (crashLog != null) FeedbackType.CRASH else null
+        )
     }
 }
 
