@@ -33,7 +33,7 @@ sealed class SettingsRoute(val route: String) {
 
 @Composable
 fun SettingsNavigation(
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit  // This is the callback to exit settings entirely
 ) {
     val navController = rememberNavController()
     
@@ -42,19 +42,21 @@ fun SettingsNavigation(
         startDestination = SettingsRoute.Main.route
     ) {
         // Main Settings
-    composable(SettingsRoute.Main.route) {
-	SettingsScreen(
-            navController = navController,
-            onNavigateToAesthetic = { navController.navigate(SettingsRoute.Aesthetic.route) },
-            onNavigateToPrivacy = { navController.navigate(SettingsRoute.Privacy.route) },
-            onNavigateToSecurity = { navController.navigate(SettingsRoute.Security.route) },
-            onNavigateToDataManagement = { navController.navigate(SettingsRoute.DataManagement.route) },
-            onNavigateToPlugins = { navController.navigate(SettingsRoute.Plugins.route) },
-            onNavigateToPluginSecurity = { navController.navigate(SettingsRoute.PluginSecurity.route) },
-            onNavigateToNotifications = { navController.navigate(SettingsRoute.Notifications.route) },
-            onNavigateToAbout = { navController.navigate(SettingsRoute.About.route) }
-        )
-    }        
+        composable(SettingsRoute.Main.route) {
+            SettingsScreen(
+                navController = navController,
+                onNavigateBack = onNavigateBack, // Pass the callback to exit settings entirely
+                onNavigateToAesthetic = { navController.navigate(SettingsRoute.Aesthetic.route) },
+                onNavigateToPrivacy = { navController.navigate(SettingsRoute.Privacy.route) },
+                onNavigateToSecurity = { navController.navigate(SettingsRoute.Security.route) },
+                onNavigateToDataManagement = { navController.navigate(SettingsRoute.DataManagement.route) },
+                onNavigateToPlugins = { navController.navigate(SettingsRoute.Plugins.route) },
+                onNavigateToPluginSecurity = { navController.navigate(SettingsRoute.PluginSecurity.route) },
+                onNavigateToNotifications = { navController.navigate(SettingsRoute.Notifications.route) },
+                onNavigateToAbout = { navController.navigate(SettingsRoute.About.route) }
+            )
+        }
+        
         // Aesthetic
         composable(SettingsRoute.Aesthetic.route) {
             AestheticSettingsScreen(
