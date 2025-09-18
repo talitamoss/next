@@ -394,7 +394,7 @@ fun SettingsScreen(
                     CrashHandler.clearCrashLog(context)
                 }
             },
-            feedbackEmail = "feedback@yourdomain.com", // TODO: Replace with your actual email
+            feedbackEmail = "support@anthemos.org",
             crashLog = crashLog,
             preselectedType = if (crashLog != null) FeedbackType.CRASH else null
         )
