@@ -5,6 +5,7 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.domain.app.core.storage.encryption.EncryptionManager
+import com.domain.app.ui.settings.CrashHandler
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -17,12 +18,15 @@ class App : Application(), Configuration.Provider {
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
     
-    // ADD THIS PROPERTY - This is what DatabaseModule needs!
+    // This property is needed by DatabaseModule
     lateinit var encryptionManager: EncryptionManager
         private set
     
     override fun onCreate() {
         super.onCreate()
+        
+        // Install crash handler to capture crashes for feedback
+        CrashHandler.install(this)
         
         // Initialize encryption manager BEFORE other components
         encryptionManager = EncryptionManager(this)

@@ -1,4 +1,4 @@
-// FeedbackDialog.kt - Add this as a new file in your ui/settings folder
+// app/src/main/java/com/domain/app/ui/settings/FeedbackDialog.kt
 package com.domain.app.ui.settings
 
 import android.app.ActivityManager
@@ -41,13 +41,18 @@ enum class FeedbackType(val label: String) {
     CRASH("Crash Report")
 }
 
+enum class SendMethod {
+    EMAIL_APP,
+    COPY
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedbackDialog(
     onDismiss: () -> Unit,
-    feedbackEmail: String = "feedback@yourdomain.com", // Replace with your email
-    crashLog: String? = null, // Pass crash log if available
-    preselectedType: FeedbackType? = null // Pre-select crash type if crash occurred
+    feedbackEmail: String = "feedback@yourdomain.com",
+    crashLog: String? = null,
+    preselectedType: FeedbackType? = null
 ) {
     var feedbackType by remember { mutableStateOf(preselectedType ?: FeedbackType.GENERAL) }
     var feedbackText by remember { mutableStateOf("") }
@@ -62,16 +67,16 @@ fun FeedbackDialog(
     
     // Build device info string
     val deviceInfo = remember {
-        """
-        
-        ---
-        Device Information:
-        App Version: ${BuildConfig.VERSION_NAME}
-        Device: ${Build.MANUFACTURER} ${Build.MODEL}
-        Android Version: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})
-        Available Memory: ${getAvailableMemory(context)}
-        Total Storage: ${getTotalStorage()}
-        """.trimIndent()
+        buildString {
+            appendLine()
+            appendLine("---")
+            appendLine("Device Information:")
+            appendLine("App Version: ${BuildConfig.VERSION_NAME}")
+            appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+            appendLine("Android Version: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
+            appendLine("Available Memory: ${getAvailableMemory(context)}")
+            appendLine("Total Storage: ${getTotalStorage()}")
+        }
     }
     
     if (showSuccess) {
@@ -96,43 +101,92 @@ fun FeedbackDialog(
                     when (sendMethod) {
                         SendMethod.EMAIL_APP -> "Your email app will open with your feedback ready to send."
                         SendMethod.COPY -> "Your feedback has been copied to clipboard. Paste it in your preferred email app."
-                    },
-                    textAlign = TextAlign.Center
+                    }
                 )
             },
             confirmButton = {
                 TextButton(onClick = onDismiss) {
-                    Text("Done")
+                    Text("OK")
                 }
             }
         )
-    } else {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            modifier = Modifier.fillMaxWidth(),
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-            title = {
+        return
+    }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .fillMaxWidth(0.95f)
+            .fillMaxHeight(0.9f)
+    ) {
+        Card(
+            modifier = Modifier.fillMaxSize(),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp)
+            ) {
+                // Header
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Feedback,
-                        contentDescription = null
+                    Text(
+                        text = "Send Feedback",
+                        style = MaterialTheme.typography.headlineSmall
                     )
-                    Text("Send Feedback")
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
                 }
-            },
-            text = {
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Scrollable content
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .weight(1f)
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // Crash alert if crash log present
+                    if (crashLog != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                                Column {
+                                    Text(
+                                        "App Crash Detected",
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        "We found a recent crash. Please describe what you were doing when it occurred.",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    
                     // Feedback Type Selection
                     Text(
-                        text = "What kind of feedback?",
+                        "Feedback Type",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -145,9 +199,7 @@ fun FeedbackDialog(
                             FilterChip(
                                 selected = feedbackType == type,
                                 onClick = { feedbackType = type },
-                                label = {
-                                    Text(type.label.split(" ").last())
-                                },
+                                label = { Text(type.label.split(" ").last()) },
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -161,9 +213,7 @@ fun FeedbackDialog(
                             FilterChip(
                                 selected = feedbackType == type,
                                 onClick = { feedbackType = type },
-                                label = {
-                                    Text(type.label.split(" ").last())
-                                },
+                                label = { Text(type.label.split(" ").last()) },
                                 modifier = Modifier.weight(1f),
                                 enabled = type != FeedbackType.CRASH || crashLog != null
                             )
@@ -181,93 +231,34 @@ fun FeedbackDialog(
                                     FeedbackType.BUG -> "Describe what went wrong..."
                                     FeedbackType.FEATURE -> "What feature would you like to see?"
                                     FeedbackType.COMPLIMENT -> "What do you love about the app?"
+                                    FeedbackType.CRASH -> "What were you doing when the app crashed?"
                                     FeedbackType.GENERAL -> "Share your thoughts..."
                                 }
                             )
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 120.dp, max = 200.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 4,
+                        maxLines = 8,
                         keyboardOptions = KeyboardOptions(
                             capitalization = KeyboardCapitalization.Sentences,
                             imeAction = ImeAction.Default
-                        ),
-                        minLines = 5,
-                        maxLines = 10
+                        )
                     )
                     
-                    // Optional: User Email
+                    // Optional Email
                     OutlinedTextField(
                         value = userEmail,
                         onValueChange = { userEmail = it },
                         label = { Text("Your email (optional)") },
                         placeholder = { Text("For follow-up questions") },
                         modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(
-                            imeAction = ImeAction.Done
-                        ),
                         singleLine = true,
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Email,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        keyboardOptions = KeyboardOptions(
+                            imeAction = ImeAction.Next
+                        )
                     )
                     
-                    // Include Device Info Checkbox
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = includeDeviceInfo,
-                            onCheckedChange = { includeDeviceInfo = it }
-                        )
-                        Text(
-                            text = "Include device information",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        IconButton(
-                            onClick = { /* Show device info preview */ },
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = "Device info details",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    
-                    // Include Crash Log Checkbox (if available)
-                    if (crashLog != null) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = includeCrashLog,
-                                onCheckedChange = { includeCrashLog = it }
-                            )
-                            Text(
-                                text = "Include crash log",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(start = 8.dp)
-                            )
-                            Spacer(modifier = Modifier.weight(1f))
-                            Text(
-                                text = "${crashLog.lines().size} lines",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    
-                    // Send Method Selection
+                    // Include Options
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -277,157 +268,223 @@ fun FeedbackDialog(
                             modifier = Modifier.padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = "How to send:",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            
                             Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                RadioButton(
-                                    selected = sendMethod == SendMethod.EMAIL_APP,
-                                    onClick = { sendMethod = SendMethod.EMAIL_APP }
+                                Checkbox(
+                                    checked = includeDeviceInfo,
+                                    onCheckedChange = { includeDeviceInfo = it }
                                 )
                                 Text(
-                                    text = "Open email app",
-                                    style = MaterialTheme.typography.bodySmall
+                                    text = "Include device information",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(start = 8.dp)
                                 )
+                                Spacer(modifier = Modifier.weight(1f))
                             }
                             
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                RadioButton(
-                                    selected = sendMethod == SendMethod.COPY,
-                                    onClick = { sendMethod = SendMethod.COPY }
-                                )
-                                Text(
-                                    text = "Copy to clipboard",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                            if (crashLog != null) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = includeCrashLog,
+                                        onCheckedChange = { includeCrashLog = it }
+                                    )
+                                    Text(
+                                        text = "Include crash log",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.padding(start = 8.dp)
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Text(
+                                        text = "${crashLog.lines().size} lines",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
+                    
+                    // Send Method Selection
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = sendMethod == SendMethod.EMAIL_APP,
+                            onClick = { sendMethod = SendMethod.EMAIL_APP },
+                            label = { 
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Text("Email App")
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = sendMethod == SendMethod.COPY,
+                            onClick = { sendMethod = SendMethod.COPY },
+                            label = { 
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Text("Copy to Clipboard")
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val fullFeedback = buildString {
-                            if (userEmail.isNotBlank()) {
-                                appendLine("From: $userEmail")
-                                appendLine()
-                            }
-                            
-                            appendLine(feedbackText)
-                            
-                            if (includeDeviceInfo) {
-                                appendLine()
-                                append(deviceInfo)
-                            }
-                            
-                            if (includeCrashLog && crashLog != null) {
-                                appendLine()
-                                appendLine("---")
-                                appendLine("Crash Log:")
-                                append(crashLog)
-                            }
-                        }
-                        
-                        when (sendMethod) {
-                            SendMethod.EMAIL_APP -> {
-                                val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
-                                    data = Uri.parse("mailto:")
-                                    putExtra(Intent.EXTRA_EMAIL, arrayOf(feedbackEmail))
-                                    putExtra(
-                                        Intent.EXTRA_SUBJECT, 
-                                        "${feedbackType.label} - App v${BuildConfig.VERSION_NAME}"
-                                    )
-                                    putExtra(Intent.EXTRA_TEXT, fullFeedback)
-                                }
-                                
-                                try {
-                                    context.startActivity(
-                                        Intent.createChooser(emailIntent, "Send feedback via")
-                                    )
-                                    scope.launch {
-                                        showSuccess = true
-                                        delay(2000)
-                                        onDismiss()
-                                    }
-                                } catch (e: ActivityNotFoundException) {
-                                    // No email app available, fallback to copy
-                                    sendMethod = SendMethod.COPY
-                                    copyToClipboard(context, fullFeedback, feedbackEmail)
-                                    showSuccess = true
-                                }
-                            }
-                            
-                            SendMethod.COPY -> {
-                                copyToClipboard(context, fullFeedback, feedbackEmail)
-                                showSuccess = true
-                            }
-                        }
-                    },
-                    enabled = feedbackText.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth()
+                
+                // Action buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Send,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Send Feedback")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel")
+                    Button(
+                        onClick = {
+                            val fullFeedback = buildFullFeedback(
+                                feedbackType = feedbackType,
+                                feedbackText = feedbackText,
+                                userEmail = userEmail,
+                                includeDeviceInfo = includeDeviceInfo,
+                                deviceInfo = deviceInfo,
+                                includeCrashLog = includeCrashLog,
+                                crashLog = crashLog
+                            )
+                            
+                            when (sendMethod) {
+                                SendMethod.EMAIL_APP -> {
+                                    sendViaEmailApp(
+                                        context = context,
+                                        email = feedbackEmail,
+                                        subject = "${feedbackType.label} - App v${BuildConfig.VERSION_NAME}",
+                                        body = fullFeedback
+                                    )
+                                }
+                                SendMethod.COPY -> {
+                                    copyToClipboard(
+                                        context = context,
+                                        text = fullFeedback,
+                                        email = feedbackEmail
+                                    )
+                                }
+                            }
+                            
+                            scope.launch {
+                                showSuccess = true
+                                delay(2000)
+                                onDismiss()
+                            }
+                        },
+                        enabled = feedbackText.isNotBlank()
+                    ) {
+                        Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Send Feedback")
+                    }
                 }
             }
-        )
+        }
     }
 }
 
-private enum class SendMethod {
-    EMAIL_APP, COPY
+private fun buildFullFeedback(
+    feedbackType: FeedbackType,
+    feedbackText: String,
+    userEmail: String,
+    includeDeviceInfo: Boolean,
+    deviceInfo: String,
+    includeCrashLog: Boolean,
+    crashLog: String?
+): String {
+    return buildString {
+        appendLine("Type: ${feedbackType.label}")
+        appendLine()
+        appendLine("Message:")
+        appendLine(feedbackText)
+        
+        if (userEmail.isNotBlank()) {
+            appendLine()
+            appendLine("User email: $userEmail")
+        }
+        
+        if (includeDeviceInfo) {
+            append(deviceInfo)
+        }
+        
+        if (includeCrashLog && crashLog != null) {
+            appendLine()
+            appendLine("---")
+            appendLine("Crash Log:")
+            appendLine(crashLog)
+        }
+    }
 }
 
-private fun copyToClipboard(context: Context, text: String, email: String) {
+private fun sendViaEmailApp(
+    context: Context,
+    email: String,
+    subject: String,
+    body: String
+) {
+    val intent = Intent(Intent.ACTION_SENDTO).apply {
+        data = Uri.parse("mailto:")
+        putExtra(Intent.EXTRA_EMAIL, arrayOf(email))
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, body)
+    }
+    
+    try {
+        context.startActivity(Intent.createChooser(intent, "Send feedback via..."))
+    } catch (e: ActivityNotFoundException) {
+        copyToClipboard(context, body, email)
+    }
+}
+
+private fun copyToClipboard(
+    context: Context,
+    text: String,
+    email: String
+) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     val clip = ClipData.newPlainText("Feedback", text)
     clipboard.setPrimaryClip(clip)
     
     Toast.makeText(
         context,
-        "Feedback copied! Send to: $email",
+        "Feedback copied!\nSend to: $email",
         Toast.LENGTH_LONG
     ).show()
 }
 
-// Helper functions for device info
 private fun getAvailableMemory(context: Context): String {
     val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     val memoryInfo = ActivityManager.MemoryInfo()
     activityManager.getMemoryInfo(memoryInfo)
-    val availableMemory = memoryInfo.availMem / (1024 * 1024) // Convert to MB
-    val totalMemory = memoryInfo.totalMem / (1024 * 1024) // Convert to MB
+    val availableMemory = memoryInfo.availMem / (1024 * 1024)
+    val totalMemory = memoryInfo.totalMem / (1024 * 1024)
     return "${availableMemory}MB / ${totalMemory}MB"
 }
 
 private fun getTotalStorage(): String {
     val stat = StatFs(Environment.getDataDirectory().path)
-    val available = (stat.availableBlocksLong * stat.blockSizeLong) / (1024 * 1024 * 1024) // GB
-    val total = (stat.blockCountLong * stat.blockSizeLong) / (1024 * 1024 * 1024) // GB
+    val available = (stat.availableBlocksLong * stat.blockSizeLong) / (1024 * 1024 * 1024)
+    val total = (stat.blockCountLong * stat.blockSizeLong) / (1024 * 1024 * 1024)
     return "${available}GB / ${total}GB"
 }
 
-// Crash Handler class - Add this to your App.kt or a separate file
+/**
+ * Crash Handler class to capture uncaught exceptions
+ */
 class CrashHandler(
     private val context: Context,
     private val defaultHandler: Thread.UncaughtExceptionHandler?
@@ -436,6 +493,7 @@ class CrashHandler(
     companion object {
         private const val CRASH_LOG_KEY = "last_crash_log"
         private const val CRASH_TIME_KEY = "last_crash_time"
+        private const val PREFS_NAME = "crash_logs"
         
         fun install(context: Context) {
             val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
@@ -445,19 +503,21 @@ class CrashHandler(
         }
         
         fun getLastCrashLog(context: Context): String? {
-            val prefs = context.getSharedPreferences("crash_logs", Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             return prefs.getString(CRASH_LOG_KEY, null)
         }
         
         fun clearCrashLog(context: Context) {
-            val prefs = context.getSharedPreferences("crash_logs", Context.MODE_PRIVATE)
-            prefs.edit().remove(CRASH_LOG_KEY).remove(CRASH_TIME_KEY).apply()
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit()
+                .remove(CRASH_LOG_KEY)
+                .remove(CRASH_TIME_KEY)
+                .apply()
         }
     }
     
     override fun uncaughtException(thread: Thread, exception: Throwable) {
         try {
-            // Build crash log
             val crashLog = buildString {
                 appendLine("Crash occurred at: ${java.util.Date()}")
                 appendLine("Thread: ${thread.name}")
@@ -471,8 +531,7 @@ class CrashHandler(
                 }
             }
             
-            // Save crash log to SharedPreferences
-            val prefs = context.getSharedPreferences("crash_logs", Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             prefs.edit()
                 .putString(CRASH_LOG_KEY, crashLog)
                 .putLong(CRASH_TIME_KEY, System.currentTimeMillis())
@@ -482,60 +541,7 @@ class CrashHandler(
             // Ignore errors while saving crash log
         }
         
-        // Pass to default handler (which will show the crash dialog)
+        // Pass to default handler
         defaultHandler?.uncaughtException(thread, exception)
-    }
-}
-
-// Add this to your SettingsScreen.kt file:
-// At the top of the composable, add:
-var showFeedbackDialog by remember { mutableStateOf(false) }
-val context = LocalContext.current
-
-// Check for crash logs on screen load
-LaunchedEffect(Unit) {
-    val crashLog = CrashHandler.getLastCrashLog(context)
-    if (crashLog != null) {
-        // Show dialog to report crash
-        showFeedbackDialog = true
-    }
-}
-
-// In the Information section, update the Feedback item:
-SettingsItem(
-    icon = Icons.Default.Feedback,
-    title = "Send Feedback",
-    subtitle = "Report bugs or suggest features",
-    onClick = { showFeedbackDialog = true },
-    enabled = true
-)
-
-// At the end of the SettingsScreen composable, add:
-if (showFeedbackDialog) {
-    val crashLog = CrashHandler.getLastCrashLog(context)
-    
-    FeedbackDialog(
-        onDismiss = { 
-            showFeedbackDialog = false
-            // Clear crash log after user dismisses (whether they sent it or not)
-            if (crashLog != null) {
-                CrashHandler.clearCrashLog(context)
-            }
-        },
-        feedbackEmail = "your-email@example.com", // Replace with your actual email
-        crashLog = crashLog,
-        preselectedType = if (crashLog != null) FeedbackType.CRASH else null
-    )
-}
-
-// Add this to your App.kt in the onCreate() method:
-class App : Application() {
-    override fun onCreate() {
-        super.onCreate()
-        
-        // Install crash handler
-        CrashHandler.install(this)
-        
-        // Rest of your initialization...
     }
 }
